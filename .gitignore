@@ -1,2 +1,5 @@
 # Diário de aprendizado pessoal — não viaja com o repo (design §9.2)
 .claude/.local/
+
+# Editor config pessoal
+.vscode/
