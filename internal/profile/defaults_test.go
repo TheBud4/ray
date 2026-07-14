@@ -49,6 +49,38 @@ func TestDefaultsIntegrationsAndSettings(t *testing.T) {
 	}
 }
 
+func TestDefaultsScaffoldFiles(t *testing.T) {
+	wantPaths := []string{
+		"CLAUDE.md",
+		"SECURITY.md",
+		"docs/README.md",
+		"docs/architecture.md",
+		"docs/conventions.md",
+		"docs/context.md",
+		".claude/rules/security.md",
+		".claude/rules/workflow.md",
+		".claude/rules/handoff.md",
+		".claude/rules/knowledge-vault.md",
+		".claude/rules/documentation.md",
+		".claude/commands/document.md",
+		".claude/handoff.md",
+	}
+
+	for _, p := range Defaults() {
+		p := p
+		t.Run(p.Name, func(t *testing.T) {
+			if len(p.Scaffold.Files) != len(wantPaths) {
+				t.Fatalf("len(Scaffold.Files) = %d, want %d", len(p.Scaffold.Files), len(wantPaths))
+			}
+			for i, f := range p.Scaffold.Files {
+				if f.Path != wantPaths[i] {
+					t.Errorf("Scaffold.Files[%d].Path = %q, want %q", i, f.Path, wantPaths[i])
+				}
+			}
+		})
+	}
+}
+
 func TestDefaultsCreateCommands(t *testing.T) {
 	want := map[string]string{
 		"go":      "go mod init {{.Name}}",

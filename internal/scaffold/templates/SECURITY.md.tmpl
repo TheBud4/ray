@@ -1,0 +1,10 @@
+# Política de segurança — {{.ProjectName}}
+
+- Nunca commitar segredos (`.env`, chaves, tokens). Use variáveis de ambiente
+  ou um cofre externo.
+- Dependências: revisar antes de adicionar; preferir libs mantidas e com poucas
+  dependências transitivas.
+- Dados sensíveis de usuários: nunca logar em texto plano; nunca enviar a
+  serviços externos sem necessidade explícita.
+- Encontrou uma vulnerabilidade? Registre em `docs/context.md` e priorize a
+  correção antes de features novas.

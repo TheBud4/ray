@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# SessionStart hook: injects the live handoff so continuity costs a bounded,
+# small amount of context regardless of session number.
+set -euo pipefail
+
+cd "$(dirname "${BASH_SOURCE[0]}")/../.."
+
+if [[ -f .claude/handoff.md ]]; then
+  echo "## Handoff"
+  cat .claude/handoff.md
+  echo
+fi

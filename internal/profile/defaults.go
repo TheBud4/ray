@@ -48,6 +48,33 @@ func defaultSettings() map[string]any {
 	return map[string]any{"model": "opus", "effortLevel": "high"}
 }
 
+// baseScaffoldFiles é o conjunto de orientação (§7 do build guide) que todo
+// perfil default escreve: CLAUDE.md, SECURITY.md, docs/, regras e o
+// comando /document. Os templates que renderizam cada path vivem em
+// internal/scaffold.
+func baseScaffoldFiles() []ScaffoldFile {
+	paths := []string{
+		"CLAUDE.md",
+		"SECURITY.md",
+		"docs/README.md",
+		"docs/architecture.md",
+		"docs/conventions.md",
+		"docs/context.md",
+		".claude/rules/security.md",
+		".claude/rules/workflow.md",
+		".claude/rules/handoff.md",
+		".claude/rules/knowledge-vault.md",
+		".claude/rules/documentation.md",
+		".claude/commands/document.md",
+		".claude/handoff.md",
+	}
+	files := make([]ScaffoldFile, len(paths))
+	for i, p := range paths {
+		files[i] = ScaffoldFile{Path: p}
+	}
+	return files
+}
+
 // build monta um perfil default a partir de suas partes.
 func build(name, desc string, create []string, extra []Component) Profile {
 	return Profile{
@@ -55,7 +82,7 @@ func build(name, desc string, create []string, extra []Component) Profile {
 		Description:  desc,
 		Integrations: allIntegrations(),
 		Components:   append(baseComponents(), extra...),
-		Scaffold:     Scaffold{Settings: defaultSettings()},
+		Scaffold:     Scaffold{Files: baseScaffoldFiles(), Settings: defaultSettings()},
 		Create:       create,
 	}
 }

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# PreToolUse guard for --mode learn. Denies Edit/Write/MultiEdit outside the
+# docs allowlist (*.md, docs/**, .claude/**), per learn overlay (see
+# .claude/rules/learn.md). Reads the hook's JSON payload from stdin.
+set -euo pipefail
+
+payload="$(cat)"
+file_path="$(jq -r '.tool_input.file_path // empty' <<<"$payload")"
+
+if [[ -z "$file_path" ]]; then
+  # No single file_path (e.g. some MultiEdit shapes) — fail closed.
+  echo '{"decision":"block","reason":"guard-code: modo learn não conseguiu determinar o arquivo alvo; edição negada por segurança"}'
+  exit 0
+fi
+
+rel="${file_path#"$PWD"/}"
+
+case "$rel" in
+  *.md|docs/*|.claude/*)
+    exit 0
+    ;;
+  *)
+    echo "{\"decision\":\"block\",\"reason\":\"guard-code: modo learn não edita código diretamente ($rel). Explique o próximo passo em vez de escrever a solução.\"}"
+    exit 0
+    ;;
+esac
