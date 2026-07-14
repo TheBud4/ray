@@ -34,6 +34,9 @@ func ConfigPath() (string, error) { return sub("config.yaml") }
 // StatePath é <Home>/state.yaml (rayconfig.State).
 func StatePath() (string, error) { return sub("state.yaml") }
 
+// CommandsPath é <Home>/commands.yaml (aliases globais do `ray run`).
+func CommandsPath() (string, error) { return sub("commands.yaml") }
+
 func sub(name string) (string, error) {
 	h, err := Home()
 	if err != nil {
