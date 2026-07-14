@@ -28,6 +28,12 @@ func TemplatesDir() (string, error) { return sub("templates") }
 // VaultDir é <Home>/vault, o vault de conhecimento da IA.
 func VaultDir() (string, error) { return sub("vault") }
 
+// ConfigPath é <Home>/config.yaml (rayconfig.Config).
+func ConfigPath() (string, error) { return sub("config.yaml") }
+
+// StatePath é <Home>/state.yaml (rayconfig.State).
+func StatePath() (string, error) { return sub("state.yaml") }
+
 func sub(name string) (string, error) {
 	h, err := Home()
 	if err != nil {

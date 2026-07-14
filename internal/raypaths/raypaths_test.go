@@ -25,6 +25,8 @@ func TestHomeUsesRayHome(t *testing.T) {
 		{"ProfilesDir", ProfilesDir, "/custom/root/profiles"},
 		{"TemplatesDir", TemplatesDir, "/custom/root/templates"},
 		{"VaultDir", VaultDir, "/custom/root/vault"},
+		{"ConfigPath", ConfigPath, "/custom/root/config.yaml"},
+		{"StatePath", StatePath, "/custom/root/state.yaml"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
