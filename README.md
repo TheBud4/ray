@@ -1,7 +1,8 @@
-<h1 align="center">
-  <img src="docs/assets/logo.png" width="240" alt="Logo do ray: óculos escuros sobre um splash de tinta laranja"><br>
-  ray
-</h1>
+<p align="center">
+  <img src="docs/assets/logo.png" width="320" alt="Logo do ray: óculos escuros sobre um splash de tinta laranja" style="margin-bottom: -30px;">
+</p>
+
+<h1 align="center">ray</h1>
 
 <p align="center">
   CLI pessoal em Go para criar projetos e montar ambientes de IA econômicos em tokens.
