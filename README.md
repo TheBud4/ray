@@ -1,4 +1,18 @@
-# ray
+<p align="center">
+  <img src="docs/assets/logo.png" width="160" alt="Logo do ray: óculos escuros sobre um splash de tinta laranja">
+</p>
+
+<h1 align="center">ray</h1>
+
+<p align="center">
+  CLI pessoal em Go para criar projetos e montar ambientes de IA econômicos em tokens.
+</p>
+
+<p align="center">
+  <a href="https://github.com/TheBud4/ray/actions/workflows/ci.yml"><img src="https://github.com/TheBud4/ray/actions/workflows/ci.yml/badge.svg" alt="Status do CI"></a>
+  <img src="https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go&logoColor=white" alt="Go 1.25+">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="Licença MIT"></a>
+</p>
 
 `ray` é uma CLI pessoal em Go que (a) cria projetos novos de um stack e (b)
 monta, com um comando, um ambiente de desenvolvimento com IA (Claude Code)
@@ -92,3 +106,7 @@ make ci          # fmt-check + vet + test (o que o CI roda)
 
 Detalhes de arquitetura, modelo de dados e o plano de fases de construção
 estão em [`docs/ray-build-guide.md`](docs/ray-build-guide.md).
+
+## Licença
+
+[MIT](LICENSE) — © 2026 TheBud4.
