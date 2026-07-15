@@ -159,6 +159,127 @@ func readTemplate(tmplName, templatesDir string) ([]byte, error) {
 	return embedded.ReadFile(templatesRoot + "/" + tmplName)
 }
 
+const (
+	gitignoreMarkerBegin = "# >>> ray"
+	gitignoreMarkerEnd   = "# <<< ray"
+)
+
+// gitignoreBaseLines é a "regra-mãe" (I1): conteúdo de IA vendorizado é
+// commitado (whitelist explícita contra qualquer ignore anterior no arquivo);
+// runtime, segredos e material pessoal nunca são (blacklist).
+var gitignoreBaseLines = []string{
+	"# Conteúdo de IA vendorizado — commitado (não editar as negações abaixo)",
+	"!.claude/skills/",
+	"!.claude/agents/",
+	"!.claude/commands/",
+	"!.claude/settings.json",
+	"!.mcp.json",
+	"!docs/",
+	"!**/.ray-origin",
+	"!**/LICENSE",
+	"",
+	"# Runtime, segredos e pessoal — nunca commitados",
+	"graphify-out/",
+	".claude/.ray-metrics/",
+	".claude/.local/",
+	".env",
+	"*.local",
+}
+
+// MergeGitignore garante que <target>/.gitignore contenha o bloco do ray
+// (whitelist do conteúdo de IA + blacklist de runtime/segredos, mais
+// stackLines específicas do perfil, renderizadas com data — ex.
+// "/{{.ProjectName}}"), preservando o resto do arquivo. O bloco vive entre
+// marcadores idempotentes — rodar de novo não duplica nem perde linhas que o
+// usuário tenha fora deles. dryRun imprime o resultado em out em vez de
+// gravar.
+func MergeGitignore(target string, stackLines []string, data Data, dryRun bool, out io.Writer) error {
+	path := filepath.Join(target, ".gitignore")
+
+	existing, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	renderedStack, err := renderGitignoreStackLines(stackLines, data)
+	if err != nil {
+		return err
+	}
+
+	block := buildGitignoreBlock(renderedStack)
+	content, changed := mergeMarkedBlock(string(existing), block)
+
+	if dryRun {
+		if out != nil {
+			_, err := io.WriteString(out, content)
+			return err
+		}
+		return nil
+	}
+	if !changed {
+		return nil
+	}
+	return os.WriteFile(path, []byte(content), 0o644)
+}
+
+// renderGitignoreStackLines executa cada linha de stackLines como
+// text/template com data (ex. "/{{.ProjectName}}" → "/ray").
+func renderGitignoreStackLines(stackLines []string, data Data) ([]string, error) {
+	rendered := make([]string, len(stackLines))
+	for i, line := range stackLines {
+		t, err := template.New("gitignore-stack-line").Parse(line)
+		if err != nil {
+			return nil, fmt.Errorf("parsing gitignore stack line %q: %w", line, err)
+		}
+		var buf bytes.Buffer
+		if err := t.Execute(&buf, data); err != nil {
+			return nil, fmt.Errorf("rendering gitignore stack line %q: %w", line, err)
+		}
+		rendered[i] = buf.String()
+	}
+	return rendered, nil
+}
+
+// buildGitignoreBlock monta o bloco completo (base + stackLines) entre
+// marcadores.
+func buildGitignoreBlock(stackLines []string) string {
+	lines := append([]string{gitignoreMarkerBegin}, gitignoreBaseLines...)
+	if len(stackLines) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, stackLines...)
+	}
+	lines = append(lines, gitignoreMarkerEnd)
+	return strings.Join(lines, "\n")
+}
+
+// mergeMarkedBlock devolve existing com block inserido/substituído entre
+// gitignoreMarkerBegin/End, e se o conteúdo mudou. Sem marcador prévio,
+// acrescenta ao final; com marcador, substitui só o miolo.
+func mergeMarkedBlock(existing, block string) (string, bool) {
+	beginIdx := strings.Index(existing, gitignoreMarkerBegin)
+	if beginIdx == -1 {
+		trimmed := strings.TrimRight(existing, "\n")
+		var b strings.Builder
+		if trimmed != "" {
+			b.WriteString(trimmed)
+			b.WriteString("\n\n")
+		}
+		b.WriteString(block)
+		b.WriteString("\n")
+		return b.String(), true
+	}
+
+	endIdx := strings.Index(existing[beginIdx:], gitignoreMarkerEnd)
+	var newContent string
+	if endIdx == -1 {
+		newContent = existing[:beginIdx] + block + "\n"
+	} else {
+		endIdx += beginIdx + len(gitignoreMarkerEnd)
+		newContent = existing[:beginIdx] + block + existing[endIdx:]
+	}
+	return newContent, newContent != existing
+}
+
 // EnsureTemplates copia os templates embutidos para dir como overlay editável,
 // nunca sobrescrevendo o que já existir.
 func EnsureTemplates(dir string) error {

@@ -36,6 +36,14 @@ func TestComponentCommand(t *testing.T) {
 			want: "npx claude-code-templates@latest --agent=development-tools/code-reviewer --yes",
 		},
 		{
+			// aitmpl (agents/commands) não tem noção de --global (I1 design
+			// §3.3): sempre project-local, mesmo com opts.Global.
+			name: "aitmpl agent ignores Global",
+			comp: profile.Component{Via: profile.ViaAitmpl, Type: profile.TypeAgent, Ref: "development-tools/code-reviewer"},
+			opts: Options{Global: true},
+			want: "npx claude-code-templates@latest --agent=development-tools/code-reviewer --yes",
+		},
+		{
 			name: "aitmpl command",
 			comp: profile.Component{Via: profile.ViaAitmpl, Type: profile.TypeCommand, Ref: "development-tools/document"},
 			want: "npx claude-code-templates@latest --command=development-tools/document --yes",

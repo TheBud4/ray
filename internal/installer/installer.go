@@ -28,8 +28,13 @@ type GlobalStep struct {
 }
 
 // Options carrega decisões que o chamador já resolveu antes de Resolve.
-// Global controla o -g dos componentes de conteúdo. VaultPath/UserDocsVaultPath
-// são caminhos já resolvidos; vazio em UserDocsVaultPath significa "não configurado".
+// Global marca componentes `via: skills` como conteúdo **pessoal**
+// cross-project (`-g` do `npx skills add`) — não é o caminho normal dos
+// componentes de projeto (I1 design §3.3): por padrão, componentes instalam
+// project-local e são vendorizados/commitados em `.claude/` (ver
+// scaffold.MergeGitignore). `via: aitmpl` não tem noção de global e ignora
+// esta flag. VaultPath/UserDocsVaultPath são caminhos já resolvidos; vazio em
+// UserDocsVaultPath significa "não configurado".
 type Options struct {
 	Global            bool
 	VaultPath         string
@@ -52,6 +57,9 @@ func Resolve(p *profile.Profile, opts Options) (Plan, error) {
 }
 
 // componentCommand mapeia um Component no comando npx que o instala.
+// Project-local por padrão (I1): só `via: skills` com opts.Global adiciona
+// `-g`, marcando o componente como conteúdo pessoal cross-project em vez de
+// vendorizado no projeto.
 func componentCommand(c profile.Component, opts Options) (runner.Command, error) {
 	switch c.Via {
 	case profile.ViaSkills:

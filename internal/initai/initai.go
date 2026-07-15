@@ -205,6 +205,14 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	sum.Created = res.Created
 	sum.Skipped = res.Skipped
 
+	// 11. .gitignore (I1) — regra-mãe: conteúdo de IA vendorizado é
+	// commitável, runtime/segredos nunca são.
+	gitignoreData := scaffold.Data{ProjectName: filepath.Base(target), Stack: prof.Name}
+	if err := scaffold.MergeGitignore(target, prof.Scaffold.GitignoreStack, gitignoreData, opts.DryRun, out); err != nil {
+		return Summary{}, err
+	}
+	sum.Created = append(sum.Created, ".gitignore")
+
 	sum.HadFailure = len(sum.Failed) > 0
 	return sum, nil
 }

@@ -48,7 +48,7 @@ func newInitAICmd() *cobra.Command {
 	}
 	c.Flags().StringVar(&flagProfile, "profile", "", "recipe to install (required)")
 	c.Flags().StringVar(&flagMode, "mode", scaffold.ModeBuild, "build|learn")
-	c.Flags().BoolVarP(&flagGlobal, "global", "g", false, "install content-producing skills globally instead of project-local")
+	c.Flags().BoolVarP(&flagGlobal, "global", "g", false, "install content-producing skills as personal, cross-project content instead of project-local/vendored (I1: --global no longer means \"the normal path\")")
 	c.Flags().BoolVar(&flagForce, "force", false, "regenerate scaffold files that already exist (never touches .claude/handoff.md)")
 	c.Flags().BoolVar(&flagNoGlobal, "no-global", false, "skip all install-once global steps")
 	c.Flags().BoolVar(&flagReinstallGlobal, "reinstall-global", false, "ignore state.yaml and reinstall global steps")

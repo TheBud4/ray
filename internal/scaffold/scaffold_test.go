@@ -224,6 +224,112 @@ func TestEnsureTemplatesOverlayWinsOverEmbed(t *testing.T) {
 	}
 }
 
+func TestMergeGitignoreCreatesWhitelistAndBlacklist(t *testing.T) {
+	target := t.TempDir()
+
+	if err := MergeGitignore(target, nil, Data{}, false, nil); err != nil {
+		t.Fatalf("MergeGitignore() error = %v", err)
+	}
+
+	got, err := os.ReadFile(filepath.Join(target, ".gitignore"))
+	if err != nil {
+		t.Fatalf("stat .gitignore: %v", err)
+	}
+	content := string(got)
+
+	for _, want := range []string{
+		"!.claude/skills/", "!.claude/agents/", "!.claude/commands/",
+		"!.claude/settings.json", "!.mcp.json", "!docs/",
+		"!**/.ray-origin", "!**/LICENSE",
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf(".gitignore missing whitelist entry %q\n---\n%s", want, content)
+		}
+	}
+	for _, want := range []string{
+		"graphify-out/", ".claude/.ray-metrics/", ".claude/.local/", ".env", "*.local",
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf(".gitignore missing blacklist entry %q\n---\n%s", want, content)
+		}
+	}
+}
+
+func TestMergeGitignoreStackBlock(t *testing.T) {
+	target := t.TempDir()
+
+	if err := MergeGitignore(target, []string{"# Go", "/{{.ProjectName}}"}, Data{ProjectName: "demo"}, false, nil); err != nil {
+		t.Fatalf("MergeGitignore() error = %v", err)
+	}
+
+	got, err := os.ReadFile(filepath.Join(target, ".gitignore"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), "/demo") {
+		t.Fatalf(".gitignore = %q, want the stack block rendered with the project name", got)
+	}
+	if strings.Contains(string(got), "{{.ProjectName}}") {
+		t.Fatalf(".gitignore = %q, want the stack block template resolved, not raw", got)
+	}
+}
+
+func TestMergeGitignoreIdempotent(t *testing.T) {
+	target := t.TempDir()
+
+	for i := 0; i < 2; i++ {
+		if err := MergeGitignore(target, []string{"/bin/"}, Data{}, false, nil); err != nil {
+			t.Fatalf("MergeGitignore() run %d error = %v", i, err)
+		}
+	}
+
+	got, err := os.ReadFile(filepath.Join(target, ".gitignore"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(string(got), "# >>> ray"); n != 1 {
+		t.Fatalf("marker count = %d, want exactly 1 (no duplicate block): %q", n, got)
+	}
+}
+
+func TestMergeGitignorePreservesExistingLines(t *testing.T) {
+	target := t.TempDir()
+	path := filepath.Join(target, ".gitignore")
+	if err := os.WriteFile(path, []byte("node_modules/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := MergeGitignore(target, nil, Data{}, false, nil); err != nil {
+		t.Fatalf("MergeGitignore() error = %v", err)
+	}
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), "node_modules/") {
+		t.Fatalf(".gitignore lost pre-existing line: %q", got)
+	}
+	if !strings.Contains(string(got), "graphify-out/") {
+		t.Fatalf(".gitignore missing ray block after merge: %q", got)
+	}
+}
+
+func TestMergeGitignoreDryRunDoesNotWrite(t *testing.T) {
+	target := t.TempDir()
+	var out bytes.Buffer
+
+	if err := MergeGitignore(target, nil, Data{}, true, &out); err != nil {
+		t.Fatalf("MergeGitignore() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(target, ".gitignore")); !os.IsNotExist(err) {
+		t.Fatalf(".gitignore should not exist after dry-run, stat err = %v", err)
+	}
+	if !strings.Contains(out.String(), "graphify-out/") {
+		t.Fatalf("dry-run output = %q, want it to show the block", out.String())
+	}
+}
+
 func TestEnsureTemplatesNeverOverwrites(t *testing.T) {
 	overlayDir := t.TempDir()
 	overlayFile := filepath.Join(overlayDir, "CLAUDE.md.tmpl")

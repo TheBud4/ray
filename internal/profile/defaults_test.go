@@ -81,6 +81,32 @@ func TestDefaultsScaffoldFiles(t *testing.T) {
 	}
 }
 
+func TestDefaultsGitignoreStack(t *testing.T) {
+	want := map[string][]string{
+		"go":      {"/{{.ProjectName}}"},
+		"web":     {"node_modules/", ".next/"},
+		"flutter": {".dart_tool/", "build/"},
+	}
+
+	for _, p := range Defaults() {
+		p := p
+		t.Run(p.Name, func(t *testing.T) {
+			wantLines, ok := want[p.Name]
+			if !ok {
+				t.Fatalf("unexpected default profile %q", p.Name)
+			}
+			if len(p.Scaffold.GitignoreStack) != len(wantLines) {
+				t.Fatalf("GitignoreStack = %v, want %v", p.Scaffold.GitignoreStack, wantLines)
+			}
+			for i, l := range wantLines {
+				if p.Scaffold.GitignoreStack[i] != l {
+					t.Errorf("GitignoreStack[%d] = %q, want %q", i, p.Scaffold.GitignoreStack[i], l)
+				}
+			}
+		})
+	}
+}
+
 func TestDefaultsCreateCommands(t *testing.T) {
 	want := map[string]string{
 		"go":      "go mod init {{.Name}}",

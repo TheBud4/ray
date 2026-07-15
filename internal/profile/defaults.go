@@ -76,14 +76,18 @@ func baseScaffoldFiles() []ScaffoldFile {
 }
 
 // build monta um perfil default a partir de suas partes.
-func build(name, desc string, create []string, extra []Component) Profile {
+func build(name, desc string, create []string, extra []Component, gitignoreStack []string) Profile {
 	return Profile{
 		Name:         name,
 		Description:  desc,
 		Integrations: allIntegrations(),
 		Components:   append(baseComponents(), extra...),
-		Scaffold:     Scaffold{Files: baseScaffoldFiles(), Settings: defaultSettings()},
-		Create:       create,
+		Scaffold: Scaffold{
+			Files:          baseScaffoldFiles(),
+			Settings:       defaultSettings(),
+			GitignoreStack: gitignoreStack,
+		},
+		Create: create,
 	}
 }
 
@@ -92,7 +96,8 @@ func goProfile() Profile {
 		[]string{"go mod init {{.Name}}"},
 		skillsFrom("samber/cc-skills-golang",
 			"golang-code-style", "golang-error-handling", "golang-design-patterns",
-			"golang-performance", "golang-testing", "golang-security", "golang-documentation"))
+			"golang-performance", "golang-testing", "golang-security", "golang-documentation"),
+		[]string{"/{{.ProjectName}}"})
 }
 
 func webProfile() Profile {
@@ -101,7 +106,8 @@ func webProfile() Profile {
 		"react-best-practices", "composition-patterns", "writing-guidelines", "web-design-guidelines")...)
 	extra = append(extra, skillsFrom("anthropics/skills", "frontend-design", "webapp-testing")...)
 	extra = append(extra, skill("hoodini/ai-agents-skills", "owasp-security"))
-	return build("web", "Next.js web stack", []string{"npx create-next-app@latest . --yes"}, extra)
+	return build("web", "Next.js web stack", []string{"npx create-next-app@latest . --yes"}, extra,
+		[]string{"node_modules/", ".next/"})
 }
 
 func flutterProfile() Profile {
@@ -112,5 +118,6 @@ func flutterProfile() Profile {
 		"flutter-add-integration-test", "flutter-build-responsive-layout")...)
 	extra = append(extra, skill("firebase/agent-skills", "firebase-security-rules-auditor"))
 	extra = append(extra, skill("leonxlnx/taste-skill", "imagegen-frontend-mobile"))
-	return build("flutter", "Flutter mobile stack", []string{"flutter create ."}, extra)
+	return build("flutter", "Flutter mobile stack", []string{"flutter create ."}, extra,
+		[]string{".dart_tool/", "build/"})
 }

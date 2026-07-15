@@ -88,6 +88,44 @@ func TestRunBuildModeFullFlow(t *testing.T) {
 	}
 }
 
+func TestRunWritesGitignore(t *testing.T) {
+	home := newHome(t)
+	p := testProfile()
+	p.Scaffold.GitignoreStack = []string{"/{{.ProjectName}}"}
+	writeProfile(t, home.ProfilesDir, p)
+	target := t.TempDir()
+
+	opts := Options{Profile: "test", Target: target, Mode: scaffold.ModeBuild, Out: &bytes.Buffer{}}
+	sum, err := Run(&runner.FakeRunner{}, allFound, opts, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if sum.HadFailure {
+		t.Fatalf("HadFailure = true, Failed = %v", sum.Failed)
+	}
+
+	data, err := os.ReadFile(filepath.Join(target, ".gitignore"))
+	if err != nil {
+		t.Fatalf("stat .gitignore: %v", err)
+	}
+	content := string(data)
+	for _, want := range []string{"!.claude/skills/", "graphify-out/", "/" + filepath.Base(target)} {
+		if !strings.Contains(content, want) {
+			t.Errorf(".gitignore = %q, want it to contain %q", content, want)
+		}
+	}
+
+	found := false
+	for _, c := range sum.Created {
+		if c == ".gitignore" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Summary.Created = %v, want it to include .gitignore", sum.Created)
+	}
+}
+
 func TestRunLearnModeOverlay(t *testing.T) {
 	home := newHome(t)
 	writeProfile(t, home.ProfilesDir, testProfile())

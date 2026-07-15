@@ -57,6 +57,10 @@ type Component struct {
 type Scaffold struct {
 	Files    []ScaffoldFile `yaml:"files,omitempty"`
 	Settings map[string]any `yaml:"settings,omitempty"`
+	// GitignoreStack são linhas específicas da stack acrescentadas ao bloco
+	// base do .gitignore (scaffold.MergeGitignore); podem usar text/template
+	// (ex. "/{{.ProjectName}}"), renderizadas com os mesmos dados do scaffold.
+	GitignoreStack []string `yaml:"gitignore_stack,omitempty"`
 }
 
 // ScaffoldFile é um arquivo a criar; Template nomeia um template de origem opcional.
