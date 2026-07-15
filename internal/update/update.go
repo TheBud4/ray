@@ -210,9 +210,9 @@ func isTreeDirty(check runner.Runner, target string) (bool, error) {
 	return strings.TrimSpace(res.Stdout) != "", nil
 }
 
-// toolUpgradeCommands espelha integrations.go (addHeadroom/addCodeGraph),
-// trocando install por upgrade — só as integrações com uma ferramenta uv
-// global entram aqui (as demais são conteúdo, tratado no passo 4).
+// toolUpgradeCommands espelha economy.Headroom/economy.CodeGraph, trocando
+// install por upgrade — só as integrações com uma ferramenta uv global
+// entram aqui (as demais são conteúdo, tratado no passo 4).
 func toolUpgradeCommands(in profile.Integrations) []runner.Command {
 	var cmds []runner.Command
 	if in.Headroom {
