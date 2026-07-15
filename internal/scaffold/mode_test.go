@@ -121,3 +121,69 @@ func TestGuardCodeAllowsDocsBlocksCode(t *testing.T) {
 		t.Fatalf("guard-code.sh on lib/main.dart = %q, want it to contain \"block\"", codeOut)
 	}
 }
+
+func runSessionStart(t *testing.T, scriptPath string) string {
+	t.Helper()
+	cmd := exec.Command("bash", scriptPath)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("session-start.sh failed: %v\noutput: %s", err, out.String())
+	}
+	return out.String()
+}
+
+func TestSessionStartCountsInjectedHandoffs(t *testing.T) {
+	requireBashAndJQ(t)
+
+	target := t.TempDir()
+	if _, err := WriteFiles(SystemFiles(ModeBuild), Options{Target: target}); err != nil {
+		t.Fatal(err)
+	}
+	scriptPath := filepath.Join(target, ".claude/hooks/session-start.sh")
+	countPath := filepath.Join(target, ".claude/.ray-metrics/handoffs.count")
+
+	if err := os.WriteFile(filepath.Join(target, ".claude/handoff.md"), []byte("state"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out1 := runSessionStart(t, scriptPath)
+	if !strings.Contains(out1, "state") {
+		t.Fatalf("session-start.sh output = %q, want it to include the handoff content", out1)
+	}
+	data, err := os.ReadFile(countPath)
+	if err != nil {
+		t.Fatalf("stat handoffs.count after 1st run: %v", err)
+	}
+	if strings.TrimSpace(string(data)) != "1" {
+		t.Errorf("handoffs.count after 1st run = %q, want %q", data, "1")
+	}
+
+	runSessionStart(t, scriptPath)
+	data, err = os.ReadFile(countPath)
+	if err != nil {
+		t.Fatalf("stat handoffs.count after 2nd run: %v", err)
+	}
+	if strings.TrimSpace(string(data)) != "2" {
+		t.Errorf("handoffs.count after 2nd run = %q, want %q", data, "2")
+	}
+}
+
+func TestSessionStartWithoutHandoffRecordsNoMetric(t *testing.T) {
+	requireBashAndJQ(t)
+
+	target := t.TempDir()
+	if _, err := WriteFiles(SystemFiles(ModeBuild), Options{Target: target}); err != nil {
+		t.Fatal(err)
+	}
+	scriptPath := filepath.Join(target, ".claude/hooks/session-start.sh")
+
+	out := runSessionStart(t, scriptPath)
+	if strings.TrimSpace(out) != "" {
+		t.Errorf("session-start.sh output = %q, want empty with no handoff.md", out)
+	}
+	if _, err := os.Stat(filepath.Join(target, ".claude/.ray-metrics")); !os.IsNotExist(err) {
+		t.Error(".ray-metrics/ should not exist: no handoff was injected, no activity to record")
+	}
+}
