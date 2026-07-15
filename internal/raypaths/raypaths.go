@@ -37,6 +37,10 @@ func StatePath() (string, error) { return sub("state.yaml") }
 // CommandsPath é <Home>/commands.yaml (aliases globais do `ray run`).
 func CommandsPath() (string, error) { return sub("commands.yaml") }
 
+// StoreDir é <Home>/store, o cache content-addressed de conteúdo de IA
+// adquirido (internal/store).
+func StoreDir() (string, error) { return sub("store") }
+
 func sub(name string) (string, error) {
 	h, err := Home()
 	if err != nil {
