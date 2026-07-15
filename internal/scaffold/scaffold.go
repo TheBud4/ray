@@ -175,6 +175,7 @@ var gitignoreBaseLines = []string{
 	"!.claude/settings.json",
 	"!.mcp.json",
 	"!docs/",
+	"!.claude/.ray-profile",
 	"!**/.ray-origin",
 	"!**/LICENSE",
 	"",

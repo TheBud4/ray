@@ -27,15 +27,16 @@ func New(root string) *Store {
 	return &Store{root: root}
 }
 
-func (s *Store) objectsDir() string { return filepath.Join(s.root, "objects") }
-func (s *Store) indexPath() string  { return filepath.Join(s.root, "index.yaml") }
+func (s *Store) objectsDir() string   { return filepath.Join(s.root, "objects") }
+func (s *Store) indexPath() string    { return filepath.Join(s.root, "index.yaml") }
+func (s *Store) pristinePath() string { return filepath.Join(s.root, "pristine.yaml") }
 
 // Put hasheia o conteúdo de dir (por bytes, não por coord) e o guarda em
 // <root>/objects/<hash> se ainda não existir; registra coord→hash no índice.
 // Put do mesmo coord com o mesmo conteúdo é idempotente; conteúdo idêntico de
 // coords diferentes compartilha um único objeto (dedup por bytes).
 func (s *Store) Put(coord, dir string) (string, error) {
-	hash, err := hashTree(dir)
+	hash, err := HashTree(dir)
 	if err != nil {
 		return "", err
 	}
@@ -109,18 +110,29 @@ func (s *Store) saveIndex(index map[string]string) error {
 	return os.WriteFile(s.indexPath(), data, 0o644)
 }
 
-// hashTree calcula um sha256 determinístico sobre (rel-path, conteúdo) de
-// todo arquivo regular em dir, em ordem lexicográfica de rel-path.
-func hashTree(dir string) (string, error) {
+// HashTree calcula um sha256 determinístico sobre (rel-path, conteúdo) de
+// todo arquivo regular sob path, em ordem lexicográfica de rel-path. path
+// pode ser um diretório ou um único arquivo (aitmpl entrega um .md solto),
+// caso em que rel-path é só o nome-base do arquivo.
+func HashTree(path string) (string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
+	dir := path
+	if !info.IsDir() {
+		dir = filepath.Dir(path)
+	}
+
 	var rels []string
-	if err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+	if err := filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if d.IsDir() {
 			return nil
 		}
-		rel, err := filepath.Rel(dir, path)
+		rel, err := filepath.Rel(dir, p)
 		if err != nil {
 			return err
 		}
@@ -143,6 +155,62 @@ func hashTree(dir string) (string, error) {
 		h.Write([]byte{0})
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// PristineHash devolve o hash que o store gravou por último para proj×coord
+// (I3: linha-base contra a qual `ray update` detecta fork por conteúdo), ou
+// ok=false se nunca foi gravado.
+func (s *Store) PristineHash(proj, coord string) (string, bool) {
+	index, err := s.loadPristine()
+	if err != nil {
+		return "", false
+	}
+	byCoord, ok := index[proj]
+	if !ok {
+		return "", false
+	}
+	hash, ok := byCoord[coord]
+	return hash, ok
+}
+
+// SetPristine grava o hash pristino de proj×coord, sobrescrevendo qualquer
+// valor anterior.
+func (s *Store) SetPristine(proj, coord, hash string) error {
+	index, err := s.loadPristine()
+	if err != nil {
+		return err
+	}
+	if index[proj] == nil {
+		index[proj] = map[string]string{}
+	}
+	index[proj][coord] = hash
+	return s.savePristine(index)
+}
+
+func (s *Store) loadPristine() (map[string]map[string]string, error) {
+	index := map[string]map[string]string{}
+	data, err := os.ReadFile(s.pristinePath())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return index, nil
+		}
+		return nil, err
+	}
+	if err := yaml.Unmarshal(data, &index); err != nil {
+		return nil, err
+	}
+	return index, nil
+}
+
+func (s *Store) savePristine(index map[string]map[string]string) error {
+	if err := os.MkdirAll(s.root, 0o755); err != nil {
+		return err
+	}
+	data, err := yaml.Marshal(index)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(s.pristinePath(), data, 0o644)
 }
 
 // CopyTree copia src (arquivo ou diretório, com estrutura + permissões) para

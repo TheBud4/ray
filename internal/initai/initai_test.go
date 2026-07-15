@@ -14,6 +14,7 @@ import (
 	"github.com/TheBud4/ray/internal/rayconfig"
 	"github.com/TheBud4/ray/internal/runner"
 	"github.com/TheBud4/ray/internal/scaffold"
+	"github.com/TheBud4/ray/internal/store"
 )
 
 // seedingRunner é como runner.FakeRunner (registra chamadas, permite forçar
@@ -378,6 +379,57 @@ func TestRunContentCacheFirstNoReacquireOnSecondRun(t *testing.T) {
 	}
 	if acquireCalls != 1 {
 		t.Fatalf("acquire calls = %d, want exactly 1: the 2nd run should hit the warm cache, not re-acquire", acquireCalls)
+	}
+}
+
+func TestRunWritesProfileRecord(t *testing.T) {
+	home := newHome(t)
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+
+	opts := Options{Profile: "test", Target: target, Mode: scaffold.ModeBuild, Out: &bytes.Buffer{}}
+	sum, err := Run(&seedingRunner{}, allFound, opts, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if sum.HadFailure {
+		t.Fatalf("HadFailure = true, Failed = %v", sum.Failed)
+	}
+
+	data, err := os.ReadFile(filepath.Join(target, ".claude", ".ray-profile"))
+	if err != nil {
+		t.Fatalf("stat .claude/.ray-profile: %v", err)
+	}
+	if strings.TrimSpace(string(data)) != "test" {
+		t.Errorf(".ray-profile = %q, want %q", data, "test")
+	}
+}
+
+func TestRunWritesPristineHashForAcquiredComponent(t *testing.T) {
+	home := newHome(t)
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+
+	opts := Options{Profile: "test", Target: target, Mode: scaffold.ModeBuild, Out: &bytes.Buffer{}}
+	sum, err := Run(&seedingRunner{}, allFound, opts, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if sum.HadFailure {
+		t.Fatalf("HadFailure = true, Failed = %v", sum.Failed)
+	}
+
+	st := store.New(home.StoreDir)
+	onDiskHash, err := store.HashTree(filepath.Join(target, ".claude", "skills", "s"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pristine, ok := st.PristineHash(target, "skills:o/r#s")
+	if !ok {
+		t.Fatal("PristineHash() ok = false, want a pristine hash recorded after Run")
+	}
+	if pristine != onDiskHash {
+		t.Errorf("PristineHash() = %q, want it to match the on-disk hash %q", pristine, onDiskHash)
 	}
 }
 

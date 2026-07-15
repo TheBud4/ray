@@ -28,7 +28,7 @@ func newRootCmd() *cobra.Command {
 
 	// Build the command tree
 	root.AddCommand(newInitCmd(), newNewCmd(), newRunCmd(), newProfileCmd(),
-		newVaultCmd(), newDocsCmd(), newDoctorCmd())
+		newVaultCmd(), newDocsCmd(), newDoctorCmd(), newUpdateCmd())
 
 	return root
 

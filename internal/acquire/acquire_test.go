@@ -373,6 +373,35 @@ func TestDestRelMatchesAcquireResult(t *testing.T) {
 	}
 }
 
+func TestLeafName(t *testing.T) {
+	cases := []struct {
+		name string
+		comp profile.Component
+		want string
+	}{
+		{"git", profile.Component{Via: profile.ViaGit, Path: "skills/widget"}, "widget"},
+		{"skills", profile.Component{Via: profile.ViaSkills, Skill: "prompt-engineer"}, "prompt-engineer"},
+		{"aitmpl", profile.Component{Via: profile.ViaAitmpl, Ref: "development-tools/code-reviewer"}, "code-reviewer.md"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := LeafName(tc.comp)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tc.want {
+				t.Errorf("LeafName() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestLeafNameUnknownVia(t *testing.T) {
+	if _, err := LeafName(profile.Component{Via: "bogus"}); err == nil {
+		t.Fatal("LeafName() = nil error, want error for unknown via")
+	}
+}
+
 func TestPreviewCommand(t *testing.T) {
 	cases := []struct {
 		name string

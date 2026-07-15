@@ -236,6 +236,17 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 			sum.Failed = append(sum.Failed, coord)
 			continue
 		}
+		leaf, err := acquire.LeafName(c)
+		if err != nil {
+			return Summary{}, err
+		}
+		leafHash, err := store.HashTree(filepath.Join(target, destRel, leaf))
+		if err != nil {
+			return Summary{}, err
+		}
+		if err := st.SetPristine(target, coord, leafHash); err != nil {
+			return Summary{}, err
+		}
 		sum.Installed = append(sum.Installed, coord)
 	}
 
@@ -285,6 +296,21 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		return Summary{}, err
 	}
 	sum.Created = append(sum.Created, ".gitignore")
+
+	// 12. registro do perfil (I3) — permite a `ray update` descobrir qual
+	// receita re-adquirir sem exigir --profile num clone.
+	profileRecord := filepath.Join(target, ".claude", ".ray-profile")
+	if opts.DryRun {
+		fmt.Fprintf(out, "+ write %s (%s)\n", profileRecord, prof.Name)
+	} else {
+		if err := os.MkdirAll(filepath.Dir(profileRecord), 0o755); err != nil {
+			return Summary{}, err
+		}
+		if err := os.WriteFile(profileRecord, []byte(prof.Name+"\n"), 0o644); err != nil {
+			return Summary{}, err
+		}
+	}
+	sum.Created = append(sum.Created, ".claude/.ray-profile")
 
 	sum.HadFailure = len(sum.Failed) > 0
 	return sum, nil

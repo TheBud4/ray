@@ -153,3 +153,66 @@ func TestPutSameCoordTwiceIsIdempotent(t *testing.T) {
 		t.Fatal("Has() = false after two Puts of the same coord")
 	}
 }
+
+func TestHashTreeSingleFile(t *testing.T) {
+	dir := seedTree(t, map[string]string{"skill.md": "content"})
+	file := filepath.Join(dir, "skill.md")
+
+	h1, err := HashTree(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h2, err := HashTree(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h1 != h2 {
+		t.Fatalf("HashTree(file) = %q, HashTree(parentDir) = %q, want equal for single-file dir", h1, h2)
+	}
+}
+
+func TestPristineHashRoundTrip(t *testing.T) {
+	s := New(t.TempDir())
+
+	if _, ok := s.PristineHash("/proj/a", "git:o/r#c"); ok {
+		t.Fatal("PristineHash() ok = true before SetPristine")
+	}
+
+	if err := s.SetPristine("/proj/a", "git:o/r#c", "abc123"); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := s.PristineHash("/proj/a", "git:o/r#c")
+	if !ok || got != "abc123" {
+		t.Fatalf("PristineHash() = (%q, %v), want (%q, true)", got, ok, "abc123")
+	}
+}
+
+func TestPristineHashIsolatedPerProject(t *testing.T) {
+	s := New(t.TempDir())
+	if err := s.SetPristine("/proj/a", "coord", "hash-a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetPristine("/proj/b", "coord", "hash-b"); err != nil {
+		t.Fatal(err)
+	}
+
+	gotA, _ := s.PristineHash("/proj/a", "coord")
+	gotB, _ := s.PristineHash("/proj/b", "coord")
+	if gotA != "hash-a" || gotB != "hash-b" {
+		t.Fatalf("got (%q, %q), want (%q, %q)", gotA, gotB, "hash-a", "hash-b")
+	}
+}
+
+func TestSetPristineOverwrites(t *testing.T) {
+	s := New(t.TempDir())
+	if err := s.SetPristine("/proj/a", "coord", "old"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetPristine("/proj/a", "coord", "new"); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := s.PristineHash("/proj/a", "coord")
+	if !ok || got != "new" {
+		t.Fatalf("PristineHash() = (%q, %v), want (%q, true)", got, ok, "new")
+	}
+}

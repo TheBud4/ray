@@ -111,7 +111,10 @@ func (g GitAcquirer) Acquire(ctx context.Context, comp profile.Component) (Resul
 		return Result{}, fmt.Errorf("path %q not found in %s@%s", comp.Path, comp.Repo, gitRef(comp))
 	}
 
-	name := filepath.Base(comp.Path)
+	name, err := LeafName(comp)
+	if err != nil {
+		return Result{}, err
+	}
 	container, err := os.MkdirTemp("", "ray-acquire-content-")
 	if err != nil {
 		return Result{}, err
@@ -165,10 +168,31 @@ func cliAcquireCommand(comp profile.Component, projectDir string) (cmd runner.Co
 		if aerr != nil {
 			return runner.Command{}, "", "", aerr
 		}
+		name, nerr := LeafName(comp)
+		if nerr != nil {
+			return runner.Command{}, "", "", nerr
+		}
 		args := []string{"claude-code-templates@latest", flag + "=" + comp.Ref, "--yes"}
-		return runner.Command{Name: "npx", Args: args, Dir: projectDir, Env: env}, filepath.Join(".claude", sub), filepath.Base(comp.Ref) + ".md", nil
+		return runner.Command{Name: "npx", Args: args, Dir: projectDir, Env: env}, filepath.Join(".claude", sub), name, nil
 	default:
 		return runner.Command{}, "", "", fmt.Errorf("via %q is not a CLI acquisition", comp.Via)
+	}
+}
+
+// LeafName devolve, sem tocar disco/rede, o nome do subdiretório/arquivo que
+// o conteúdo de comp ocupa dentro do seu DestRel (ex. ".claude/skills/<nome>")
+// — usado pelo `ray update` (I3) para localizar o conteúdo já vendorizado no
+// projeto e hasheá-lo antes de decidir se sobrescreve.
+func LeafName(comp profile.Component) (string, error) {
+	switch comp.Via {
+	case profile.ViaGit:
+		return filepath.Base(comp.Path), nil
+	case profile.ViaSkills:
+		return comp.Skill, nil
+	case profile.ViaAitmpl:
+		return filepath.Base(comp.Ref) + ".md", nil
+	default:
+		return "", fmt.Errorf("unknown via %q", comp.Via)
 	}
 }
 

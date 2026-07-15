@@ -1,0 +1,234 @@
+// Package update implementa `ray update` (I3): atualiza ferramentas (latest)
+// e re-adquire conteúdo pelo Acquirer de cada componente, protegendo edições
+// por conteúdo (não por git-status) via o hash pristino gravado pelo
+// internal/initai em internal/store.
+package update
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/TheBud4/ray/internal/acquire"
+	"github.com/TheBud4/ray/internal/profile"
+	"github.com/TheBud4/ray/internal/runner"
+	"github.com/TheBud4/ray/internal/store"
+)
+
+// Home reúne os caminhos de ~/.ray que Run precisa, resolvidos pelo chamador
+// (internal/raypaths) — mesmo padrão de initai.Home.
+type Home struct {
+	ProfilesDir string
+	StoreDir    string
+}
+
+// Options são os parâmetros de `ray update`.
+type Options struct {
+	// Profile sobrescreve o registro project-local (.claude/.ray-profile).
+	// Vazio = ler o registro.
+	Profile string
+	Target  string
+	Force   bool
+	DryRun  bool
+	Out     io.Writer
+}
+
+// Summary é o resultado de Run.
+type Summary struct {
+	Updated    []string
+	Skipped    []string
+	Failed     []string
+	Warnings   []string
+	HadFailure bool
+}
+
+// profileRecordPath é onde `ray init ai` grava o nome do perfil usado
+// (initai.go, passo 12) para que um clone rode `ray update .` sem --profile.
+func profileRecordPath(target string) string {
+	return filepath.Join(target, ".claude", ".ray-profile")
+}
+
+// Run executa `ray update`. r executa ações efetivas (ferramentas, cópia de
+// conteúdo) e respeita --dry-run na fiação real; check só consulta o estado
+// da árvore git e deve continuar real mesmo sob --dry-run (mesmo raciocínio
+// do preflight em `ray init ai`: um guard não deve virar teatro).
+func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary, error) {
+	var sum Summary
+	out := opts.Out
+	if out == nil {
+		out = io.Discard
+	}
+
+	target, err := filepath.Abs(opts.Target)
+	if err != nil {
+		return Summary{}, err
+	}
+
+	// 1. resolve o perfil: --profile ganha; senão lê o registro project-local.
+	name := opts.Profile
+	if name == "" {
+		data, rerr := os.ReadFile(profileRecordPath(target))
+		if rerr != nil {
+			return Summary{}, fmt.Errorf("no profile recorded at %s and --profile not given: %w", profileRecordPath(target), rerr)
+		}
+		name = strings.TrimSpace(string(data))
+	}
+	prof, err := profile.Load(filepath.Join(home.ProfilesDir, name+".yaml"))
+	if err != nil {
+		return Summary{}, err
+	}
+
+	// 2. guard de árvore limpa (ortogonal) — mantém o diff do update legível.
+	// Se não der para checar (não é repo git, git ausente), segue sem bloquear.
+	if !opts.Force {
+		dirty, gerr := isTreeDirty(check, target)
+		if gerr == nil && dirty {
+			return Summary{}, fmt.Errorf("%s has uncommitted changes; commit/stash or pass --force so the update diff stays legible", target)
+		}
+	}
+
+	// 3. ferramentas (latest) — só as que a receita liga.
+	for _, cmd := range toolUpgradeCommands(prof.Integrations) {
+		if runOne(r, cmd) {
+			sum.Updated = append(sum.Updated, cmd.String())
+		} else {
+			sum.Failed = append(sum.Failed, cmd.String())
+		}
+	}
+
+	// 4. conteúdo — re-aquisição por ref, protegida por fork (por componente).
+	st := store.New(home.StoreDir)
+	for _, c := range prof.Components {
+		acq, ok := acquire.For(c, r)
+		if !ok {
+			continue
+		}
+		coord := acq.Key(c)
+		leaf, lerr := acquire.LeafName(c)
+		if lerr != nil {
+			return Summary{}, lerr
+		}
+		destRel, derr := acquire.DestRel(c)
+		if derr != nil {
+			return Summary{}, derr
+		}
+		onDisk := filepath.Join(target, destRel, leaf)
+
+		if c.Via == profile.ViaGit && c.Ref != "" && c.Ref != "main" {
+			sum.Skipped = append(sum.Skipped, coord+" (pinned ref, no-op)")
+			continue
+		}
+
+		if opts.DryRun {
+			fmt.Fprintf(out, "+ re-acquire %s -> %s\n", coord, destRel)
+			sum.Updated = append(sum.Updated, coord)
+			continue
+		}
+
+		res, aerr := acq.Acquire(context.Background(), c)
+		if aerr != nil {
+			sum.Failed = append(sum.Failed, coord)
+			continue
+		}
+		freshDir := filepath.Join(res.Dir, leaf)
+		freshHash, herr := store.HashTree(freshDir)
+		if herr != nil {
+			return Summary{}, herr
+		}
+
+		onDiskHash, onDiskErr := store.HashTree(onDisk)
+		pristineHash, hasPristine := st.PristineHash(target, coord)
+
+		overwrite, reason := decideOverwrite(opts.Force, onDiskErr == nil, onDiskHash, freshHash, pristineHash, hasPristine)
+		if !overwrite {
+			sum.Skipped = append(sum.Skipped, coord)
+			sum.Warnings = append(sum.Warnings, fmt.Sprintf("%s: %s", coord, reason))
+			continue
+		}
+
+		if err := os.RemoveAll(onDisk); err != nil && !os.IsNotExist(err) {
+			return Summary{}, err
+		}
+		if err := store.CopyTree(freshDir, onDisk); err != nil {
+			sum.Failed = append(sum.Failed, coord)
+			continue
+		}
+		if _, err := st.Put(coord, freshDir); err != nil {
+			return Summary{}, err
+		}
+		if err := st.SetPristine(target, coord, freshHash); err != nil {
+			return Summary{}, err
+		}
+		sum.Updated = append(sum.Updated, coord)
+	}
+
+	sum.HadFailure = len(sum.Failed) > 0
+	return sum, nil
+}
+
+// decideOverwrite é a política de detecção de fork por conteúdo (design §6,
+// §13): pura, sem tocar disco — recebe os hashes já calculados por Run.
+//   - force: sempre sobrescreve.
+//   - sem conteúdo no disco ainda: sobrescreve (primeira instalação do leaf).
+//   - com pristino conhecido: disco == pristino → sobrescreve (não editado);
+//     disco != pristino → você editou → pula.
+//   - sem pristino (clone novo, degradação graciosa): disco == fresco →
+//     não é fork, sobrescreve; disco != fresco → ambíguo → pula.
+func decideOverwrite(force, onDiskExists bool, onDiskHash, freshHash, pristineHash string, hasPristine bool) (overwrite bool, reason string) {
+	if force {
+		return true, ""
+	}
+	if !onDiskExists {
+		return true, ""
+	}
+	if hasPristine {
+		if onDiskHash == pristineHash {
+			return true, ""
+		}
+		return false, "edited locally (differs from last pristine); use --force to overwrite"
+	}
+	if onDiskHash == freshHash {
+		return true, ""
+	}
+	return false, "edited locally (no pristine baseline; differs from upstream); use --force to overwrite"
+}
+
+// isTreeDirty roda `git status --porcelain` em target via check. Devolve
+// erro se não deu para checar (não é repo git, git ausente) — Run trata isso
+// como "não bloqueia" (soft).
+func isTreeDirty(check runner.Runner, target string) (bool, error) {
+	res, err := check.Run(context.Background(), runner.Command{Name: "git", Args: []string{"status", "--porcelain"}, Dir: target})
+	if err != nil {
+		return false, err
+	}
+	if res.ExitCode != 0 {
+		return false, fmt.Errorf("git status exited %d", res.ExitCode)
+	}
+	return strings.TrimSpace(res.Stdout) != "", nil
+}
+
+// toolUpgradeCommands espelha integrations.go (addHeadroom/addCodeGraph),
+// trocando install por upgrade — só as integrações com uma ferramenta uv
+// global entram aqui (as demais são conteúdo, tratado no passo 4).
+func toolUpgradeCommands(in profile.Integrations) []runner.Command {
+	var cmds []runner.Command
+	if in.Headroom {
+		cmds = append(cmds, runner.Command{Name: "uv", Args: []string{"tool", "upgrade", "headroom-ai"}})
+	}
+	if in.CodeGraph {
+		cmds = append(cmds, runner.Command{Name: "uv", Args: []string{"tool", "upgrade", "graphifyy"}})
+	}
+	return cmds
+}
+
+// runOne roda c via r e classifica o resultado: err ou ExitCode != 0 → false.
+func runOne(r runner.Runner, c runner.Command) bool {
+	res, err := r.Run(context.Background(), c)
+	if err != nil {
+		return false
+	}
+	return res.ExitCode == 0
+}
