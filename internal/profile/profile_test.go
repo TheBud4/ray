@@ -144,6 +144,40 @@ func TestValidate(t *testing.T) {
 			},
 			wantErr: "component 1",
 		},
+		{
+			name: "valid milestone",
+			profile: Profile{
+				Name:       "go",
+				Milestones: []Milestone{{Goal: "Skeleton compiles", Verify: "go build ./..."}},
+			},
+		},
+		{
+			name: "milestone missing goal",
+			profile: Profile{
+				Name:       "go",
+				Milestones: []Milestone{{Verify: "go build ./..."}},
+			},
+			wantErr: "goal is required",
+		},
+		{
+			name: "milestone missing verify",
+			profile: Profile{
+				Name:       "go",
+				Milestones: []Milestone{{Goal: "Skeleton compiles"}},
+			},
+			wantErr: "verify is required",
+		},
+		{
+			name: "error on second milestone preserves index",
+			profile: Profile{
+				Name: "go",
+				Milestones: []Milestone{
+					{Goal: "a", Verify: "true"},
+					{Goal: "b"},
+				},
+			},
+			wantErr: "milestone 1",
+		},
 	}
 
 	for _, tc := range cases {
@@ -250,4 +284,61 @@ func TestLoadInvalid(t *testing.T) {
 			t.Errorf("Load() error = %q, want it to contain \"parsing\"", err.Error())
 		}
 	})
+}
+
+func writeTestProfile(t *testing.T, profilesDir, name string) {
+	t.Helper()
+	if err := os.MkdirAll(profilesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data, err := yaml.Marshal(Profile{Name: name})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(profilesDir, name+".yaml"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLoadForTargetOverrideWins(t *testing.T) {
+	profilesDir := t.TempDir()
+	writeTestProfile(t, profilesDir, "go")
+	target := t.TempDir() // no record file at all
+
+	got, err := LoadForTarget(profilesDir, target, "go")
+	if err != nil {
+		t.Fatalf("LoadForTarget() error = %v", err)
+	}
+	if got.Name != "go" {
+		t.Errorf("Name = %q, want %q", got.Name, "go")
+	}
+}
+
+func TestLoadForTargetFallsBackToRecord(t *testing.T) {
+	profilesDir := t.TempDir()
+	writeTestProfile(t, profilesDir, "web")
+	target := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(target, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ProfileRecordPath(target), []byte("web\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := LoadForTarget(profilesDir, target, "")
+	if err != nil {
+		t.Fatalf("LoadForTarget() error = %v", err)
+	}
+	if got.Name != "web" {
+		t.Errorf("Name = %q, want %q", got.Name, "web")
+	}
+}
+
+func TestLoadForTargetMissingBothErrors(t *testing.T) {
+	profilesDir := t.TempDir()
+	target := t.TempDir()
+
+	if _, err := LoadForTarget(profilesDir, target, ""); err == nil {
+		t.Fatal("LoadForTarget() = nil error, want error when no record and no override")
+	}
 }

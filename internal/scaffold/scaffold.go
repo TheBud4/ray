@@ -30,28 +30,34 @@ const executableSuffix = ".sh"
 
 // templateFor liga cada path alvo ao seu arquivo .tmpl dentro de templates/.
 var templateFor = map[string]string{
-	"CLAUDE.md":                        "CLAUDE.md.tmpl",
-	"SECURITY.md":                      "SECURITY.md.tmpl",
-	"docs/README.md":                   "docs/README.md.tmpl",
-	"docs/architecture.md":             "docs/architecture.md.tmpl",
-	"docs/conventions.md":              "docs/conventions.md.tmpl",
-	"docs/context.md":                  "docs/context.md.tmpl",
-	".claude/rules/security.md":        "claude/rules/security.md.tmpl",
-	".claude/rules/workflow.md":        "claude/rules/workflow.md.tmpl",
-	".claude/rules/handoff.md":         "claude/rules/handoff.md.tmpl",
-	".claude/rules/knowledge-vault.md": "claude/rules/knowledge-vault.md.tmpl",
-	".claude/rules/documentation.md":   "claude/rules/documentation.md.tmpl",
-	".claude/commands/document.md":     "claude/commands/document.md.tmpl",
-	".claude/handoff.md":               "claude/handoff.md.tmpl",
-	".claude/hooks/session-start.sh":   "claude/hooks/session-start.sh.tmpl",
-	".claude/rules/learn.md":           "claude/rules/learn.md.tmpl",
-	".claude/hooks/guard-code.sh":      "claude/hooks/guard-code.sh.tmpl",
+	"CLAUDE.md":                         "CLAUDE.md.tmpl",
+	"SECURITY.md":                       "SECURITY.md.tmpl",
+	"docs/README.md":                    "docs/README.md.tmpl",
+	"docs/architecture.md":              "docs/architecture.md.tmpl",
+	"docs/conventions.md":               "docs/conventions.md.tmpl",
+	"docs/context.md":                   "docs/context.md.tmpl",
+	".claude/rules/security.md":         "claude/rules/security.md.tmpl",
+	".claude/rules/workflow.md":         "claude/rules/workflow.md.tmpl",
+	".claude/rules/handoff.md":          "claude/rules/handoff.md.tmpl",
+	".claude/rules/knowledge-vault.md":  "claude/rules/knowledge-vault.md.tmpl",
+	".claude/rules/documentation.md":    "claude/rules/documentation.md.tmpl",
+	".claude/commands/document.md":      "claude/commands/document.md.tmpl",
+	".claude/handoff.md":                "claude/handoff.md.tmpl",
+	".claude/hooks/session-start.sh":    "claude/hooks/session-start.sh.tmpl",
+	".claude/rules/learn.md":            "claude/rules/learn.md.tmpl",
+	".claude/hooks/guard-code.sh":       "claude/hooks/guard-code.sh.tmpl",
+	".claude/rules/learning-journal.md": "claude/rules/learning-journal.md.tmpl",
 }
 
 // Data são os placeholders disponíveis em todo template.
 type Data struct {
 	ProjectName string
 	Stack       string
+	// Level é iniciante|intermediário|avançado (LevelBeginner/Intermediate/
+	// Advanced), só relevante em --mode learn — I6a só rosqueia o valor até
+	// aqui; quem de fato varia o template por Level é o conteúdo de ensino
+	// do I6b.
+	Level string
 }
 
 // Options controla como WriteFiles escreve em Target.

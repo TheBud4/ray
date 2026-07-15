@@ -17,12 +17,12 @@ import (
 
 func resetInitAIFlags(t *testing.T) {
 	t.Helper()
-	prevProfile, prevMode := flagProfile, flagMode
+	prevProfile, prevMode, prevLevel := flagProfile, flagMode, flagLevel
 	prevGlobal, prevForce := flagGlobal, flagForce
 	prevNoGlobal, prevReinstall := flagNoGlobal, flagReinstallGlobal
 	prevDryRun := flagDryRun
 	t.Cleanup(func() {
-		flagProfile, flagMode = prevProfile, prevMode
+		flagProfile, flagMode, flagLevel = prevProfile, prevMode, prevLevel
 		flagGlobal, flagForce = prevGlobal, prevForce
 		flagNoGlobal, flagReinstallGlobal = prevNoGlobal, prevReinstall
 		flagDryRun = prevDryRun
@@ -33,6 +33,7 @@ func TestBuildInitAIOptionsMapsFlags(t *testing.T) {
 	resetInitAIFlags(t)
 	flagProfile = "go"
 	flagMode = scaffold.ModeLearn
+	flagLevel = scaffold.LevelBeginner
 	flagGlobal = true
 	flagForce = true
 	flagNoGlobal = true
@@ -41,8 +42,8 @@ func TestBuildInitAIOptionsMapsFlags(t *testing.T) {
 
 	opts := buildInitAIOptions("/tmp/project", &bytes.Buffer{})
 
-	if opts.Profile != "go" || opts.Mode != scaffold.ModeLearn || opts.Target != "/tmp/project" {
-		t.Fatalf("opts = %+v, want Profile=go Mode=learn Target=/tmp/project", opts)
+	if opts.Profile != "go" || opts.Mode != scaffold.ModeLearn || opts.Level != scaffold.LevelBeginner || opts.Target != "/tmp/project" {
+		t.Fatalf("opts = %+v, want Profile=go Mode=learn Level=beginner Target=/tmp/project", opts)
 	}
 	if !opts.Global || !opts.Force || !opts.NoGlobal || !opts.ReinstallGlobal || !opts.DryRun {
 		t.Fatalf("opts = %+v, want all bool flags true", opts)

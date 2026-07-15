@@ -6,6 +6,7 @@ package profile
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -19,6 +20,19 @@ type Profile struct {
 	Components   []Component  `yaml:"components"`
 	Scaffold     Scaffold     `yaml:"scaffold"`
 	Create       []string     `yaml:"create"`
+	// Milestones é um overlay opcional de projeto-escola (design §9.3,
+	// I6a): cada marco é um comando verificável, não prosa. O `ray` só
+	// fornece a máquina (internal/learn) — a curadoria do currículo vive
+	// na receita do usuário.
+	Milestones []Milestone `yaml:"milestones,omitempty"`
+}
+
+// Milestone é um marco de projeto-escola: Verify é o comando (sem shell,
+// splitado por espaço como os passos de internal/runfile) que precisa
+// passar para o marco contar como cruzado.
+type Milestone struct {
+	Goal   string `yaml:"goal"`
+	Verify string `yaml:"verify"`
 }
 
 // Integrations liga/desliga as capacidades embutidas que o ray conecta num projeto.
@@ -88,6 +102,21 @@ func (p *Profile) Validate() error {
 			return fmt.Errorf("scaffold file %d: path is required", i)
 		}
 	}
+	for i, m := range p.Milestones {
+		if err := m.validate(); err != nil {
+			return fmt.Errorf("milestone %d: %w", i, err)
+		}
+	}
+	return nil
+}
+
+func (m Milestone) validate() error {
+	if strings.TrimSpace(m.Goal) == "" {
+		return fmt.Errorf("goal is required")
+	}
+	if strings.TrimSpace(m.Verify) == "" {
+		return fmt.Errorf("verify is required")
+	}
 	return nil
 }
 
@@ -132,4 +161,26 @@ func Load(path string) (*Profile, error) {
 		return nil, fmt.Errorf("invalid profile %s: %w", path, err)
 	}
 	return &p, nil
+}
+
+// ProfileRecordPath é onde `ray init ai` grava o nome do perfil usado
+// (initai.go, passo 12) — permite a comandos como `ray update`/`ray learn
+// check` descobrirem o perfil de um projeto sem exigir --profile.
+func ProfileRecordPath(target string) string {
+	return filepath.Join(target, ".claude", ".ray-profile")
+}
+
+// LoadForTarget resolve e carrega o perfil de target: overrideName, se
+// não-vazio, ganha; senão lê o registro project-local
+// (ProfileRecordPath(target), escrito por `ray init ai`).
+func LoadForTarget(profilesDir, target, overrideName string) (*Profile, error) {
+	name := overrideName
+	if name == "" {
+		data, err := os.ReadFile(ProfileRecordPath(target))
+		if err != nil {
+			return nil, fmt.Errorf("no profile recorded at %s and --profile not given: %w", ProfileRecordPath(target), err)
+		}
+		name = strings.TrimSpace(string(data))
+	}
+	return Load(filepath.Join(profilesDir, name+".yaml"))
 }

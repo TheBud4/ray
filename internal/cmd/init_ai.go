@@ -16,6 +16,7 @@ import (
 var (
 	flagProfile         string
 	flagMode            string
+	flagLevel           string
 	flagGlobal          bool
 	flagForce           bool
 	flagNoGlobal        bool
@@ -48,6 +49,7 @@ func newInitAICmd() *cobra.Command {
 	}
 	c.Flags().StringVar(&flagProfile, "profile", "", "recipe to install (required)")
 	c.Flags().StringVar(&flagMode, "mode", scaffold.ModeBuild, "build|learn")
+	c.Flags().StringVar(&flagLevel, "level", "", "beginner|intermediate|advanced (--mode learn only; defaults to intermediate)")
 	c.Flags().BoolVarP(&flagGlobal, "global", "g", false, "install content-producing skills as personal, cross-project content instead of project-local/vendored (I1: --global no longer means \"the normal path\")")
 	c.Flags().BoolVar(&flagForce, "force", false, "regenerate scaffold files that already exist (never touches .claude/handoff.md)")
 	c.Flags().BoolVar(&flagNoGlobal, "no-global", false, "skip all install-once global steps")
@@ -62,6 +64,7 @@ func buildInitAIOptions(target string, out io.Writer) initai.Options {
 		Profile:         flagProfile,
 		Target:          target,
 		Mode:            flagMode,
+		Level:           flagLevel,
 		Global:          flagGlobal,
 		Force:           flagForce,
 		NoGlobal:        flagNoGlobal,

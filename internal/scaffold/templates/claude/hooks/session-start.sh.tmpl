@@ -17,3 +17,12 @@ if [[ -f .claude/handoff.md ]]; then
   count=$(cat "$count_file" 2>/dev/null || echo 0)
   echo $((count + 1)) > "$count_file"
 fi
+
+# I6a: injects only the learning-journal head (small, always-rewritten) —
+# the log is append-only and never injected. No-ops outside --mode learn or
+# before the first `ray learn check` (file doesn't exist yet).
+if [[ -f .claude/.local/learning-journal.md ]]; then
+  echo "## Learning journal"
+  cat .claude/.local/learning-journal.md
+  echo
+fi

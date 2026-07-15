@@ -45,12 +45,6 @@ type Summary struct {
 	HadFailure bool
 }
 
-// profileRecordPath é onde `ray init ai` grava o nome do perfil usado
-// (initai.go, passo 12) para que um clone rode `ray update .` sem --profile.
-func profileRecordPath(target string) string {
-	return filepath.Join(target, ".claude", ".ray-profile")
-}
-
 // Run executa `ray update`. r executa ações efetivas (ferramentas, cópia de
 // conteúdo) e respeita --dry-run na fiação real; check só consulta o estado
 // da árvore git e deve continuar real mesmo sob --dry-run (mesmo raciocínio
@@ -68,15 +62,7 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 	}
 
 	// 1. resolve o perfil: --profile ganha; senão lê o registro project-local.
-	name := opts.Profile
-	if name == "" {
-		data, rerr := os.ReadFile(profileRecordPath(target))
-		if rerr != nil {
-			return Summary{}, fmt.Errorf("no profile recorded at %s and --profile not given: %w", profileRecordPath(target), rerr)
-		}
-		name = strings.TrimSpace(string(data))
-	}
-	prof, err := profile.Load(filepath.Join(home.ProfilesDir, name+".yaml"))
+	prof, err := profile.LoadForTarget(home.ProfilesDir, target, opts.Profile)
 	if err != nil {
 		return Summary{}, err
 	}

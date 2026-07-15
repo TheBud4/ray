@@ -20,9 +20,10 @@ func TestSystemFilesBuildIsJustSessionStart(t *testing.T) {
 func TestSystemFilesLearnAddsGuardAndRule(t *testing.T) {
 	files := SystemFiles(ModeLearn)
 	want := map[string]bool{
-		".claude/hooks/session-start.sh": false,
-		".claude/rules/learn.md":         false,
-		".claude/hooks/guard-code.sh":    false,
+		".claude/hooks/session-start.sh":    false,
+		".claude/rules/learn.md":            false,
+		".claude/hooks/guard-code.sh":       false,
+		".claude/rules/learning-journal.md": false,
 	}
 	if len(files) != len(want) {
 		t.Fatalf("SystemFiles(learn) = %v, want %d entries", files, len(want))
@@ -167,6 +168,29 @@ func TestSessionStartCountsInjectedHandoffs(t *testing.T) {
 	}
 	if strings.TrimSpace(string(data)) != "2" {
 		t.Errorf("handoffs.count after 2nd run = %q, want %q", data, "2")
+	}
+}
+
+func TestSessionStartInjectsJournalHeadWhenPresent(t *testing.T) {
+	requireBashAndJQ(t)
+
+	target := t.TempDir()
+	if _, err := WriteFiles(SystemFiles(ModeBuild), Options{Target: target}); err != nil {
+		t.Fatal(err)
+	}
+	scriptPath := filepath.Join(target, ".claude/hooks/session-start.sh")
+
+	journalDir := filepath.Join(target, ".claude/.local")
+	if err := os.MkdirAll(journalDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(journalDir, "learning-journal.md"), []byte("Milestones passed: 1/2"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out := runSessionStart(t, scriptPath)
+	if !strings.Contains(out, "Milestones passed: 1/2") {
+		t.Errorf("session-start.sh output = %q, want it to include the journal head", out)
 	}
 }
 
