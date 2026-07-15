@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/logo.png" width="320" alt="Logo do ray: óculos escuros sobre um splash de tinta laranja" style="margin-bottom: -30px;">
+  <img src="docs/assets/logo.png" width="340" alt="Logo do ray: óculos escuros sobre um splash de tinta laranja">
 </p>
 
 <h1 align="center">ray</h1>
