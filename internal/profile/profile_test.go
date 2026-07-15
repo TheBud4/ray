@@ -96,6 +96,36 @@ func TestValidate(t *testing.T) {
 			wantErr: "requires 'ref'",
 		},
 		{
+			name: "valid git component",
+			profile: Profile{
+				Name:       "go",
+				Components: []Component{{Via: ViaGit, Repo: "o/r", Ref: "main", Path: "skills/x"}},
+			},
+		},
+		{
+			name: "git missing repo",
+			profile: Profile{
+				Name:       "go",
+				Components: []Component{{Via: ViaGit, Path: "skills/x"}},
+			},
+			wantErr: "requires 'repo' and 'path'",
+		},
+		{
+			name: "git missing path",
+			profile: Profile{
+				Name:       "go",
+				Components: []Component{{Via: ViaGit, Repo: "o/r"}},
+			},
+			wantErr: "requires 'repo' and 'path'",
+		},
+		{
+			name: "git ref is optional",
+			profile: Profile{
+				Name:       "go",
+				Components: []Component{{Via: ViaGit, Repo: "o/r", Path: "skills/x"}},
+			},
+		},
+		{
 			name: "scaffold file empty path",
 			profile: Profile{
 				Name:     "go",

@@ -18,12 +18,14 @@ var allFound = stubLooker{
 	"uv": true, "headroom": true, "graphify": true,
 }
 
+// newTestProfile propositalmente não traz Components: estes testes exercem
+// `ray new` (create step + git init + scaffold), não a aquisição de
+// conteúdo (coberta em internal/acquire e internal/initai).
 func newTestProfile(create []string) *profile.Profile {
 	return &profile.Profile{
-		Name:       "test",
-		Create:     create,
-		Components: []profile.Component{{Via: profile.ViaSkills, Skill: "s", Source: "o/r"}},
-		Scaffold:   profile.Scaffold{Files: []profile.ScaffoldFile{{Path: "CLAUDE.md"}}},
+		Name:     "test",
+		Create:   create,
+		Scaffold: profile.Scaffold{Files: []profile.ScaffoldFile{{Path: "CLAUDE.md"}}},
 	}
 }
 
@@ -50,6 +52,7 @@ func newTestHome(t *testing.T) initai.Home {
 		VaultDir:     filepath.Join(base, "vault"),
 		ConfigPath:   filepath.Join(base, "config.yaml"),
 		StatePath:    filepath.Join(base, "state.yaml"),
+		StoreDir:     filepath.Join(base, "store"),
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/TheBud4/ray/internal/acquire"
 	"github.com/TheBud4/ray/internal/installer"
 	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/rayconfig"
@@ -90,10 +91,14 @@ func runProfileShow(dir, name, vaultPath, userDocsPath string, out io.Writer) er
 
 	fmt.Fprintf(out, "%s — %s\n", p.Name, p.Description)
 
-	if len(plan.Commands) > 0 {
+	if len(p.Components) > 0 {
 		fmt.Fprintln(out, "\nComponents:")
-		for _, c := range plan.Commands {
-			fmt.Fprintf(out, "  %s\n", c.String())
+		for _, c := range p.Components {
+			cmd, err := acquire.PreviewCommand(c)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(out, "  %s\n", cmd.String())
 		}
 	}
 	if len(plan.Globals) > 0 {

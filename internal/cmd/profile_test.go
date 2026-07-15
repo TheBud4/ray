@@ -47,8 +47,8 @@ func TestRunProfileShowPrintsComponentsAndServers(t *testing.T) {
 	}
 
 	got := out.String()
-	if !strings.Contains(got, "npx skills add o/r --skill s -a claude-code -y") {
-		t.Errorf("output = %q, want the component command", got)
+	if !strings.Contains(got, "npx skills add o/r --skill s -a claude-code -y --copy") {
+		t.Errorf("output = %q, want the component command (I2: preview forces --copy)", got)
 	}
 	if !strings.Contains(got, "vault-fs") {
 		t.Errorf("output = %q, want the vault-fs MCP server", got)

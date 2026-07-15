@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -17,6 +18,10 @@ type Command struct {
 	Name string
 	Args []string
 	Dir  string // Working directory ("" = actual).
+	// Env são variáveis extras injetadas no ambiente do subprocesso (ex.
+	// DO_NOT_TRACK=1 para o CliAcquirer). nil = herda só o ambiente do
+	// processo pai, sem adições.
+	Env map[string]string
 }
 
 // String gives a legible form to logs and error messages.
@@ -53,6 +58,12 @@ func (r ExecRunner) Run(ctx context.Context, c Command) (Result, error) {
 
 	cmd := exec.CommandContext(ctx, c.Name, c.Args...)
 	cmd.Dir = c.Dir
+	if c.Env != nil {
+		cmd.Env = os.Environ()
+		for k, v := range c.Env {
+			cmd.Env = append(cmd.Env, k+"="+v)
+		}
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

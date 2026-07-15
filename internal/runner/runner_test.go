@@ -30,3 +30,33 @@ func TestExecRunnerEcho(t *testing.T) {
 		t.Fatalf("Unexpected: %+v", res)
 	}
 }
+
+func TestExecRunnerPropagatesEnv(t *testing.T) {
+	r := &ExecRunner{}
+	res, err := r.Run(context.Background(), Command{
+		Name: "sh",
+		Args: []string{"-c", "echo $DO_NOT_TRACK"},
+		Env:  map[string]string{"DO_NOT_TRACK": "1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Stdout != "1\n" {
+		t.Fatalf("Stdout = %q, want %q (Env not propagated to the subprocess)", res.Stdout, "1\n")
+	}
+}
+
+func TestExecRunnerNilEnvInheritsProcessEnv(t *testing.T) {
+	t.Setenv("RAY_TEST_INHERIT", "yes")
+	r := &ExecRunner{}
+	res, err := r.Run(context.Background(), Command{
+		Name: "sh",
+		Args: []string{"-c", "echo $RAY_TEST_INHERIT"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Stdout != "yes\n" {
+		t.Fatalf("Stdout = %q, want %q (nil Env should still inherit the process env)", res.Stdout, "yes\n")
+	}
+}

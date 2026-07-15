@@ -3,12 +3,14 @@
 package initai
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/TheBud4/ray/internal/acquire"
 	"github.com/TheBud4/ray/internal/claudecfg"
 	"github.com/TheBud4/ray/internal/installer"
 	"github.com/TheBud4/ray/internal/mcp"
@@ -17,6 +19,7 @@ import (
 	"github.com/TheBud4/ray/internal/rayconfig"
 	"github.com/TheBud4/ray/internal/runner"
 	"github.com/TheBud4/ray/internal/scaffold"
+	"github.com/TheBud4/ray/internal/store"
 	"github.com/TheBud4/ray/internal/vault"
 )
 
@@ -29,6 +32,7 @@ type Home struct {
 	VaultDir     string
 	ConfigPath   string
 	StatePath    string
+	StoreDir     string
 }
 
 // Options são os parâmetros de `ray init ai` (build guide §5, §8).
@@ -168,7 +172,76 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		}
 	}
 
-	// 7b. componentes por-projeto — falha isolada não aborta o loop.
+	// 7b. componentes de conteúdo (I2) — cache-first sobre internal/store:
+	// já cacheado restaura sem rede; senão adquire (git/CLI) e popula o
+	// cache. Falha isolada não aborta o loop. `--global` só se aplica a
+	// `via: skills` (I1 §3.3): instala pessoal/cross-project, não passa
+	// pelo store nem é vendorizado no projeto. Roda ANTES de 7c: o
+	// `graphify update .` (integração code_graph) precisa achar conteúdo
+	// real em `.claude/` para ter o que indexar.
+	st := store.New(home.StoreDir)
+	for _, c := range prof.Components {
+		if opts.Global && c.Via == profile.ViaSkills {
+			cmd, err := acquire.GlobalInstallCommand(c)
+			if err != nil {
+				return Summary{}, err
+			}
+			cmd.Dir = target
+			if opts.DryRun {
+				fmt.Fprintf(out, "+ %s\n", cmd.String())
+				sum.Installed = append(sum.Installed, cmd.String())
+				continue
+			}
+			if runOne(r, cmd) {
+				sum.Installed = append(sum.Installed, cmd.String())
+			} else {
+				sum.Failed = append(sum.Failed, cmd.String())
+			}
+			continue
+		}
+
+		acq, ok := acquire.For(c, r)
+		if !ok {
+			continue
+		}
+		coord := acq.Key(c)
+		destRel, err := acquire.DestRel(c)
+		if err != nil {
+			return Summary{}, err
+		}
+
+		if opts.DryRun {
+			fmt.Fprintf(out, "+ acquire %s -> %s\n", coord, destRel)
+			sum.Installed = append(sum.Installed, coord)
+			continue
+		}
+
+		srcDir, hit := st.Get(coord)
+		if !hit {
+			res, acqErr := acq.Acquire(context.Background(), c)
+			if acqErr != nil {
+				sum.Failed = append(sum.Failed, coord)
+				continue
+			}
+			if !res.HasLicense {
+				sum.Warnings = append(sum.Warnings, fmt.Sprintf("%s: sem LICENSE detectada na fonte", coord))
+			}
+			if _, putErr := st.Put(coord, res.Dir); putErr != nil {
+				return Summary{}, putErr
+			}
+			srcDir = res.Dir
+		}
+
+		if err := store.CopyTree(srcDir, filepath.Join(target, destRel)); err != nil {
+			sum.Failed = append(sum.Failed, coord)
+			continue
+		}
+		sum.Installed = append(sum.Installed, coord)
+	}
+
+	// 7c. comandos por-projeto das integrações (ex. `graphify update .`) —
+	// roda depois de 7b para achar o conteúdo vendorizado já no disco.
+	// Falha isolada não aborta o loop.
 	for _, c := range plan.Commands {
 		c.Dir = target
 		if runOne(r, c) {

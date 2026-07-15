@@ -35,6 +35,7 @@ type Integrations struct {
 const (
 	ViaSkills = "skills"
 	ViaAitmpl = "aitmpl"
+	ViaGit    = "git"
 )
 
 const (
@@ -44,13 +45,16 @@ const (
 )
 
 // Component é uma unidade instalável vinda de um ecossistema externo.
-// via: "skills" usa Skill+Source; via: "aitmpl" usa Type+Ref.
+// via: "skills" usa Skill+Source; via: "aitmpl" usa Type+Ref; via: "git" usa
+// Repo+Ref+Path (I2: aquisição direta de um repositório, pinada por ref).
 type Component struct {
 	Via    string `yaml:"via"`
 	Skill  string `yaml:"skill,omitempty"`
 	Source string `yaml:"source,omitempty"`
 	Type   string `yaml:"type,omitempty"`
 	Ref    string `yaml:"ref,omitempty"`
+	Repo   string `yaml:"repo,omitempty"`
+	Path   string `yaml:"path,omitempty"`
 }
 
 // Scaffold descreve arquivos que o ray escreve e settings mesclados no .claude.
@@ -101,6 +105,10 @@ func (c Component) validate() error {
 		}
 		if c.Ref == "" {
 			return fmt.Errorf("via aitmpl requires 'ref'")
+		}
+	case ViaGit:
+		if c.Repo == "" || c.Path == "" {
+			return fmt.Errorf("via git requires 'repo' and 'path' (ref is optional, defaults to main)")
 		}
 	case "":
 		return fmt.Errorf("'via' is required")

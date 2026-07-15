@@ -42,7 +42,7 @@ func (s *Store) Put(coord, dir string) (string, error) {
 
 	objDir := filepath.Join(s.objectsDir(), hash)
 	if _, err := os.Stat(objDir); os.IsNotExist(err) {
-		if err := copyTree(dir, objDir); err != nil {
+		if err := CopyTree(dir, objDir); err != nil {
 			return "", err
 		}
 	} else if err != nil {
@@ -145,8 +145,10 @@ func hashTree(dir string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// copyTree copia dir inteiro (arquivos + estrutura + permissões) para dst.
-func copyTree(src, dst string) error {
+// CopyTree copia src (arquivo ou diretório, com estrutura + permissões) para
+// dst. Exportada para reuso por internal/acquire (montagem do conteúdo
+// adquirido) e internal/initai (restauração do store para o projeto).
+func CopyTree(src, dst string) error {
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
