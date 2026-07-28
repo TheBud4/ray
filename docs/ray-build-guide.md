@@ -221,13 +221,12 @@ rastreados por `Key` em `state.yaml`), `Servers` (entradas de `.mcp.json`).
 ├── SECURITY.md               # [MUST]/[SHOULD], regras p/ código gerado por IA, checklist de PR
 ├── .mcp.json                 # headroom + brain? + graphify + componentes
 ├── docs/                     # o ESTADO ATUAL do projeto (versionado)
-│   ├── README.md             # os três papéis + o laço spec-driven
-│   ├── architecture.md  conventions.md
-│   └── specs/TEMPLATE.md     # o template de spec (CA numerado, perguntas em aberto)
+│   ├── README.md             # os dois papéis + o laço spec-driven
+│   └── architecture.md  conventions.md
 └── .claude/
     ├── settings.json         # model, effortLevel, hooks
     ├── handoff.md            # estado vivo (gerido pela IA; NUNCA tocado por --force)
-    ├── commands/{document,handoff,revisar}.md
+    ├── commands/{destilar,document,handoff,revisar}.md
     ├── hooks/session-start.sh
     ├── agents/  skills/       # populados pelos installers
 ```

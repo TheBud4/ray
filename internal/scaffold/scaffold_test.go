@@ -421,7 +421,7 @@ func TestDestilarCommandCarriesLoadBearingRules(t *testing.T) {
 	// impede docs/ de nascer mentindo; "espere OK" protege a decisão travada;
 	// "não invente trabalho" impede relatório inflado quando não há nada.
 	for _, s := range []string{
-		"status",
+		"não se destila plano",
 		"implementada",
 		"não vira texto",
 		"espere OK",
@@ -429,6 +429,20 @@ func TestDestilarCommandCarriesLoadBearingRules(t *testing.T) {
 	} {
 		if !strings.Contains(txt, s) {
 			t.Errorf("destilar.md perdeu a regra %q", s)
+		}
+	}
+
+	// A tabela seção→destino é o coração do comando: sem ela, /destilar não
+	// sabe para onde cada seção da spec vai.
+	for _, s := range []string{
+		"| Seção da spec | Destino |",
+		"Regras de negócio e invariantes",
+		"Contratos",
+		"docs/architecture.md",
+		"docs/conventions.md",
+	} {
+		if !strings.Contains(txt, s) {
+			t.Errorf("destilar.md perdeu a tabela seção→destino: falta %q", s)
 		}
 	}
 }

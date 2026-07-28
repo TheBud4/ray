@@ -32,6 +32,12 @@ precisaria ler para entender o sistema como ele é hoje.
 8. Revisar antes do commit com /revisar NNN.
 ```
 
+As seções que alimentam o passo 7 são fixas: **Regras de negócio e invariantes**,
+**Contratos**, **Estratégia de teste específica** e **Decisões durante a
+implementação** são as que viram estado; **Dependências e impacto** é de onde o
+`/destilar` tira o escopo a conferir no código. Sem esses nomes na spec, o
+`/destilar` não tem o que ler.
+
 ## A regra que impede a spec de apodrecer
 
 Todo teste referencia o ID do critério de aceite no nome:
@@ -41,7 +47,7 @@ CA-03: rejeita pedido sem itens com 422
 ```
 
 Assim `grep -r "CA-03" test/` responde "isso está implementado?" em um segundo. O
-teste que lê esse CA fica ligado à spec que o definiram, mesmo que a spec more no
+teste que lê esse CA fica ligado à spec que o definiu, mesmo que a spec more no
 cérebro. A numeração sequencial da spec garante rastreabilidade — desde o turno
 até o commit que fecha a feature.
 
@@ -51,11 +57,8 @@ As specs no cérebro seguem `001`, `002`, … sequencial, nunca reaproveitado.
 Feature abandonada fica com `status: descartada` e mora lá também: o histórico
 do que você decidiu *não* fazer vale tanto quanto o que foi implementado.
 
-## Os outros arquivos
+## Mantendo em dia
 
-- `architecture.md` — como o sistema é montado hoje.
-- `conventions.md` — as convenções que o código segue hoje.
-
-Ambos descrevem estado, não intenção. Se um deles ficar defasado do código, ele
-virou ficção — corrija junto com a mudança que o defasou, ou deixe o `/destilar`
-fazer isso ao fechar a spec.
+`architecture.md` e `conventions.md` descrevem estado, não intenção. Se um deles
+ficar defasado do código, ele virou ficção — corrija junto com a mudança que o
+defasou, ou deixe o `/destilar` fazer isso ao fechar a spec.
