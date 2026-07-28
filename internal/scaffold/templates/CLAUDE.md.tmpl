@@ -135,9 +135,9 @@ Ao receber uma spec, siga estritamente, **um critério de aceite por vez**:
 7. Volte ao 3 para o próximo CA.
 8. **Fechar a spec** (ao terminar todos os CAs, não a cada CA) — marque
    `status: implementada` e preencha "Decisões durante a implementação" com o que
-   divergiu do planejado. Se a spec mudou o estado do sistema, atualize `docs/`
-   (`architecture.md`, `conventions.md`) no mesmo ciclo; se mudou uma decisão
-   travada ou a <stack>, atualize a seção aqui. Sem esse passo a spec não está
+   divergiu do planejado. Depois rode `/destilar NNN`: ele leva para `docs/` o que
+   a spec virou estado e propõe o que mudou de decisão travada. Sem comando
+   disponível, faça à mão o mesmo trabalho. Sem esse passo a spec não está
    fechada, mesmo com os gates verdes.
 
 Nunca pule do 2 para o 4. Nunca edite um teste existente para fazê-lo passar sem

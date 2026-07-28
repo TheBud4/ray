@@ -497,3 +497,28 @@ func TestDocsReadmeLoopEndsInDistillation(t *testing.T) {
 		t.Error("docs/README.md não pode mandar publicar spec em docs/specs/")
 	}
 }
+
+func TestWorkflowStep8DelegatesToDestilar(t *testing.T) {
+	target := t.TempDir()
+
+	if _, err := WriteFiles([]profile.ScaffoldFile{{Path: "CLAUDE.md"}}, Options{
+		Target: target,
+		Data:   Data{ProjectName: "demo", Stack: "go"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	body, err := os.ReadFile(filepath.Join(target, "CLAUDE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	txt := string(body)
+
+	if !strings.Contains(txt, "/destilar") {
+		t.Error("o passo de fechamento da spec precisa delegar ao /destilar")
+	}
+	// Orçamento do cabeçalho: o arquivo entra em contexto em todo turno.
+	if n := strings.Count(txt, "\n"); n > 300 {
+		t.Errorf("CLAUDE.md = %d linhas, orçamento é 300", n)
+	}
+}
