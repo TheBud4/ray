@@ -7,9 +7,9 @@ construção. Siga estes passos, na ordem:
 
 1. Leia `docs/ray-build-guide.md`, seção "## 14. Plano de fases (ordem de
    construção)" — a lista de Fases 0 a 12, cada uma com o que entrega.
-2. Leia `docs/ray-reproducible-environments-plan.md` — os incrementos I1 a
-   I9, que só passam a fazer sentido depois que o build guide (Fases 0–12)
-   estiver implementado.
+2. Leia `planos/ray-plano-ambientes.md`, na pasta do projeto `ray` no cérebro
+   — os incrementos I1 a I9, que só passam a fazer sentido depois que o build
+   guide (Fases 0–12) estiver implementado.
 3. Rode `git log --oneline` e liste os arquivos existentes em `internal/`
    (`find internal -type f`). Cruze as mensagens de commit e os pacotes
    existentes com as fases do build guide para inferir o que já está pronto.
