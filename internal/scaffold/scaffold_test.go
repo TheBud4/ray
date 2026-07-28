@@ -2,14 +2,17 @@ package scaffold
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/TheBud4/ray/internal/profile"
+	"github.com/TheBud4/ray/internal/runner"
 )
 
 var wantBasePaths = []string{
@@ -619,5 +622,209 @@ func TestRevisarAsksForCrossFamilyReview(t *testing.T) {
 		if !strings.Contains(txt, want) {
 			t.Errorf("revisar.md não pede revisor de outra família: falta %q", want)
 		}
+	}
+}
+
+// hasJQ reporta se jq existe no ambiente. Os hooks fazem no-op sem ele, então
+// o teste de comportamento não tem o que afirmar.
+func hasJQ(t *testing.T) bool {
+	t.Helper()
+	res, err := runner.ExecRunner{}.Run(context.Background(), runner.Command{
+		Name: "bash", Args: []string{"-c", "command -v jq >/dev/null 2>&1"},
+	})
+	return err == nil && res.ExitCode == 0
+}
+
+// runHook renderiza um hook num diretório temporário, alimenta-o com payload
+// pela stdin e devolve o resultado. Usa runner.ExecRunner de propósito: é a
+// fronteira do projeto para processo externo, e evita uma terceira importação
+// de os/exec.
+func runHook(t *testing.T, script, payload string) runner.Result {
+	t.Helper()
+	dir := t.TempDir()
+
+	if _, err := WriteFiles([]profile.ScaffoldFile{{Path: ".claude/hooks/" + script}}, Options{
+		Target: dir,
+		Data:   Data{ProjectName: "demo", Stack: "go"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	payloadPath := filepath.Join(dir, "payload.json")
+	if err := os.WriteFile(payloadPath, []byte(payload), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := runner.ExecRunner{}.Run(context.Background(), runner.Command{
+		Name: "bash",
+		Args: []string{"-c", "cat " + payloadPath + " | bash " + filepath.Join(dir, ".claude/hooks/"+script)},
+		Dir:  dir,
+	})
+	if err != nil {
+		t.Fatalf("rodando %s: %v", script, err)
+	}
+	return res
+}
+
+func TestGuardAddWarnsOnBlindAdd(t *testing.T) {
+	if !hasJQ(t) {
+		t.Skip("jq ausente; o hook faz no-op por design")
+	}
+
+	cases := []struct {
+		name    string
+		command string
+		warns   bool
+	}{
+		{"add -A", "git add -A", true},
+		{"add --all", "git add --all", true},
+		{"add ponto", "git add .", true},
+		{"add seletivo", "git add internal/scaffold/scaffold.go", false},
+		{"commit qualquer", "git commit -m 'x'", false},
+		{"add dentro de outra palavra", "echo 'git added'", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			payload := `{"tool_input":{"command":` + strconv.Quote(tc.command) + `}}`
+			res := runHook(t, "guard-add.sh", payload)
+
+			if res.ExitCode != 0 {
+				t.Fatalf("ExitCode = %d, want 0 — hook de aviso nunca falha", res.ExitCode)
+			}
+			warned := strings.Contains(res.Stdout, "systemMessage")
+			if warned != tc.warns {
+				t.Errorf("avisou = %v, want %v (stdout: %q)", warned, tc.warns, res.Stdout)
+			}
+		})
+	}
+}
+
+func TestGuardVocabWarnsOnDeliveredArtifacts(t *testing.T) {
+	if !hasJQ(t) {
+		t.Skip("jq ausente; o hook faz no-op por design")
+	}
+
+	cases := []struct {
+		name    string
+		relPath string
+		content string
+		warns   bool
+	}{
+		{"readme cita spec numerada", "README.md", "Ver spec 012 para detalhes.\n", true},
+		{"codigo cita CA", "internal/foo/foo.go", "// implementa CA-03\n", true},
+		{"codigo cita RF", "internal/foo/foo.go", "// conforme RF-07\n", true},
+		{"readme cita criterio de aceite", "README.md", "Cada critério de aceite vira teste.\n", true},
+		{"teste pode citar CA", "internal/foo/foo_test.go", "// CA-01: rejeita vazio\n", false},
+		{"CLAUDE.md pode citar spec", "CLAUDE.md", "Ao receber uma spec 012, siga.\n", false},
+		{"claude dir pode citar", ".claude/commands/x.md", "Leia a spec 012.\n", false},
+		{"OpenAPI spec passa limpo", "README.md", "Servimos uma OpenAPI spec em /docs.\n", false},
+		{"spec-driven passa limpo", "README.md", "Fluxo spec-driven development.\n", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+
+			if _, err := WriteFiles([]profile.ScaffoldFile{{Path: ".claude/hooks/guard-vocab.sh"}}, Options{
+				Target: dir,
+				Data:   Data{ProjectName: "demo", Stack: "go"},
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			target := filepath.Join(dir, filepath.FromSlash(tc.relPath))
+			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(target, []byte(tc.content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			payloadPath := filepath.Join(dir, "payload.json")
+			payload := `{"tool_input":{"file_path":` + strconv.Quote(target) + `}}`
+			if err := os.WriteFile(payloadPath, []byte(payload), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			res, err := runner.ExecRunner{}.Run(context.Background(), runner.Command{
+				Name: "bash",
+				Args: []string{"-c", "cat " + payloadPath + " | bash " + filepath.Join(dir, ".claude/hooks/guard-vocab.sh")},
+				Dir:  dir,
+			})
+			if err != nil {
+				t.Fatalf("rodando guard-vocab.sh: %v", err)
+			}
+
+			warned := res.ExitCode == 2
+			if warned != tc.warns {
+				t.Errorf("avisou = %v, want %v (exit %d, stderr %q)", warned, tc.warns, res.ExitCode, res.Stderr)
+			}
+			if warned && !strings.Contains(res.Stderr, tc.relPath) {
+				t.Errorf("stderr não nomeia o arquivo: %q", res.Stderr)
+			}
+		})
+	}
+}
+
+func TestGuardPlansWarnsOnRepoPlans(t *testing.T) {
+	if !hasJQ(t) {
+		t.Skip("jq ausente; o hook faz no-op por design")
+	}
+
+	cases := []struct {
+		name  string
+		path  string
+		warns bool
+	}{
+		{"plano em docs/superpowers", "/repo/docs/superpowers/plans/x.md", true},
+		{"design em docs/superpowers", "/repo/docs/superpowers/specs/x-design.md", true},
+		{"superpowers na raiz", "/repo/superpowers/plano.md", true},
+		{"doc normal", "/repo/docs/architecture.md", false},
+		{"codigo", "/repo/internal/foo/foo.go", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			payload := `{"tool_input":{"file_path":` + strconv.Quote(tc.path) + `}}`
+			res := runHook(t, "guard-plans.sh", payload)
+
+			if res.ExitCode != 0 {
+				t.Fatalf("ExitCode = %d, want 0 — hook de aviso nunca falha", res.ExitCode)
+			}
+			warned := strings.Contains(res.Stdout, "systemMessage")
+			if warned != tc.warns {
+				t.Errorf("avisou = %v, want %v (stdout: %q)", warned, tc.warns, res.Stdout)
+			}
+		})
+	}
+}
+
+func TestClaudeMdNamesPlanDestination(t *testing.T) {
+	target := t.TempDir()
+
+	if _, err := WriteFiles([]profile.ScaffoldFile{{Path: "CLAUDE.md"}}, Options{
+		Target: target,
+		Data:   Data{ProjectName: "demo", Stack: "go"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	body, err := os.ReadFile(filepath.Join(target, "CLAUDE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	txt := string(body)
+
+	// A skill escreve onde a instrução mandar. Sem o destino nomeado aqui, ela
+	// usa o default dela — docs/superpowers/ — e o hook só avisa depois.
+	if !strings.Contains(txt, "plano e design") {
+		t.Error("CLAUDE.md não diz onde plano e design moram")
+	}
+	if !strings.Contains(txt, "superpowers") {
+		t.Error("CLAUDE.md não nomeia o diretório que não deve ser usado")
+	}
+	if n := strings.Count(txt, "\n"); n > 300 {
+		t.Errorf("CLAUDE.md = %d linhas, orçamento é 300", n)
 	}
 }

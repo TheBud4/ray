@@ -97,3 +97,24 @@ func TestMissingRequiredFiltersByRequiredAndFound(t *testing.T) {
 		t.Error("MissingRequired should not include npx (present)")
 	}
 }
+
+func TestRunIncludesOptionalJQ(t *testing.T) {
+	l := stubLooker{"npx": true, "jq": false}
+	checks := Run(l, false)
+
+	var jq *Check
+	for i := range checks {
+		if checks[i].Name == "jq" {
+			jq = &checks[i]
+		}
+	}
+	if jq == nil {
+		t.Fatal("Run() não inclui check para jq; os hooks scaffoldados dependem dele")
+	}
+	if jq.Required {
+		t.Error("jq Required = true, want false — hook sem jq faz no-op, não quebra")
+	}
+	if jq.Hint == "" {
+		t.Error("jq Hint vazio; sem hint o ray doctor não diz o que fazer")
+	}
+}
