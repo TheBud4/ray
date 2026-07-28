@@ -726,6 +726,11 @@ func TestGuardVocabWarnsOnDeliveredArtifacts(t *testing.T) {
 		{"attestation nao e diretorio de teste", "attestation/README.md", "Ver spec 012.\n", true},
 		{"diretorio test de verdade e isento", "test/helper.md", "Ver spec 012.\n", false},
 		{"diretorio tests de verdade e isento", "pkg/tests/helper.md", "Ver spec 012.\n", false},
+		// .superpowers/ é diretório de sessão local, não artefato entregue.
+		// Acusá-lo faz o hook gritar justamente onde a nota de processo mora,
+		// e ruído é o que faz um hook de aviso deixar de ser lido.
+		{"superpowers e sessao local", ".superpowers/sdd/progress.md", "Task 1 fecha o CA-01 da spec 012.\n", false},
+		{"superpowers aninhado", "sub/.superpowers/x.md", "Ver spec 012.\n", false},
 	}
 
 	for _, tc := range cases {
@@ -832,5 +837,29 @@ func TestClaudeMdNamesPlanDestination(t *testing.T) {
 	}
 	if n := strings.Count(txt, "\n"); n > 300 {
 		t.Errorf("CLAUDE.md = %d linhas, orçamento é 300", n)
+	}
+}
+
+func TestFileEditingHooksCoverMultiEdit(t *testing.T) {
+	// guard-code sempre cobriu Edit|Write|MultiEdit. Um hook que inspeciona
+	// arquivo e esquece MultiEdit tem buraco silencioso: a edição em lote é
+	// caminho comum e passaria sem aviso.
+	for _, mode := range []string{ModeBuild, ModeLearn} {
+		hooks := HookSettings(mode)["hooks"].(map[string]any)
+		for _, event := range []string{"PreToolUse", "PostToolUse"} {
+			entries, ok := hooks[event].([]any)
+			if !ok {
+				continue
+			}
+			for _, e := range entries {
+				matcher, _ := e.(map[string]any)["matcher"].(string)
+				if matcher == "Bash" {
+					continue // guard-add lê comando, não arquivo
+				}
+				if !strings.Contains(matcher, "MultiEdit") {
+					t.Errorf("mode %s, %s matcher = %q, want cobrindo MultiEdit", mode, event, matcher)
+				}
+			}
+		}
 	}
 }
