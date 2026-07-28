@@ -10,8 +10,7 @@
 > **Política de commits:** SEM trailer `Co-Authored-By` (nenhum co-autor de IA).
 >
 > **Alinhamento com o design v2 (2026-07-01).** As seções afetadas pelo modelo de
-> ambientes reprodutíveis estão marcadas ⟶v2 e detalhadas no
-> `ray-reproducible-environments-design.md` (aquisição por fonte, `--copy`,
+> ambientes reprodutíveis estão marcadas ⟶v2 (aquisição por fonte, `--copy`,
 > store agnóstico, update por fork-de-conteúdo, origem/licença).
 
 ---

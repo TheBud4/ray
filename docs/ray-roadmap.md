@@ -3,8 +3,7 @@
 > propósito, **não** acompanha o design de ambientes reprodutíveis. Alguns
 > detalhes aqui (p.ex. `.claude/` como efêmero, `.gitignore` com `graphify-out/`,
 > semântica antiga de `--global`) foram **substituídos** — para o modelo vigente,
-> veja `ray-reproducible-environments-design.md` (v2, 2026-07-01) e o
-> `ray-build-guide.md`. Mantido intacto pelo seu valor **pedagógico** (aprender
+> veja o `ray-build-guide.md`. Mantido intacto pelo seu valor **pedagógico** (aprender
 > Go do zero), não como referência do produto atual.
 
 ---

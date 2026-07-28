@@ -43,9 +43,9 @@ estrito de spec-driven development e TDD.
 <documentation_sources>
 <!-- Onde buscar contrato real antes de assumir algo. -->
 - `docs/` — o **estado atual** deste projeto: arquitetura, convenções, como rodar,
-  como fazer deploy. Versionado, viaja com o código. Os documentos de design
-  (`ray-reproducible-environments-design.md`, `ray-build-guide.md`) explicam o
-  porquê das decisões e são citados pelos docs de pacote.
+  como fazer deploy. Versionado, viaja com o código. `ray-build-guide.md` explica
+  o porquê das decisões e é citado pelos docs de pacote; o design de ambientes
+  reprodutíveis mora na pasta do projeto no cérebro.
 - O **cérebro** (vault Obsidian do usuário, em `~/www/MegaBrain`, exposta pelo
   MCP `brain` quando configurada) — todo o resto: tarefa, exploração,
   aprendizado, decisão em disputa, spec ainda em aberto. A nota do projeto é
