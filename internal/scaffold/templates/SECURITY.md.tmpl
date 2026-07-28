@@ -1,10 +1,137 @@
 # Política de segurança — {{.ProjectName}}
 
-- Nunca commitar segredos (`.env`, chaves, tokens). Use variáveis de ambiente
-  ou um cofre externo.
-- Dependências: revisar antes de adicionar; preferir libs mantidas e com poucas
-  dependências transitivas.
-- Dados sensíveis de usuários: nunca logar em texto plano; nunca enviar a
-  serviços externos sem necessidade explícita.
-- Encontrou uma vulnerabilidade? Registre em `docs/context.md` e priorize a
-  correção antes de features novas.
+Define as práticas obrigatórias de segurança para o código deste repositório,
+**incluindo código produzido com auxílio de IA**.
+
+Stack em escopo: {{.Stack}}.
+
+## Severidade
+
+Toda regra é marcada:
+
+- **[MUST]** — bloqueante. Um PR que viola não pode ser mergeado.
+- **[SHOULD]** — fortemente recomendado. Desviar exige justificativa escrita no PR.
+
+Exceção a um `[MUST]` exige aprovação explícita registrada no PR. Exceção com
+prazo precisa de issue de acompanhamento.
+
+A ordem de prioridade, quando houver conflito:
+
+```
+Correção → Segurança → Performance → Conveniência
+```
+
+Nunca troque segurança por velocidade.
+
+## Regras para código gerado por IA
+
+A IA é assistente, não autoridade de segurança. **Nunca assuma que código gerado
+é seguro.**
+
+**[MUST]** Todo bloco de código gerado por IA é revisado por um humano antes do
+merge. Para cada implementação gerada, verifique: autenticação, autorização,
+validação de entrada, codificação de saída, tratamento de segredos, tratamento de
+erro, logging, uso de dependências e requisições externas.
+
+## Zero Trust
+
+**[MUST]** Trate todo dado externo como malicioso até ser validado.
+
+Dado externo inclui: respostas de API, parâmetros de URL e query, entrada de
+formulário, arquivos enviados, storage local e cookies, variáveis de ambiente,
+payloads de push e qualquer integração de terceiro.
+
+Valide tudo. Não confie em nada.
+
+## Segredos
+
+- **[MUST]** Nenhum segredo em arquivo versionado — chaves, tokens, senhas,
+  strings de conexão. Use variáveis de ambiente ou um cofre.
+- **[MUST]** `.env` e equivalentes no `.gitignore` **antes** do primeiro commit.
+- **[MUST]** Segredo só é lido no servidor. Nada de segredo em código que roda no
+  cliente, por mais "ofuscado" que pareça.
+- **[SHOULD]** Rode um scanner de segredos no CI.
+
+## Validação e injeção
+
+- **[MUST]** Validação sempre no servidor. Validação no cliente é UX, não
+  segurança.
+- **[MUST]** Consultas parametrizadas ou query builder. Nunca concatenar entrada
+  de usuário em query.
+- **[MUST]** Escapar/codificar saída conforme o contexto de destino (HTML, URL,
+  shell, SQL).
+- **[MUST]** Comando de sistema com entrada de usuário: lista de permitidos, nunca
+  interpolação de string.
+
+## Autenticação e autorização
+
+- **[MUST]** Toda rota não pública verifica autenticação.
+- **[MUST]** Autorização é verificada **por objeto**, não só por papel — o teste
+  do IDOR: este usuário pode ver *este* registro específico?
+- **[MUST]** Canal que não passa pelo middleware HTTP (WebSocket, fila, job)
+  verifica auth por conta própria.
+
+## Logging e erro
+
+- **[MUST]** Nunca logar segredo, credencial, token ou dado pessoal em texto
+  plano.
+- **[MUST]** Erro exposto ao usuário não vaza stack trace, query, caminho de
+  arquivo nem detalhe de infraestrutura.
+- **[SHOULD]** Mantenha uma lista de campos redigidos no logger e revise-a quando
+  um campo novo passar a ser logado.
+
+## Dependências
+
+- **[MUST]** Lockfile versionado.
+- **[MUST]** Revisar antes de adicionar: preferir libs mantidas, com poucas
+  dependências transitivas e licença compatível.
+- **[MUST]** Conferir o **nome** do pacote caractere a caractere antes de instalar.
+  Typosquatting acerta justamente quem confia no autocompletar e em nome ditado por
+  IA — um caractere trocado num nome plausível é a via mais barata de execução de
+  código na sua máquina e no seu CI.
+- **[SHOULD]** Auditoria de vulnerabilidades no CI, e ela precisa reprovar o
+  build — auditoria que só avisa é ignorada.
+
+## CI/CD
+
+- **[MUST]** Segredo de pipeline vem do cofre do provedor, nunca do arquivo de
+  workflow.
+- **[MUST]** Build de produção sem código de debug, endpoint de dev ou
+  source map público.
+
+## Checklist de revisão de PR
+
+- [ ] Nenhum segredo hardcoded
+- [ ] Validação de entrada existe, no servidor
+- [ ] AuthN + AuthZ existem, incluindo checagem por objeto (IDOR)
+- [ ] Canal fora do middleware HTTP verifica auth sozinho
+- [ ] Webhook novo valida assinatura antes de confiar no payload
+- [ ] Dependências revisadas; lockfile atualizado; auditoria limpa
+- [ ] Nenhum log sensível; nenhum dado pessoal novo chegando ao logger
+- [ ] Nenhum código de debug em caminho de produção
+- [ ] Build, lint e testes verdes
+
+## Resposta a incidente
+
+Se um segredo vazar:
+
+1. Revogue imediatamente
+2. Rotacione a credencial
+3. Audite os logs de acesso
+4. Publique a credencial nova
+5. Documente o incidente
+
+**Nunca assuma que remover um segredo do histórico do git o torna seguro.**
+Assuma comprometimento.
+
+## Reportar uma vulnerabilidade
+
+Reporte direto ao responsável pelo projeto. Não abra issue pública e não commite
+prova de conceito nem dado exposto no repositório — descreva o problema e, se
+envolver segredo, siga a resposta a incidente acima primeiro (rotacione antes,
+discuta depois).
+
+## Regra final
+
+Código gerado é não confiável até ser revisado. Revisão humana e validação de
+segurança são obrigatórias. Deploy em produção sem revisão é proibido.

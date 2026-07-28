@@ -1,0 +1,81 @@
+---
+description: Revisa uma spec implementada antes do commit
+argument-hint: NNN (número da spec)
+---
+
+# /revisar $ARGUMENTS — revisão de spec implementada
+
+Revisa a implementação da spec `$ARGUMENTS`. Termina com um veredito: aprovada,
+ou a lista do que corrigir.
+
+## Regra de ouro
+
+**Não confie no `status:` da spec nem no relato de quem implementou.** O
+frontmatter é marcado `implementada` antes da revisão, por definição. Rode o gate
+de verdade e leia o diff. Prove que funciona; não assuma.
+
+## Passo 1 — reconciliar
+
+```bash
+git status --short
+git log --oneline -3
+```
+
+Separe o que é desta spec do que é trabalho de outra. Se um arquivo tiver as duas
+coisas, registre agora — isso vai importar no commit.
+
+## Passo 2 — ler a spec e listar os CAs
+
+Leia `docs/specs/$ARGUMENTS-*.md` inteira. Extraia:
+
+- a lista de CAs — cada um deve ter virado um teste nomeado `CA-NN:`
+- a seção **Contratos** — o esboço que a implementação deveria seguir
+- a seção **Dependências e impacto** — arquivos tocados
+- **Regras de negócio e invariantes** — é aqui que moram as afirmações que o teste
+  não cobre
+
+## Passo 3 — rodar os gates de verdade
+
+Rode os `<quality_gates>` do `CLAUDE.md`. Confira que **cada CA da spec tem um
+teste correspondente** rodando e verde — `grep -r "CA-NN" <dir de teste>`. Teste
+que não existe não é CA verde.
+
+Reporte o número real da suíte (`97/97`), nunca "passou". Se algum gate falhar,
+mostre a saída real — nunca resuma uma falha como "quase passou".
+
+## Passo 4 — ler o diff contra o contrato
+
+`git diff` de cada arquivo tocado. Procure especificamente:
+
+- **Desvio do contrato:** divergiu do esboço? Divergir pode estar certo — o esboço
+  é ilustrativo — mas tem que estar **justificado** em "Decisões durante a
+  implementação".
+- **Escopo excedido:** mudou algo que a spec não pediu?
+- **Invariantes:** as afirmações da seção de invariantes continuam valendo? Várias
+  não têm teste (ex.: "zero mudança de comportamento observável") e só a leitura
+  pega.
+- **CA que nasceu verde:** normal quando uma unidade é reescrita inteira, mas deve
+  estar declarado na spec como desvio consciente do workflow.
+- **Vocabulário de processo vazando para artefato entregue:** `grep` por "spec",
+  "CA-" e "RF-" nos READMEs e no código de produção tocado. Deve voltar vazio.
+
+## Passo 5 — checar o fechamento
+
+- `status: implementada` e "Decisões durante a implementação" preenchida
+- Nenhum TODO novo no código
+- Se a spec mudou o estado do sistema, `docs/architecture.md` / `docs/conventions.md`
+  foram atualizados no mesmo ciclo; se mudou decisão travada ou `<stack>`, o
+  `CLAUDE.md` foi atualizado
+- As suposições adotadas durante a implementação estão declaradas — nenhuma decisão
+  tomada em silêncio
+
+## Passo 6 — veredito
+
+Diga uma das duas coisas, sem meio-termo:
+
+- **Aprovada** — com a evidência: CAs verdes, número da suíte, e o que você
+  conferiu à mão que o teste não cobria.
+- **Precisa corrigir** — lista objetiva, cada item com arquivo, linha e o porquê.
+
+Registre também os **nits não-bloqueantes**: o que não impede o commit mas vale
+saber depois. Eles não viram spec sozinhos — vão para o cérebro.

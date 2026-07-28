@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -16,13 +18,10 @@ var wantBasePaths = []string{
 	"docs/README.md",
 	"docs/architecture.md",
 	"docs/conventions.md",
-	"docs/context.md",
-	".claude/rules/security.md",
-	".claude/rules/workflow.md",
-	".claude/rules/handoff.md",
-	".claude/rules/knowledge-vault.md",
-	".claude/rules/documentation.md",
+	"docs/specs/TEMPLATE.md",
 	".claude/commands/document.md",
+	".claude/commands/handoff.md",
+	".claude/commands/revisar.md",
 	".claude/handoff.md",
 }
 
@@ -33,6 +32,9 @@ func baseFiles() []profile.ScaffoldFile {
 	}
 	return files
 }
+
+// sectionOpen casa a abertura de uma seção XML do CLAUDE.md, ex "<workflow>".
+var sectionOpen = regexp.MustCompile(`^<([a-z_]+)>$`)
 
 func TestWriteFilesCreatesBaseSetAndSystemFiles(t *testing.T) {
 	target := t.TempDir()
@@ -351,5 +353,87 @@ func TestEnsureTemplatesNeverOverwrites(t *testing.T) {
 	}
 	if string(got) != string(custom) {
 		t.Fatalf("EnsureTemplates overwrote a pre-existing overlay file: got %q, want %q", got, custom)
+	}
+}
+
+// A ordem das seções do CLAUDE.md é load-bearing, não estética: <workflow> fica
+// perto do fim de propósito, porque instrução de processo no topo é atropelada
+// pelo volume da spec colada no turno. E <edge_cases> é a cláusula que impede
+// invenção quando a premissa falha — ela fecha o documento.
+func TestClaudeMdKeepsSectionOrder(t *testing.T) {
+	target := t.TempDir()
+
+	if _, err := WriteFiles([]profile.ScaffoldFile{{Path: "CLAUDE.md"}}, Options{
+		Target: target,
+		Data:   Data{ProjectName: "demo", Stack: "go"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	body, err := os.ReadFile(filepath.Join(target, "CLAUDE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []string{
+		"role", "context", "stack", "documentation_sources",
+		"architecture", "test_strategy", "conventions", "quality_gates",
+		"workflow", "agent_behavior", "output_format", "edge_cases",
+	}
+
+	var got []string
+	for _, line := range strings.Split(string(body), "\n") {
+		m := sectionOpen.FindStringSubmatch(line)
+		if m != nil {
+			got = append(got, m[1])
+		}
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("seções = %v, want %v", got, want)
+	}
+
+	// Toda seção aberta precisa fechar, ou o bloco vira lixo no prompt.
+	for _, s := range want {
+		if !strings.Contains(string(body), "</"+s+">") {
+			t.Errorf("seção <%s> não é fechada", s)
+		}
+	}
+}
+
+func TestSpecTemplateKeepsLoadBearingSections(t *testing.T) {
+	target := t.TempDir()
+
+	if _, err := WriteFiles([]profile.ScaffoldFile{{Path: "docs/specs/TEMPLATE.md"}}, Options{
+		Target: target,
+		Data:   Data{ProjectName: "demo", Stack: "go"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	body, err := os.ReadFile(filepath.Join(target, "docs", "specs", "TEMPLATE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	txt := string(body)
+
+	// "Perguntas em aberto" é o portão do status: aprovada; "Fora de escopo"
+	// é o que impede o modelo de inventar feature adjacente; "Decisões durante
+	// a implementação" é o que impede a spec de virar ficção.
+	for _, s := range []string{
+		"## Fora de escopo",
+		"## Critérios de aceite",
+		"## Regras de negócio e invariantes",
+		"## Perguntas em aberto",
+		"## Decisões durante a implementação",
+	} {
+		if !strings.Contains(txt, s) {
+			t.Errorf("TEMPLATE.md perdeu a seção %q", s)
+		}
+	}
+	if !strings.Contains(txt, "status: rascunho") {
+		t.Error("TEMPLATE.md deve nascer com status: rascunho")
+	}
+	if !strings.Contains(txt, "CA-01") {
+		t.Error("TEMPLATE.md deve trazer os CAs numerados como exemplo")
 	}
 }

@@ -1,10 +1,16 @@
 # /document
 
 Documente o que foi feito nesta sessão, roteando para o destino certo (ver
-`.claude/rules/documentation.md`):
+a seção `<documentation_sources>` do `CLAUDE.md`).
 
-1. Aprendizado ou decisão que só interessa à IA → vault da IA.
-2. Mudança relevante para quem lê o código → `docs/` do projeto.
-3. Nota pessoal do usuário, cross-project → vault central (se configurado).
+A escolha é binária, e a pergunta é uma só:
 
-Pergunte ao usuário se o destino não for óbvio.
+> Se alguém clonasse este repo amanhã, isto precisaria estar lá?
+
+- **Sim** → `docs/` deste projeto. É o estado atual: arquitetura, convenções,
+  como rodar, como fazer deploy.
+- **Não** → o cérebro, pelo MCP `brain`. É processo: tarefa, exploração,
+  aprendizado, decisão em disputa, spec ainda em aberto.
+
+Não escreva nos dois lugares. Se a resposta parecer "os dois", o texto está
+misturando estado e processo — separe-o em duas peças antes de escrever.

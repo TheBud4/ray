@@ -1,6 +1,49 @@
 # Arquitetura — {{.ProjectName}}
 
+Como o sistema é montado **hoje**. Descreve estado, não intenção: se algo aqui
+ficar defasado do código, virou ficção — corrija junto com a mudança que o defasou.
+
+As decisões travadas ("não reabrir sem perguntar") **não** moram aqui: moram na
+seção `<architecture>` do `CLAUDE.md`, que é o que o agente lê em todo turno. Aqui
+fica a descrição; lá, o que não se discute.
+
 Stack: {{.Stack}}.
 
-Descreva aqui os módulos principais, suas fronteiras e como se comunicam.
-Mantenha atualizado conforme o projeto muda de forma estrutural.
+## Visão em uma tela
+
+Um diagrama certo poupa três parágrafos. Anote **o que cada seta significa** —
+seta sem legenda é ambígua: "chama"? "depende de"? "publica evento para"?
+
+```text
+  ┌─────────────┐    (o que a seta significa)    ┌─────────────┐
+  │      …      │ ─────────────────────────────▶ │      …      │
+  └─────────────┘                                └─────────────┘
+```
+
+Escolha o recorte que explica **este** sistema — camadas, fluxo de dados, ou o
+caminho de uma requisição de ponta a ponta. Um diagrama que serve, não três
+genéricos.
+
+## Onde mora o quê
+
+```text
+…/
+├── …          # o que mora aqui
+└── …          # o que mora aqui
+```
+
+## Regras de dependência
+
+Quem pode importar quem — e principalmente **quem não pode**, que é a metade que
+o código sozinho não conta:
+
+- … depende de …
+- … **não** depende de … — porque …
+
+## Onde entra código novo
+
+- Código de … vai em `…`.
+- Código de … vai em `…`.
+
+Se duas coisas parecidas moram em lugares diferentes, é aqui que se diz como não
+confundir as duas. É o erro mais caro de quem chega no projeto.

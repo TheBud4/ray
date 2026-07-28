@@ -1,0 +1,66 @@
+---
+description: Regenera .claude/handoff.md a partir do estado real do repo, não da memória
+---
+
+# /handoff — escrever o estado de continuidade
+
+Regenera **do zero** o arquivo `.claude/handoff.md`, substituindo o conteúdo
+inteiro.
+
+## Princípio
+
+Um handoff envelhece quando é **narrado de memória**. Este comando existe para o
+oposto: **derive tudo do repo**. Se um fato não saiu de um comando que você acabou
+de rodar ou de um arquivo que acabou de ler, ele não entra.
+
+Fique **enxuto (~40 linhas)**. Uma sessão nova neste diretório já recebe o
+`CLAUDE.md` automaticamente — arquitetura, convenções e gates chegam por lá.
+**Não copie nada dele.** Este arquivo é só a camada volátil: onde o trabalho parou.
+
+## Passo 1 — derivar o estado (rode de verdade)
+
+```bash
+git status --short                      # working tree: o que está em voo
+git log --oneline -5                    # últimos commits
+git rev-list --count @{u}..HEAD         # commits sem push
+grep -H "^status:\|^titulo:" docs/specs/*.md | tail -30
+```
+
+Regras ao ler isso:
+
+- **Working tree sujo pode ser outra sessão trabalhando agora.** Identifique de
+  qual trabalho são os arquivos. Nunca presuma que é seu.
+- O `status:` de uma spec pode estar à frente do código (é marcado
+  `implementada` antes da revisão). Cruze com `git log` antes de afirmar que algo
+  fechou.
+- Se algo não bater, **descreva a divergência** em vez de escolher a versão que
+  parece certa.
+
+## Passo 2 — escrever o arquivo
+
+Substitua o conteúdo inteiro por esta estrutura:
+
+```markdown
+# Handoff — {{.ProjectName}}
+> Gerado por /handoff em <data>. Estado derivado do repo, não de memória.
+
+## Em voo
+<o que está modificado no working tree e a que trabalho pertence>
+
+## Último estado verde
+<último commit, e quais gates passaram nele — com os números reais>
+
+## Próximo passo
+<a única coisa que a próxima sessão deve fazer primeiro>
+
+## Decisões pendentes
+<o que precisa da decisão do usuário antes de avançar; vazio se não houver>
+```
+
+Se uma seção não tem conteúdo, escreva "nada" — não invente trabalho para
+preenchê-la.
+
+## Passo 3 — reportar
+
+Diga o que mudou em relação ao handoff anterior. Se o estado não mudou desde a
+última geração, diga isso — não reescreva por reescrever.
