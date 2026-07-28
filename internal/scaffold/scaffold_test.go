@@ -491,3 +491,30 @@ func TestWorkflowStep8DelegatesToDestilar(t *testing.T) {
 		t.Errorf("CLAUDE.md = %d linhas, orçamento é 300", n)
 	}
 }
+
+func TestHandoffAndRevisarDoNotReadDocsSpecs(t *testing.T) {
+	target := t.TempDir()
+
+	if _, err := WriteFiles([]profile.ScaffoldFile{
+		{Path: ".claude/commands/handoff.md"},
+		{Path: ".claude/commands/revisar.md"},
+	}, Options{
+		Target: target,
+		Data:   Data{ProjectName: "demo", Stack: "go"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// A spec fica no cérebro, nunca em docs/specs/ do repo. Se qualquer um dos
+	// dois comandos voltar a citar esse path, ele nasce lendo um diretório que
+	// o scaffold não cria — quebrado em todo projeto novo.
+	for _, p := range []string{".claude/commands/handoff.md", ".claude/commands/revisar.md"} {
+		body, err := os.ReadFile(filepath.Join(target, filepath.FromSlash(p)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(body), "docs/specs/") {
+			t.Errorf("%s não pode ler a spec em docs/specs/", p)
+		}
+	}
+}
