@@ -66,7 +66,6 @@ ray/
 ├── .github/workflows/ci.yml      # roda `make ci`
 ├── .gitignore
 ├── README.md
-├── docs/superpowers/{specs,plans}/   # design + plano
 └── internal/
     ├── cmd/          # Cobra: root, init, init_ai, new, run, profile, vault, docs, doctor
     ├── runner/       # ÚNICA fronteira de exec. ExecRunner (real, dry-run) + FakeRunner

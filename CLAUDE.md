@@ -252,5 +252,4 @@ Para a dúvida que **não** cai em nenhum caso acima, o teste é se ela bloqueia
 
 ---
 
-Estado vivo entre sessões: `.claude/handoff.md`. Design e planos:
-`docs/superpowers/{specs,plans}/`.
+Estado vivo entre sessões: `.claude/handoff.md`. Design e planos vivem na pasta do projeto no cérebro, nunca no repo.
