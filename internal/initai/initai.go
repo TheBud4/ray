@@ -29,7 +29,6 @@ import (
 type Home struct {
 	ProfilesDir  string
 	TemplatesDir string
-	VaultDir     string
 	ConfigPath   string
 	StatePath    string
 	StoreDir     string
@@ -114,38 +113,28 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		return Summary{}, fmt.Errorf("missing required dependencies: %s (run `ray doctor`)", strings.Join(names, ", "))
 	}
 
-	// 5. docs vault do usuário + resolve o plano de instalação.
+	// 5. cérebro do usuário + resolve o plano de instalação. O ray é
+	// consumidor, não dono: valida o caminho, nunca o cria. Caminho inválido
+	// vira aviso e não registra o server — MCP quebrado é pior que ausente.
 	cfg, err := rayconfig.Load(home.ConfigPath)
 	if err != nil {
 		return Summary{}, err
 	}
-	docsPath := cfg.UserDocsVaultPath()
-	if prof.Integrations.UserDocsVault {
-		switch {
-		case docsPath == "":
-			sum.Warnings = append(sum.Warnings, "user_docs_vault ligado mas não configurado (rode `ray docs set` ou `ray docs init`)")
-		default:
-			if _, statErr := os.Stat(docsPath); statErr != nil {
-				sum.Warnings = append(sum.Warnings, fmt.Sprintf("user_docs_vault configurado mas o caminho não existe: %s", docsPath))
-			}
+	brainPath := cfg.BrainPath()
+	if prof.Integrations.Brain {
+		if brainPath == "" {
+			sum.Warnings = append(sum.Warnings, "brain ligado mas não configurado (rode `ray brain set <path>`)")
+		} else if verr := vault.Verify(brainPath); verr != nil {
+			sum.Warnings = append(sum.Warnings, verr.Error())
+			brainPath = ""
 		}
 	}
 	plan, err := installer.Resolve(prof, installer.Options{
-		Global:            opts.Global,
-		VaultPath:         home.VaultDir,
-		UserDocsVaultPath: docsPath,
+		Global:    opts.Global,
+		BrainPath: brainPath,
 	})
 	if err != nil {
 		return Summary{}, err
-	}
-
-	// 6. vault de conhecimento da IA.
-	if prof.Integrations.KnowledgeVault || prof.Integrations.SecondBrain {
-		if opts.DryRun {
-			fmt.Fprintf(out, "+ ensure vault at %s\n", home.VaultDir)
-		} else if err := vault.Ensure(home.VaultDir); err != nil {
-			return Summary{}, err
-		}
 	}
 
 	// 7a. globais (install-once, rastreados em state.yaml).

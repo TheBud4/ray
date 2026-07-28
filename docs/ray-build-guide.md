@@ -106,12 +106,9 @@ type Profile struct {
     Create       []string // templates p/ `ray new` (rodados no novo dir); {{.Name}}
 }
 type Integrations struct { // YAML keys entre parênteses
-    Headroom        bool // headroom
-    KnowledgeVault  bool // knowledge_vault
-    SecondBrain     bool // second_brain
-    ObsidianFormats bool // obsidian_formats
-    CodeGraph       bool // code_graph
-    UserDocsVault   bool // user_docs_vault
+    Headroom  bool // headroom
+    Brain     bool // brain
+    CodeGraph bool // code_graph
 }
 type Component struct {
     Via    string // "skills" | "aitmpl"
@@ -132,8 +129,8 @@ todo `ScaffoldFile.Path` não-vazio. Erro claro no primeiro problema.
 válido p/ `profile add`), `WriteNew(dir,p)`, `Remove(dir,name)`.
 
 ### 4.2 Config + State — `internal/rayconfig`
-- **Config** (`~/.ray/config.yaml`): `user_docs_vault: <path>`. Override por env
-  `RAY_DOCS_VAULT`. Helpers `Load/Save/SetUserDocsVault`.
+- **Config** (`~/.ray/config.yaml`): `brain: <path>`. Override por env
+  `RAY_BRAIN`. Helpers `Load/Save/SetBrain/BrainPath`.
 - **State** (`~/.ray/state.yaml`): `installed_globals: [keys]`. Rastreia globais
   já instalados. Helpers `LoadState/Save/HasGlobal/AddGlobal`.
 
@@ -194,10 +191,7 @@ rastreados por `Key` em `state.yaml`), `Servers` (entradas de `.mcp.json`).
 | `via: skills` | Command | `DO_NOT_TRACK=1 npx skills add <source> --skill <skill> -a claude-code --copy -y` (+`-g` se `--global`) ⟶v2: **`--copy` e telemetria off** |
 | `via: aitmpl, type: agent\|command\|mcp` | Command | `npx claude-code-templates@latest --<type>=<ref> --yes` (copia arquivos p/ `.claude/agents\|commands/`) |
 | `headroom` | Global `headroom` + Server | install: `uv tool install headroom-ai[mcp]` · server `headroom` → `headroom mcp` |
-| `knowledge_vault` | Server | `vault-fs` → `npx -y @modelcontextprotocol/server-filesystem <~/.ray/vault>` |
-| `user_docs_vault` | Server (condicional) | só se `ray docs set` configurou path válido: `user-docs` → `npx -y @modelcontextprotocol/server-filesystem <path>` |
-| `second_brain` | Global `second_brain` | `npx skills add eugeniughelbur/obsidian-second-brain --skill obsidian-second-brain -a claude-code -g -y` |
-| `obsidian_formats` | Global `obsidian_formats` | `npx skills add kepano/obsidian-skills --skill obsidian-markdown --skill json-canvas -a claude-code -g -y` |
+| `brain` | Server (condicional) | só se `ray brain set` configurou path válido: `brain` → `npx -y @modelcontextprotocol/server-filesystem <path>` |
 | `code_graph` | Global `code_graph` + Command + Server | global: `uv tool install graphifyy` **e** `graphify install --platform claude` · por-projeto: `graphify update .` (constrói o grafo, tree-sitter, sem LLM) · server `graphify` → `graphify-mcp` (stdio, lê `graphify-out/graph.json`) |
 
 **Notas que valem ouro (já mordidas uma vez):**
@@ -223,19 +217,40 @@ rastreados por `Key` em `state.yaml`), `Servers` (entradas de `.mcp.json`).
 
 ```
 <alvo>/
-├── CLAUDE.md                 # L1: descreve o projeto, aponta p/ docs e regras
-├── SECURITY.md               # política de segredos/deps/dados sensíveis
-├── .mcp.json                 # headroom + vault-fs + user-docs? + graphify + componentes
-├── docs/                     # vault de documentação DO PROJETO (human-readable)
-│   ├── README.md  architecture.md  conventions.md  context.md
+├── CLAUDE.md                 # a base estável: 12 seções XML (ver abaixo)
+├── SECURITY.md               # [MUST]/[SHOULD], regras p/ código gerado por IA, checklist de PR
+├── .mcp.json                 # headroom + brain? + graphify + componentes
+├── docs/                     # o ESTADO ATUAL do projeto (versionado)
+│   ├── README.md             # os três papéis + o laço spec-driven
+│   ├── architecture.md  conventions.md
+│   └── specs/TEMPLATE.md     # o template de spec (CA numerado, perguntas em aberto)
 └── .claude/
     ├── settings.json         # model, effortLevel, hooks
     ├── handoff.md            # estado vivo (gerido pela IA; NUNCA tocado por --force)
-    ├── rules/{security,workflow,handoff,knowledge-vault,documentation}.md
-    ├── commands/document.md  # comando /document
+    ├── commands/{document,handoff,revisar}.md
     ├── hooks/session-start.sh
     ├── agents/  skills/       # populados pelos installers
 ```
+
+**`CLAUDE.md` é a base estável** (o "00-projeto" do fluxo spec-driven), em 12
+seções XML e **nesta ordem**, que é load-bearing e travada por teste:
+
+```
+<role> <context> <stack> <documentation_sources> <architecture> <test_strategy>
+<conventions> <quality_gates> <workflow> <agent_behavior> <output_format> <edge_cases>
+```
+
+`<workflow>` fica perto do fim de propósito — instrução de processo no topo é
+atropelada pelo volume da spec colada no turno. `<edge_cases>` fecha o documento:
+é a cláusula que impede invenção quando a premissa falha.
+
+Não há mais `.claude/rules/*` no modo `build`: o que era regra solta virou seção
+do `CLAUDE.md`, que é o único arquivo que entra no contexto sem o agente ir
+buscar. `rules/` sobrou só para o que é opt-in por modo (`learn`).
+
+A regra que sustenta o conjunto: **o que está no `CLAUDE.md` nunca se repete numa
+spec.** E todo critério de aceite vira um teste nomeado `CA-NN:`, de modo que
+`grep -r "CA-03" test/` responde "isso está implementado?" em um segundo.
 
 **Templates** (`internal/scaffold/templates/*.tmpl`, `go:embed`), placeholders
 `{{.ProjectName}}` e `{{.Stack}}`. `EnsureTemplates(~/.ray/templates)` copia os
@@ -279,9 +294,9 @@ de encerrar/limpar, sobrescrever o handoff) + `session-start.sh` (no
 3. `profile.Load(profiles/<profile>.yaml)`.
 4. **Preflight** (aborta se faltar required): `needPython = Headroom || CodeGraph`.
    `preflight.MissingRequired` → erro `missing required dependencies ... (run \`ray doctor\`)`.
-5. Resolver docs vault do usuário (warning se `user_docs_vault` ligado mas não
-   configurado/inexistente) e `installer.Resolve(prof, Options{Global, VaultPath, UserDocsVaultPath})`.
-6. `vault.Ensure(vaultDir)` se `KnowledgeVault || SecondBrain` (em dry-run só imprime).
+5. Resolver o cérebro (warning se `brain` ligado mas não configurado ou com
+   caminho inválido — nesse caso o server **não** é registrado) e
+   `installer.Resolve(prof, Options{Global, BrainPath})`.
 7a. **Globais** (`runGlobals`): pula os já em `state.yaml` (salvo `--reinstall-global`);
     `--no-global` pula todos; grava `state` só em execução real.
 7b. **Componentes por-projeto**: cada `c.Dir = target`, roda e acumula (falha
@@ -303,24 +318,22 @@ classifica: `err` → Failed; `ExitCode≠0` → Failed; senão Installed.
 ~/.ray/
 ├── profiles/*.yaml      # receitas editáveis (defaults na 1ª run)
 ├── templates/*.tmpl     # overlay editável dos templates de scaffold
-├── vault/               # vault de conhecimento da IA (Obsidian-compatível)
-├── config.yaml          # Config: user_docs_vault
+├── config.yaml          # Config: brain
 ├── state.yaml           # State: installed_globals[]
 └── commands.yaml        # aliases globais do `ray run`
 ```
 
-`ray vault init` cria layout mínimo idempotente (`inbox/`, `notes/`, README,
-`.obsidian/` opcional). Com `second_brain` ligado, o obsidian-second-brain é
-quem evolui a estrutura (LLM Wiki) — o layout base não compete.
+O ray não guarda mais um vault próprio em `~/.ray/vault`. O cérebro é a vault
+Obsidian que o usuário já mantém; `ray brain set <path>` só a valida e registra.
 
-### Três destinos de documentação (por público)
-1. **Vault da IA** (`~/.ray/vault`) — memória privada da IA (Filesystem MCP r/w).
-2. **Docs do projeto** (`docs/`) — human-readable, versionado com o projeto.
-3. **Vault central do usuário** — Obsidian geral/cross-project. `ray docs set`
-   aponta um existente; `ray docs init <path>` cria um novo. Wired via Filesystem
-   MCP `user-docs` quando configurado.
+### Dois destinos de documentação, e a regra é binária
+1. **`docs/` do projeto** — o **estado atual**: arquitetura, convenções, como
+   rodar, como fazer deploy. Versionado, viaja com o código.
+2. **O cérebro** — todo o resto: tarefa, exploração, aprendizado, decisão em
+   disputa, spec em aberto. Wired via Filesystem MCP `brain` quando configurado.
 
-Roteamento por `.claude/rules/documentation.md` + comando `/document`.
+A pergunta que decide: *se alguém clonasse o repo amanhã, isto precisaria estar
+lá?* Roteamento por `.claude/rules/brain.md` + comando `/document`.
 
 ---
 
@@ -435,7 +448,7 @@ Fase 9  cmd de gestão: profile (list/show/add/edit/remove/path), vault
 Fase 10 runfile + cmd/run.go (aliases) + cmd/new.go (create+git init+init ai).
 Fase 11 Makefile + CI (make ci) + README.
 Fase 12 Validação manual num dir descartável (RAY_HOME apontado a temp):
-        doctor, vault init, init ai --dry-run, depois real; inspecionar .claude/,
+        doctor, brain set, init ai --dry-run, depois real; inspecionar .claude/,
         docs/, .mcp.json, settings.json; testar --mode learn (guard bloqueia código).
 ```
 
@@ -482,12 +495,11 @@ na segunda volta — documentados aqui pra não se perderem:
   que rodariam (equivale a um dry-run só do perfil).
 - **`profile add <n>`**: `Starter(n)` → `WriteNew` (erro se existe).
   **`edit`** abre no `$EDITOR`; **`remove`** apaga; **`path`** imprime o dir.
-- **`vault init/status/open/path`**: `Ensure`/`Status` (caminho, existe?, nº de
-  `.md`, lembrete de MCPs)/abrir no app/imprimir caminho.
-- **`docs init <path>`**: cria vault Obsidian novo (`guides/`, `concepts/`,
-  README, `.obsidian/`) e configura. **`set <path>`**: aponta existente (não
-  reorganiza). **`open`/`path`**: app/caminho. Caminho em `config.yaml`
-  (`user_docs_vault`), override `RAY_DOCS_VAULT`.
+- **`brain set <path>`**: aponta para uma vault Obsidian existente. Valida
+  (`vault.Verify`) e **nunca cria nem reorganiza** — o usuário é dono do
+  cérebro, o ray é consumidor. **`status`**: caminho, existe?, nº de `.md`.
+  **`open`/`path`**: app/caminho. Caminho em `config.yaml` (`brain`), override
+  `RAY_BRAIN`.
 - **`run [alias]`**: sem alias ou `--list` lista (com origem project/global);
   alias inexistente → erro apontando `--list`. Passos rodam em sequência, sem
   shell, abortando no 1º exit≠0; respeita `--dry-run`/`--verbose`.

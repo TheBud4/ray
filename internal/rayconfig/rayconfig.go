@@ -11,7 +11,7 @@ import (
 
 // Config é a configuração persistente do usuário.
 type Config struct {
-	UserDocsVault string `yaml:"user_docs_vault"`
+	Brain string `yaml:"brain"`
 }
 
 // Load lê o Config em path. Arquivo ausente devolve &Config{} (não é erro —
@@ -29,19 +29,19 @@ func (c *Config) Save(path string) error {
 	return saveYAML(path, c)
 }
 
-// SetUserDocsVault seta o campo e persiste imediatamente em path.
-func (c *Config) SetUserDocsVault(path, docsPath string) error {
-	c.UserDocsVault = docsPath
+// SetBrain seta o campo e persiste imediatamente em path.
+func (c *Config) SetBrain(path, brainPath string) error {
+	c.Brain = brainPath
 	return c.Save(path)
 }
 
-// UserDocsVaultPath devolve o vault central efetivo: RAY_DOCS_VAULT tem
-// prioridade sobre o valor gravado em config.yaml.
-func (c *Config) UserDocsVaultPath() string {
-	if v := os.Getenv("RAY_DOCS_VAULT"); v != "" {
+// BrainPath devolve o cérebro efetivo: RAY_BRAIN tem prioridade sobre o valor
+// gravado em config.yaml.
+func (c *Config) BrainPath() string {
+	if v := os.Getenv("RAY_BRAIN"); v != "" {
 		return v
 	}
-	return c.UserDocsVault
+	return c.Brain
 }
 
 // State rastreia globais já instalados (install-once).

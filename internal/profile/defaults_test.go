@@ -36,7 +36,7 @@ func TestDefaultsIntegrationsAndSettings(t *testing.T) {
 		p := p
 		t.Run(p.Name, func(t *testing.T) {
 			i := p.Integrations
-			if !(i.Headroom && i.KnowledgeVault && i.SecondBrain && i.ObsidianFormats && i.CodeGraph && i.UserDocsVault) {
+			if !(i.Headroom && i.Brain && i.CodeGraph) {
 				t.Errorf("Integrations = %+v, want all true", i)
 			}
 			if p.Scaffold.Settings["model"] != "opus" {
@@ -56,13 +56,10 @@ func TestDefaultsScaffoldFiles(t *testing.T) {
 		"docs/README.md",
 		"docs/architecture.md",
 		"docs/conventions.md",
-		"docs/context.md",
-		".claude/rules/security.md",
-		".claude/rules/workflow.md",
-		".claude/rules/handoff.md",
-		".claude/rules/knowledge-vault.md",
-		".claude/rules/documentation.md",
+		"docs/specs/TEMPLATE.md",
 		".claude/commands/document.md",
+		".claude/commands/handoff.md",
+		".claude/commands/revisar.md",
 		".claude/handoff.md",
 	}
 

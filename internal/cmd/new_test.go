@@ -49,7 +49,6 @@ func newTestHome(t *testing.T) initai.Home {
 	return initai.Home{
 		ProfilesDir:  filepath.Join(base, "profiles"),
 		TemplatesDir: filepath.Join(base, "templates"),
-		VaultDir:     filepath.Join(base, "vault"),
 		ConfigPath:   filepath.Join(base, "config.yaml"),
 		StatePath:    filepath.Join(base, "state.yaml"),
 		StoreDir:     filepath.Join(base, "store"),

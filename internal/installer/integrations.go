@@ -4,7 +4,6 @@ import (
 	"github.com/TheBud4/ray/internal/economy"
 	"github.com/TheBud4/ray/internal/mcp"
 	"github.com/TheBud4/ray/internal/profile"
-	"github.com/TheBud4/ray/internal/runner"
 )
 
 // resolveIntegrations acrescenta ao plan as entradas ditadas pelas integrações
@@ -16,17 +15,8 @@ func resolveIntegrations(in profile.Integrations, opts Options, plan *Plan) {
 	if in.Headroom {
 		applyMechanism(plan, economy.Headroom())
 	}
-	if in.KnowledgeVault {
-		addKnowledgeVault(opts, plan)
-	}
-	if in.UserDocsVault {
-		addUserDocsVault(opts, plan)
-	}
-	if in.SecondBrain {
-		addSecondBrain(plan)
-	}
-	if in.ObsidianFormats {
-		addObsidianFormats(plan)
+	if in.Brain {
+		addBrain(opts, plan)
 	}
 	if in.CodeGraph {
 		applyMechanism(plan, economy.CodeGraph())
@@ -47,18 +37,13 @@ func applyMechanism(plan *Plan, m economy.Mechanism) {
 	}
 }
 
-func addKnowledgeVault(opts Options, plan *Plan) {
-	if opts.VaultPath == "" {
+// addBrain expõe o cérebro do usuário por MCP filesystem. Condicional: sem
+// path configurado não há server — o aviso é responsabilidade do initai.
+func addBrain(opts Options, plan *Plan) {
+	if opts.BrainPath == "" {
 		return
 	}
-	plan.Servers = append(plan.Servers, filesystemServer("vault-fs", opts.VaultPath))
-}
-
-func addUserDocsVault(opts Options, plan *Plan) {
-	if opts.UserDocsVaultPath == "" {
-		return // "condicional": sem path configurado, sem server (aviso é UX de fase posterior).
-	}
-	plan.Servers = append(plan.Servers, filesystemServer("user-docs", opts.UserDocsVaultPath))
+	plan.Servers = append(plan.Servers, filesystemServer("brain", opts.BrainPath))
 }
 
 // filesystemServer monta um server @modelcontextprotocol/server-filesystem apontado a path.
@@ -68,24 +53,4 @@ func filesystemServer(name, path string) mcp.Server {
 		Command: "npx",
 		Args:    []string{"-y", "@modelcontextprotocol/server-filesystem", path},
 	}
-}
-
-func addSecondBrain(plan *Plan) {
-	plan.Globals = append(plan.Globals, GlobalStep{
-		Key: "second_brain",
-		Commands: []runner.Command{{
-			Name: "npx",
-			Args: []string{"skills", "add", "eugeniughelbur/obsidian-second-brain", "--skill", "obsidian-second-brain", "-a", "claude-code", "-g", "-y"},
-		}},
-	})
-}
-
-func addObsidianFormats(plan *Plan) {
-	plan.Globals = append(plan.Globals, GlobalStep{
-		Key: "obsidian_formats",
-		Commands: []runner.Command{{
-			Name: "npx",
-			Args: []string{"skills", "add", "kepano/obsidian-skills", "--skill", "obsidian-markdown", "--skill", "json-canvas", "-a", "claude-code", "-g", "-y"},
-		}},
-	})
 }

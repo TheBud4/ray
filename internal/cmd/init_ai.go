@@ -84,10 +84,6 @@ func resolveInitAIHome() (initai.Home, error) {
 	if err != nil {
 		return initai.Home{}, err
 	}
-	vaultDir, err := raypaths.VaultDir()
-	if err != nil {
-		return initai.Home{}, err
-	}
 	configPath, err := raypaths.ConfigPath()
 	if err != nil {
 		return initai.Home{}, err
@@ -103,7 +99,6 @@ func resolveInitAIHome() (initai.Home, error) {
 	return initai.Home{
 		ProfilesDir:  profilesDir,
 		TemplatesDir: templatesDir,
-		VaultDir:     vaultDir,
 		ConfigPath:   configPath,
 		StatePath:    statePath,
 		StoreDir:     storeDir,

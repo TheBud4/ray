@@ -24,7 +24,7 @@ func TestHomeUsesRayHome(t *testing.T) {
 	}{
 		{"ProfilesDir", ProfilesDir, "/custom/root/profiles"},
 		{"TemplatesDir", TemplatesDir, "/custom/root/templates"},
-		{"VaultDir", VaultDir, "/custom/root/vault"},
+
 		{"ConfigPath", ConfigPath, "/custom/root/config.yaml"},
 		{"StatePath", StatePath, "/custom/root/state.yaml"},
 		{"CommandsPath", CommandsPath, "/custom/root/commands.yaml"},

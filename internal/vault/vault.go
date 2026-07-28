@@ -1,44 +1,45 @@
-// Package vault cria e reporta o estado do vault de conhecimento da IA
-// (~/.ray/vault), compatível com Obsidian. Só toca filesystem.
+// Package vault valida e reporta o estado do cérebro do usuário — uma vault
+// Obsidian que o usuário já mantém. Só toca filesystem.
+//
+// O ray não é dono deste diretório: ele não cria layout nem escreve README.
+// Quem cria a vault é o usuário, no Obsidian; o ray só verifica que o caminho
+// aponta para algo utilizável e o expõe ao agente por MCP.
 package vault
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-const readme = `# Vault
-
-Vault de conhecimento da IA, gerido pelo ray. Compatível com Obsidian.
-
-- ` + "`inbox/`" + ` — notas capturadas, ainda não organizadas.
-- ` + "`notes/`" + ` — notas processadas.
-`
-
-// Ensure garante o layout mínimo de vault em dir: inbox/, notes/, .obsidian/ e
-// README.md. Idempotente: nunca sobrescreve o que já existir.
-func Ensure(dir string) error {
-	for _, sub := range []string{"inbox", "notes", ".obsidian"} {
-		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
-			return err
+// Verify checa que dir existe e é um diretório. Não cria nada e não impõe
+// estrutura: qualquer pasta de markdown serve como cérebro.
+func Verify(dir string) error {
+	if dir == "" {
+		return fmt.Errorf("brain path is empty; run `ray brain set <path>`")
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("brain path does not exist: %s", dir)
 		}
+		return err
 	}
-	readmePath := filepath.Join(dir, "README.md")
-	if _, err := os.Stat(readmePath); err == nil {
-		return nil // já existe: respeita
+	if !info.IsDir() {
+		return fmt.Errorf("brain path is not a directory: %s", dir)
 	}
-	return os.WriteFile(readmePath, []byte(readme), 0o644)
+	return nil
 }
 
-// Status é o retrato do vault em dir, usado por `ray vault status`.
+// Status é o retrato do cérebro em dir, usado por `ray brain status`.
 type Status struct {
 	Path          string
 	Exists        bool
 	MarkdownCount int
 }
 
-// Stat lê o estado do vault em dir. dir inexistente não é erro: devolve
+// Stat lê o estado do cérebro em dir. dir inexistente não é erro: devolve
 // Status{Exists: false}.
 func Stat(dir string) (Status, error) {
 	st := Status{Path: dir}

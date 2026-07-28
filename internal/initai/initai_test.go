@@ -3,8 +3,10 @@ package initai
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -83,7 +85,7 @@ var allFound = stubLooker{
 func testProfile() *profile.Profile {
 	return &profile.Profile{
 		Name:         "test",
-		Integrations: profile.Integrations{Headroom: true, KnowledgeVault: true, CodeGraph: true},
+		Integrations: profile.Integrations{Headroom: true, Brain: true, CodeGraph: true},
 		Components:   []profile.Component{{Via: profile.ViaSkills, Skill: "s", Source: "o/r"}},
 		Scaffold: profile.Scaffold{
 			Files:    []profile.ScaffoldFile{{Path: "CLAUDE.md"}},
@@ -112,7 +114,6 @@ func newHome(t *testing.T) Home {
 	return Home{
 		ProfilesDir:  filepath.Join(base, "profiles"),
 		TemplatesDir: filepath.Join(base, "templates"),
-		VaultDir:     filepath.Join(base, "vault"),
 		ConfigPath:   filepath.Join(base, "config.yaml"),
 		StatePath:    filepath.Join(base, "state.yaml"),
 		StoreDir:     filepath.Join(base, "store"),
@@ -137,9 +138,6 @@ func TestRunBuildModeFullFlow(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(target, p)); err != nil {
 			t.Errorf("stat %s: %v", p, err)
 		}
-	}
-	if _, err := os.Stat(filepath.Join(home.VaultDir, "README.md")); err != nil {
-		t.Errorf("vault not ensured: %v", err)
 	}
 }
 
@@ -504,5 +502,103 @@ func TestRunAcquiresGitComponent(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(target, ".claude/skills/widget/.ray-origin")); err != nil {
 		t.Fatalf(".ray-origin missing: %v", err)
+	}
+}
+
+func hasWarning(sum Summary, substr string) bool {
+	for _, w := range sum.Warnings {
+		if strings.Contains(w, substr) {
+			return true
+		}
+	}
+	return false
+}
+
+func mcpServerNames(t *testing.T, target string) []string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(target, ".mcp.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Servers map[string]any `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatal(err)
+	}
+	names := make([]string, 0, len(doc.Servers))
+	for n := range doc.Servers {
+		names = append(names, n)
+	}
+	return names
+}
+
+func TestRunWarnsWhenBrainUnconfigured(t *testing.T) {
+	t.Setenv("RAY_BRAIN", "")
+	home := newHome(t)
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+
+	sum, err := Run(&seedingRunner{}, allFound, Options{
+		Profile: "test", Target: target, Mode: scaffold.ModeBuild, Out: &bytes.Buffer{},
+	}, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !hasWarning(sum, "brain ligado mas não configurado") {
+		t.Errorf("Warnings = %v, want one about the unconfigured brain", sum.Warnings)
+	}
+	if slices.Contains(mcpServerNames(t, target), "brain") {
+		t.Error("registered a brain MCP server with no path configured")
+	}
+}
+
+// Caminho configurado mas inexistente vira aviso e NÃO registra o server:
+// um MCP apontando para o vazio quebra em runtime, o que é pior que ausente.
+func TestRunWarnsAndSkipsServerWhenBrainPathMissing(t *testing.T) {
+	home := newHome(t)
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+
+	ghost := filepath.Join(t.TempDir(), "nao-existe")
+	t.Setenv("RAY_BRAIN", ghost)
+
+	sum, err := Run(&seedingRunner{}, allFound, Options{
+		Profile: "test", Target: target, Mode: scaffold.ModeBuild, Out: &bytes.Buffer{},
+	}, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !hasWarning(sum, "does not exist") {
+		t.Errorf("Warnings = %v, want one about the missing brain path", sum.Warnings)
+	}
+	if slices.Contains(mcpServerNames(t, target), "brain") {
+		t.Error("registered a brain MCP server pointing at a nonexistent path")
+	}
+	// E o ray não pode ter criado o caminho para "consertar" a situação.
+	if _, err := os.Stat(ghost); !os.IsNotExist(err) {
+		t.Errorf("Run() created %s; ray is a consumer of the brain, not its owner", ghost)
+	}
+}
+
+func TestRunRegistersBrainServerWhenPathValid(t *testing.T) {
+	home := newHome(t)
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+
+	brain := t.TempDir()
+	t.Setenv("RAY_BRAIN", brain)
+
+	sum, err := Run(&seedingRunner{}, allFound, Options{
+		Profile: "test", Target: target, Mode: scaffold.ModeBuild, Out: &bytes.Buffer{},
+	}, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if hasWarning(sum, "brain") {
+		t.Errorf("Warnings = %v, want none for a valid brain path", sum.Warnings)
+	}
+	if !slices.Contains(mcpServerNames(t, target), "brain") {
+		t.Errorf("MCP servers = %v, want a brain entry", mcpServerNames(t, target))
 	}
 }

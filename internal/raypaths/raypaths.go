@@ -25,9 +25,6 @@ func ProfilesDir() (string, error) { return sub("profiles") }
 // TemplatesDir é <Home>/templates, o overlay editável de templates de scaffold.
 func TemplatesDir() (string, error) { return sub("templates") }
 
-// VaultDir é <Home>/vault, o vault de conhecimento da IA.
-func VaultDir() (string, error) { return sub("vault") }
-
 // ConfigPath é <Home>/config.yaml (rayconfig.Config).
 func ConfigPath() (string, error) { return sub("config.yaml") }
 

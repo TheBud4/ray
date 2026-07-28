@@ -72,7 +72,6 @@ func TestRunInitAIPrintsSummaryAndErrorsOnFailure(t *testing.T) {
 	home := initai.Home{
 		ProfilesDir:  profilesDir,
 		TemplatesDir: filepath.Join(base, "templates"),
-		VaultDir:     filepath.Join(base, "vault"),
 		ConfigPath:   filepath.Join(base, "config.yaml"),
 		StatePath:    filepath.Join(base, "state.yaml"),
 	}

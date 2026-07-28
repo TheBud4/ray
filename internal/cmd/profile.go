@@ -62,10 +62,6 @@ func newProfileShowCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			vaultDir, err := raypaths.VaultDir()
-			if err != nil {
-				return err
-			}
 			configPath, err := raypaths.ConfigPath()
 			if err != nil {
 				return err
@@ -74,17 +70,17 @@ func newProfileShowCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runProfileShow(dir, args[0], vaultDir, cfg.UserDocsVaultPath(), cmd.OutOrStdout())
+			return runProfileShow(dir, args[0], cfg.BrainPath(), cmd.OutOrStdout())
 		},
 	}
 }
 
-func runProfileShow(dir, name, vaultPath, userDocsPath string, out io.Writer) error {
+func runProfileShow(dir, name, brainPath string, out io.Writer) error {
 	p, err := profile.Load(filepath.Join(dir, name+".yaml"))
 	if err != nil {
 		return err
 	}
-	plan, err := installer.Resolve(p, installer.Options{VaultPath: vaultPath, UserDocsVaultPath: userDocsPath})
+	plan, err := installer.Resolve(p, installer.Options{BrainPath: brainPath})
 	if err != nil {
 		return err
 	}

@@ -59,8 +59,7 @@ ray init ai --profile go
 | `ray init ai --profile <n> [path]` | Monta o ambiente de IA numa pasta existente (default: diretório atual). |
 | `ray run [alias] [-- extra]` | Roda um alias de `ray.yaml` (projeto) ou `~/.ray/commands.yaml` (global); sem alias, lista os disponíveis. |
 | `ray profile list\|show\|add\|edit\|remove\|path` | Gerencia as receitas em `~/.ray/profiles`. |
-| `ray vault init\|status\|open\|path` | Gerencia o vault de conhecimento da IA (`~/.ray/vault`, compatível com Obsidian). |
-| `ray docs init\|set\|open\|path` | Gerencia o vault central de documentação do usuário (cross-project). |
+| `ray brain set\|status\|open\|path` | Aponta o ray para a sua vault Obsidian e a expõe ao agente por MCP. Valida o caminho; nunca cria nem reorganiza. |
 | `ray doctor [--fix]` | Checa/instala dependências externas. |
 
 Flags globais: `--verbose`, `--dry-run` (imprime o que seria feito, sem

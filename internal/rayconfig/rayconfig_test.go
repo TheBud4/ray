@@ -13,15 +13,15 @@ func TestLoadMissingConfigIsZeroValue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v, want nil for missing file", err)
 	}
-	if cfg.UserDocsVault != "" {
-		t.Errorf("UserDocsVault = %q, want empty", cfg.UserDocsVault)
+	if cfg.Brain != "" {
+		t.Errorf("Brain = %q, want empty", cfg.Brain)
 	}
 }
 
 func TestConfigSaveAndLoadRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 
-	cfg := &Config{UserDocsVault: "/home/u/Docs"}
+	cfg := &Config{Brain: "/home/u/Docs"}
 	if err := cfg.Save(path); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
@@ -30,39 +30,39 @@ func TestConfigSaveAndLoadRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if got.UserDocsVault != "/home/u/Docs" {
-		t.Errorf("UserDocsVault = %q, want %q", got.UserDocsVault, "/home/u/Docs")
+	if got.Brain != "/home/u/Docs" {
+		t.Errorf("Brain = %q, want %q", got.Brain, "/home/u/Docs")
 	}
 }
 
-func TestSetUserDocsVaultPersists(t *testing.T) {
+func TestSetBrainPersists(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 
 	cfg := &Config{}
-	if err := cfg.SetUserDocsVault(path, "/vault"); err != nil {
-		t.Fatalf("SetUserDocsVault() error = %v", err)
+	if err := cfg.SetBrain(path, "/vault"); err != nil {
+		t.Fatalf("SetBrain() error = %v", err)
 	}
 
 	got, err := Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.UserDocsVault != "/vault" {
-		t.Errorf("UserDocsVault = %q, want %q", got.UserDocsVault, "/vault")
+	if got.Brain != "/vault" {
+		t.Errorf("Brain = %q, want %q", got.Brain, "/vault")
 	}
 }
 
-func TestUserDocsVaultPathPrefersEnvOverride(t *testing.T) {
-	cfg := &Config{UserDocsVault: "/from/config"}
+func TestBrainPathPrefersEnvOverride(t *testing.T) {
+	cfg := &Config{Brain: "/from/config"}
 
-	t.Setenv("RAY_DOCS_VAULT", "")
-	if got := cfg.UserDocsVaultPath(); got != "/from/config" {
-		t.Errorf("UserDocsVaultPath() = %q, want config value %q", got, "/from/config")
+	t.Setenv("RAY_BRAIN", "")
+	if got := cfg.BrainPath(); got != "/from/config" {
+		t.Errorf("BrainPath() = %q, want config value %q", got, "/from/config")
 	}
 
-	t.Setenv("RAY_DOCS_VAULT", "/from/env")
-	if got := cfg.UserDocsVaultPath(); got != "/from/env" {
-		t.Errorf("UserDocsVaultPath() = %q, want env override %q", got, "/from/env")
+	t.Setenv("RAY_BRAIN", "/from/env")
+	if got := cfg.BrainPath(); got != "/from/env" {
+		t.Errorf("BrainPath() = %q, want env override %q", got, "/from/env")
 	}
 }
 
@@ -116,7 +116,7 @@ func TestAddGlobalIsIdempotent(t *testing.T) {
 func TestConfigSaveCreatesParentDir(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nested", "dir", "config.yaml")
 
-	cfg := &Config{UserDocsVault: "/x"}
+	cfg := &Config{Brain: "/x"}
 	if err := cfg.Save(path); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}

@@ -34,7 +34,7 @@ func TestRunProfileShowPrintsComponentsAndServers(t *testing.T) {
 	p := &profile.Profile{
 		Name:         "test",
 		Description:  "a test profile",
-		Integrations: profile.Integrations{KnowledgeVault: true},
+		Integrations: profile.Integrations{Brain: true},
 		Components:   []profile.Component{{Via: profile.ViaSkills, Skill: "s", Source: "o/r"}},
 	}
 	if err := profile.WriteNew(dir, p); err != nil {
@@ -42,7 +42,7 @@ func TestRunProfileShowPrintsComponentsAndServers(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := runProfileShow(dir, "test", "/home/u/.ray/vault", "", &out); err != nil {
+	if err := runProfileShow(dir, "test", "/home/u/www/MegaBrain", &out); err != nil {
 		t.Fatalf("runProfileShow() error = %v", err)
 	}
 
@@ -50,8 +50,8 @@ func TestRunProfileShowPrintsComponentsAndServers(t *testing.T) {
 	if !strings.Contains(got, "npx skills add o/r --skill s -a claude-code -y --copy") {
 		t.Errorf("output = %q, want the component command (I2: preview forces --copy)", got)
 	}
-	if !strings.Contains(got, "vault-fs") {
-		t.Errorf("output = %q, want the vault-fs MCP server", got)
+	if !strings.Contains(got, "brain") {
+		t.Errorf("output = %q, want the brain MCP server", got)
 	}
 }
 

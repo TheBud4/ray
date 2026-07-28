@@ -4,8 +4,7 @@
 // processos, não sabe de CLI. Componentes de conteúdo (`p.Components`) não
 // passam mais por aqui — I2 move a aquisição deles para internal/acquire
 // (cache-first, sobre internal/store); este pacote só resolve o que a tabela
-// §6 do build guide chama de integrações (headroom, vault, second_brain,
-// obsidian_formats, code_graph, user_docs_vault).
+// §6 do build guide chama de integrações (headroom, brain, code_graph).
 package installer
 
 import (
@@ -31,15 +30,13 @@ type GlobalStep struct {
 }
 
 // Options carrega decisões que o chamador já resolveu antes de Resolve.
-// VaultPath/UserDocsVaultPath são caminhos já resolvidos; vazio em
-// UserDocsVaultPath significa "não configurado". Global não afeta mais
-// Resolve (as integrações não têm noção de pessoal/projeto); ele segue
-// existindo em internal/acquire, que é quem hoje decide `-g` para
-// componentes `via: skills` (I1 design §3.3).
+// BrainPath é um caminho já resolvido; vazio significa "não configurado".
+// Global não afeta mais Resolve (as integrações não têm noção de
+// pessoal/projeto); ele segue existindo em internal/acquire, que é quem hoje
+// decide `-g` para componentes `via: skills` (I1 design §3.3).
 type Options struct {
-	Global            bool
-	VaultPath         string
-	UserDocsVaultPath string
+	Global    bool
+	BrainPath string
 }
 
 // Resolve monta o Plan a partir das integrações de p. Não falha mais por via

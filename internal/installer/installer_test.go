@@ -26,15 +26,14 @@ func TestResolveAllIntegrations(t *testing.T) {
 	p := &profile.Profile{
 		Name: "go",
 		Integrations: profile.Integrations{
-			Headroom: true, KnowledgeVault: true, SecondBrain: true,
-			ObsidianFormats: true, CodeGraph: true, UserDocsVault: true,
+			Headroom: true, Brain: true, CodeGraph: true,
 		},
 		Components: []profile.Component{
 			{Via: profile.ViaSkills, Skill: "prompt-engineer", Source: "jeffallan/claude-skills"},
 			{Via: profile.ViaAitmpl, Type: profile.TypeAgent, Ref: "development-tools/code-reviewer"},
 		},
 	}
-	opts := Options{Global: true, VaultPath: "/home/u/.ray/vault", UserDocsVaultPath: "/home/u/Docs"}
+	opts := Options{Global: true, BrainPath: "/home/u/www/MegaBrain"}
 
 	plan, err := Resolve(p, opts)
 	if err != nil {
@@ -52,10 +51,8 @@ func TestResolveAllIntegrations(t *testing.T) {
 	}
 
 	wantGlobals := map[string][]string{
-		"headroom":         {"uv tool install headroom-ai[mcp]"},
-		"second_brain":     {"npx skills add eugeniughelbur/obsidian-second-brain --skill obsidian-second-brain -a claude-code -g -y"},
-		"obsidian_formats": {"npx skills add kepano/obsidian-skills --skill obsidian-markdown --skill json-canvas -a claude-code -g -y"},
-		"code_graph":       {"uv tool install graphifyy", "graphify install --platform claude"},
+		"headroom":   {"uv tool install headroom-ai[mcp]"},
+		"code_graph": {"uv tool install graphifyy", "graphify install --platform claude"},
 	}
 	if len(plan.Globals) != len(wantGlobals) {
 		t.Fatalf("len(Globals) = %d, want %d", len(plan.Globals), len(wantGlobals))
@@ -72,8 +69,7 @@ func TestResolveAllIntegrations(t *testing.T) {
 
 	wantServers := []mcp.Server{
 		{Name: "headroom", Command: "headroom", Args: []string{"mcp"}},
-		{Name: "vault-fs", Command: "npx", Args: []string{"-y", "@modelcontextprotocol/server-filesystem", "/home/u/.ray/vault"}},
-		{Name: "user-docs", Command: "npx", Args: []string{"-y", "@modelcontextprotocol/server-filesystem", "/home/u/Docs"}},
+		{Name: "brain", Command: "npx", Args: []string{"-y", "@modelcontextprotocol/server-filesystem", "/home/u/www/MegaBrain"}},
 		{Name: "graphify", Command: "graphify-mcp"},
 	}
 	if !reflect.DeepEqual(plan.Servers, wantServers) {
@@ -100,12 +96,12 @@ func TestResolveNoIntegrations(t *testing.T) {
 	}
 }
 
-func TestResolveUserDocsVaultUnset(t *testing.T) {
+func TestResolveBrainUnset(t *testing.T) {
 	p := &profile.Profile{
-		Name:         "docs",
-		Integrations: profile.Integrations{UserDocsVault: true},
+		Name:         "brain",
+		Integrations: profile.Integrations{Brain: true},
 	}
-	plan, err := Resolve(p, Options{UserDocsVaultPath: ""})
+	plan, err := Resolve(p, Options{BrainPath: ""})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -35,12 +35,9 @@ func baseComponents() []Component {
 	}
 }
 
-// allIntegrations liga as seis capacidades (postura default).
+// allIntegrations liga as três capacidades (postura default).
 func allIntegrations() Integrations {
-	return Integrations{
-		Headroom: true, KnowledgeVault: true, SecondBrain: true,
-		ObsidianFormats: true, CodeGraph: true, UserDocsVault: true,
-	}
+	return Integrations{Headroom: true, Brain: true, CodeGraph: true}
 }
 
 // defaultSettings é o bloco de settings compartilhado do .claude.
@@ -59,13 +56,10 @@ func baseScaffoldFiles() []ScaffoldFile {
 		"docs/README.md",
 		"docs/architecture.md",
 		"docs/conventions.md",
-		"docs/context.md",
-		".claude/rules/security.md",
-		".claude/rules/workflow.md",
-		".claude/rules/handoff.md",
-		".claude/rules/knowledge-vault.md",
-		".claude/rules/documentation.md",
+		"docs/specs/TEMPLATE.md",
 		".claude/commands/document.md",
+		".claude/commands/handoff.md",
+		".claude/commands/revisar.md",
 		".claude/handoff.md",
 	}
 	files := make([]ScaffoldFile, len(paths))

@@ -36,13 +36,15 @@ type Milestone struct {
 }
 
 // Integrations liga/desliga as capacidades embutidas que o ray conecta num projeto.
+//
+// Brain expõe o cérebro do usuário (uma vault Obsidian) ao agente por MCP
+// filesystem. Antes eram dois campos — knowledge_vault e user_docs_vault —
+// que passavam pelo mesmo servidor, sobre o mesmo tipo de diretório: a
+// distinção existia só em prosa.
 type Integrations struct {
-	Headroom        bool `yaml:"headroom"`
-	KnowledgeVault  bool `yaml:"knowledge_vault"`
-	SecondBrain     bool `yaml:"second_brain"`
-	ObsidianFormats bool `yaml:"obsidian_formats"`
-	CodeGraph       bool `yaml:"code_graph"`
-	UserDocsVault   bool `yaml:"user_docs_vault"`
+	Headroom  bool `yaml:"headroom"`
+	Brain     bool `yaml:"brain"`
+	CodeGraph bool `yaml:"code_graph"`
 }
 
 // Constantes nomeadas: viram exatamente o valor esperado no YAML.
