@@ -20,7 +20,7 @@ rel="${file#"$PWD"/}"
 
 # Isentos: teste (onde CA-NN é convenção obrigatória) e processo interno.
 case "$rel" in
-  *_test.*|*test*/*|CLAUDE.md|*/CLAUDE.md|.claude/*|*/.claude/*)
+  *_test.*|test/*|tests/*|*/test/*|*/tests/*|CLAUDE.md|*/CLAUDE.md|.claude/*|*/.claude/*)
     exit 0
     ;;
 esac
