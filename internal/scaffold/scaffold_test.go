@@ -720,6 +720,12 @@ func TestGuardVocabWarnsOnDeliveredArtifacts(t *testing.T) {
 		{"claude dir pode citar", ".claude/commands/x.md", "Leia a spec 012.\n", false},
 		{"OpenAPI spec passa limpo", "README.md", "Servimos uma OpenAPI spec em /docs.\n", false},
 		{"spec-driven passa limpo", "README.md", "Fluxo spec-driven development.\n", false},
+		// A isenção de teste vale por segmento inteiro, não por substring:
+		// "latest" e "attestation" contêm "test" e são artefato entregue.
+		{"latest nao e diretorio de teste", "docs/latest/README.md", "Ver spec 012.\n", true},
+		{"attestation nao e diretorio de teste", "attestation/README.md", "Ver spec 012.\n", true},
+		{"diretorio test de verdade e isento", "test/helper.md", "Ver spec 012.\n", false},
+		{"diretorio tests de verdade e isento", "pkg/tests/helper.md", "Ver spec 012.\n", false},
 	}
 
 	for _, tc := range cases {
