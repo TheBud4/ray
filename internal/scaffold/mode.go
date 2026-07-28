@@ -62,7 +62,7 @@ func HookSettings(mode string) map[string]any {
 				},
 			},
 			map[string]any{
-				"matcher": "Write",
+				"matcher": "Edit|Write|MultiEdit",
 				"hooks": []any{
 					map[string]any{"type": "command", "command": "bash .claude/hooks/guard-plans.sh"},
 				},
@@ -70,7 +70,7 @@ func HookSettings(mode string) map[string]any {
 		},
 		"PostToolUse": []any{
 			map[string]any{
-				"matcher": "Edit|Write",
+				"matcher": "Edit|Write|MultiEdit",
 				"hooks": []any{
 					map[string]any{"type": "command", "command": "bash .claude/hooks/guard-vocab.sh"},
 				},

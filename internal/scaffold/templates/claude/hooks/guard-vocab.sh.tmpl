@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# PostToolUse(Edit|Write): avisa — nunca bloqueia — quando vocabulário de
-# processo vaza para artefato entregue. Decisão de arquitetura entra como fato
-# ("a navegação usa X"), nunca como "por causa da spec Y": quem clona o repo
-# não tem como resolver a referência.
+# PostToolUse(Edit|Write|MultiEdit): avisa — nunca bloqueia — quando
+# vocabulário de processo vaza para artefato entregue. Decisão de arquitetura
+# entra como fato ("a navegação usa X"), nunca como "por causa da spec Y":
+# quem clona o repo não tem como resolver a referência.
 set -euo pipefail
 
 if ! command -v jq >/dev/null 2>&1; then
@@ -18,9 +18,11 @@ fi
 
 rel="${file#"$PWD"/}"
 
-# Isentos: teste (onde CA-NN é convenção obrigatória) e processo interno.
+# Isentos: teste (onde CA-NN é convenção obrigatória), processo interno e
+# .superpowers/ — workspace de sessão local, gitignorado, onde a nota de
+# processo é o conteúdo legítimo, não um vazamento.
 case "$rel" in
-  *_test.*|test/*|tests/*|*/test/*|*/tests/*|CLAUDE.md|*/CLAUDE.md|.claude/*|*/.claude/*)
+  *_test.*|test/*|tests/*|*/test/*|*/tests/*|CLAUDE.md|*/CLAUDE.md|.claude/*|*/.claude/*|.superpowers/*|*/.superpowers/*)
     exit 0
     ;;
 esac
