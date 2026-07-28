@@ -45,6 +45,7 @@ var templateFor = map[string]string{
 	".claude/rules/learn.md":            "claude/rules/learn.md.tmpl",
 	".claude/hooks/guard-code.sh":       "claude/hooks/guard-code.sh.tmpl",
 	".claude/rules/learning-journal.md": "claude/rules/learning-journal.md.tmpl",
+	".claude/hooks/guard-vocab.sh":      "claude/hooks/guard-vocab.sh.tmpl",
 }
 
 // Data são os placeholders disponíveis em todo template.

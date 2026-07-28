@@ -10,9 +10,9 @@ import (
 	"testing"
 )
 
-func TestSystemFilesBuildIsSessionStartAndGuardAdd(t *testing.T) {
+func TestSystemFilesBuildIsSessionStartGuardAddAndGuardVocab(t *testing.T) {
 	files := SystemFiles(ModeBuild)
-	want := []string{".claude/hooks/session-start.sh", ".claude/hooks/guard-add.sh"}
+	want := []string{".claude/hooks/session-start.sh", ".claude/hooks/guard-add.sh", ".claude/hooks/guard-vocab.sh"}
 	if len(files) != len(want) {
 		t.Fatalf("SystemFiles(build) = %v, want %v", files, want)
 	}
@@ -28,6 +28,7 @@ func TestSystemFilesLearnAddsGuardAndRule(t *testing.T) {
 	want := map[string]bool{
 		".claude/hooks/session-start.sh":    false,
 		".claude/hooks/guard-add.sh":        false,
+		".claude/hooks/guard-vocab.sh":      false,
 		".claude/rules/learn.md":            false,
 		".claude/hooks/guard-code.sh":       false,
 		".claude/rules/learning-journal.md": false,

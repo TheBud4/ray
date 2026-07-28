@@ -25,6 +25,7 @@ func SystemFiles(mode string) []profile.ScaffoldFile {
 	files := []profile.ScaffoldFile{
 		{Path: ".claude/hooks/session-start.sh"},
 		{Path: ".claude/hooks/guard-add.sh"},
+		{Path: ".claude/hooks/guard-vocab.sh"},
 	}
 	if mode == ModeLearn {
 		files = append(files,
@@ -38,8 +39,10 @@ func SystemFiles(mode string) []profile.ScaffoldFile {
 
 // HookSettings devolve o bloco "hooks" a mesclar em settings.json (via
 // claudecfg.MergeSettings): SessionStart sempre injeta o handoff; PreToolUse
-// sempre traz o guard-add (avisa em `git add` cego); learn soma a esse
-// PreToolUse o guard-code, que bloqueia edição de código fora da allowlist.
+// sempre traz o guard-add (avisa em `git add` cego); PostToolUse sempre traz
+// o guard-vocab (avisa em vocabulário de processo vazado para artefato
+// entregue); learn soma ao PreToolUse o guard-code, que bloqueia edição de
+// código fora da allowlist.
 func HookSettings(mode string) map[string]any {
 	hooks := map[string]any{
 		"SessionStart": []any{
@@ -54,6 +57,14 @@ func HookSettings(mode string) map[string]any {
 				"matcher": "Bash",
 				"hooks": []any{
 					map[string]any{"type": "command", "command": "bash .claude/hooks/guard-add.sh"},
+				},
+			},
+		},
+		"PostToolUse": []any{
+			map[string]any{
+				"matcher": "Edit|Write",
+				"hooks": []any{
+					map[string]any{"type": "command", "command": "bash .claude/hooks/guard-vocab.sh"},
 				},
 			},
 		},
