@@ -10,10 +10,16 @@ import (
 	"testing"
 )
 
-func TestSystemFilesBuildIsJustSessionStart(t *testing.T) {
+func TestSystemFilesBuildIsSessionStartAndGuardAdd(t *testing.T) {
 	files := SystemFiles(ModeBuild)
-	if len(files) != 1 || files[0].Path != ".claude/hooks/session-start.sh" {
-		t.Fatalf("SystemFiles(build) = %v, want just session-start.sh", files)
+	want := []string{".claude/hooks/session-start.sh", ".claude/hooks/guard-add.sh"}
+	if len(files) != len(want) {
+		t.Fatalf("SystemFiles(build) = %v, want %v", files, want)
+	}
+	for i, p := range want {
+		if files[i].Path != p {
+			t.Fatalf("SystemFiles(build)[%d] = %q, want %q", i, files[i].Path, p)
+		}
 	}
 }
 
@@ -21,6 +27,7 @@ func TestSystemFilesLearnAddsGuardAndRule(t *testing.T) {
 	files := SystemFiles(ModeLearn)
 	want := map[string]bool{
 		".claude/hooks/session-start.sh":    false,
+		".claude/hooks/guard-add.sh":        false,
 		".claude/rules/learn.md":            false,
 		".claude/hooks/guard-code.sh":       false,
 		".claude/rules/learning-journal.md": false,
@@ -41,7 +48,7 @@ func TestSystemFilesLearnAddsGuardAndRule(t *testing.T) {
 	}
 }
 
-func TestHookSettingsBuildHasNoPreToolUse(t *testing.T) {
+func TestHookSettingsBuildHasOnlyGuardAddPreToolUse(t *testing.T) {
 	settings := HookSettings(ModeBuild)
 	hooks, ok := settings["hooks"].(map[string]any)
 	if !ok {
@@ -50,8 +57,16 @@ func TestHookSettingsBuildHasNoPreToolUse(t *testing.T) {
 	if _, ok := hooks["SessionStart"]; !ok {
 		t.Fatalf("hooks = %#v, want SessionStart", hooks)
 	}
-	if _, ok := hooks["PreToolUse"]; ok {
-		t.Fatalf("hooks = %#v, want no PreToolUse in build mode", hooks)
+	pre, ok := hooks["PreToolUse"].([]any)
+	if !ok {
+		t.Fatalf("hooks = %#v, want PreToolUse in build mode (guard-add is unconditional)", hooks)
+	}
+	if len(pre) != 1 {
+		t.Fatalf("PreToolUse = %#v, want just the guard-add matcher in build mode", pre)
+	}
+	entry, ok := pre[0].(map[string]any)
+	if !ok || entry["matcher"] != "Bash" {
+		t.Fatalf("PreToolUse[0] = %#v, want matcher \"Bash\" (guard-add.sh)", pre[0])
 	}
 }
 
@@ -61,8 +76,20 @@ func TestHookSettingsLearnHasPreToolUse(t *testing.T) {
 	if _, ok := hooks["SessionStart"]; !ok {
 		t.Fatalf("hooks = %#v, want SessionStart", hooks)
 	}
-	if _, ok := hooks["PreToolUse"]; !ok {
+	pre, ok := hooks["PreToolUse"].([]any)
+	if !ok {
 		t.Fatalf("hooks = %#v, want PreToolUse in learn mode", hooks)
+	}
+	if len(pre) != 2 {
+		t.Fatalf("PreToolUse = %#v, want guard-add (Bash) plus guard-code (Edit|Write|MultiEdit)", pre)
+	}
+	first, ok := pre[0].(map[string]any)
+	if !ok || first["matcher"] != "Bash" {
+		t.Fatalf("PreToolUse[0] = %#v, want matcher \"Bash\" (guard-add.sh)", pre[0])
+	}
+	second, ok := pre[1].(map[string]any)
+	if !ok || second["matcher"] != "Edit|Write|MultiEdit" {
+		t.Fatalf("PreToolUse[1] = %#v, want matcher \"Edit|Write|MultiEdit\" (guard-code.sh)", pre[1])
 	}
 }
 

@@ -24,6 +24,7 @@ const (
 func SystemFiles(mode string) []profile.ScaffoldFile {
 	files := []profile.ScaffoldFile{
 		{Path: ".claude/hooks/session-start.sh"},
+		{Path: ".claude/hooks/guard-add.sh"},
 	}
 	if mode == ModeLearn {
 		files = append(files,
@@ -36,8 +37,9 @@ func SystemFiles(mode string) []profile.ScaffoldFile {
 }
 
 // HookSettings devolve o bloco "hooks" a mesclar em settings.json (via
-// claudecfg.MergeSettings): SessionStart sempre injeta o handoff; learn
-// adiciona o PreToolUse que bloqueia edição de código fora da allowlist.
+// claudecfg.MergeSettings): SessionStart sempre injeta o handoff; PreToolUse
+// sempre traz o guard-add (avisa em `git add` cego); learn soma a esse
+// PreToolUse o guard-code, que bloqueia edição de código fora da allowlist.
 func HookSettings(mode string) map[string]any {
 	hooks := map[string]any{
 		"SessionStart": []any{
@@ -47,16 +49,23 @@ func HookSettings(mode string) map[string]any {
 				},
 			},
 		},
-	}
-	if mode == ModeLearn {
-		hooks["PreToolUse"] = []any{
+		"PreToolUse": []any{
 			map[string]any{
-				"matcher": "Edit|Write|MultiEdit",
+				"matcher": "Bash",
 				"hooks": []any{
-					map[string]any{"type": "command", "command": "bash .claude/hooks/guard-code.sh"},
+					map[string]any{"type": "command", "command": "bash .claude/hooks/guard-add.sh"},
 				},
 			},
-		}
+		},
+	}
+	if mode == ModeLearn {
+		pre, _ := hooks["PreToolUse"].([]any)
+		hooks["PreToolUse"] = append(pre, map[string]any{
+			"matcher": "Edit|Write|MultiEdit",
+			"hooks": []any{
+				map[string]any{"type": "command", "command": "bash .claude/hooks/guard-code.sh"},
+			},
+		})
 	}
 	return map[string]any{"hooks": hooks}
 }

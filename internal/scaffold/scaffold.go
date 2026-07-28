@@ -41,6 +41,7 @@ var templateFor = map[string]string{
 	".claude/commands/destilar.md":      "claude/commands/destilar.md.tmpl",
 	".claude/handoff.md":                "claude/handoff.md.tmpl",
 	".claude/hooks/session-start.sh":    "claude/hooks/session-start.sh.tmpl",
+	".claude/hooks/guard-add.sh":        "claude/hooks/guard-add.sh.tmpl",
 	".claude/rules/learn.md":            "claude/rules/learn.md.tmpl",
 	".claude/hooks/guard-code.sh":       "claude/hooks/guard-code.sh.tmpl",
 	".claude/rules/learning-journal.md": "claude/rules/learning-journal.md.tmpl",
