@@ -186,6 +186,7 @@ var gitignoreBaseLines = []string{
 	"graphify-out/",
 	".claude/.ray-metrics/",
 	".claude/.local/",
+	".claude/handoff.md",
 	".env",
 	"*.local",
 }
