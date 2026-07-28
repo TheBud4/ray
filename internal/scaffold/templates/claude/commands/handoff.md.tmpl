@@ -23,8 +23,11 @@ Fique **enxuto (~40 linhas)**. Uma sessão nova neste diretório já recebe o
 git status --short                      # working tree: o que está em voo
 git log --oneline -5                    # últimos commits
 git rev-list --count @{u}..HEAD         # commits sem push
-grep -H "^status:\|^titulo:" docs/specs/*.md | tail -30
 ```
+
+A spec não está no repo — não há o que fazer grep no filesystem. Pelo MCP
+`brain`, busque por `tipo`/`status` para levantar quais specs estão em
+`rascunho`, `aprovada` ou `implementada`.
 
 Regras ao ler isso:
 
