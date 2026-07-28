@@ -249,7 +249,7 @@ func TestMergeGitignoreCreatesWhitelistAndBlacklist(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		"graphify-out/", ".claude/.ray-metrics/", ".claude/.local/", ".env", "*.local",
+		"graphify-out/", ".claude/.ray-metrics/", ".claude/.local/", ".claude/handoff.md", ".env", "*.local",
 	} {
 		if !strings.Contains(content, want) {
 			t.Errorf(".gitignore missing blacklist entry %q\n---\n%s", want, content)

@@ -385,7 +385,9 @@ EOF
 ## Verificação final
 
 - [ ] `cd /home/thebud4/www/Projetos/ray && make ci` — 20 pacotes `ok`
-- [ ] `git log --oneline -3` mostra os três commits
+- [ ] `git log --oneline -2` mostra os dois commits (a entrega da Task 1 foi
+      absorvida pelo commit-base `81e6818`, cujo único deliverable era um teste
+      que o coordenador já tinha escrito)
 - [ ] `git log -3 --format=%B | grep -ci co-authored` devolve `0`
 - [ ] `git status --short` não lista `.claude/handoff.md`
 - [ ] Nenhum push feito

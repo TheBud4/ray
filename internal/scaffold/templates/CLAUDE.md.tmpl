@@ -232,3 +232,8 @@ Para a dúvida que **não** cai em nenhum caso acima, o teste é se ela bloqueia
 Estado vivo entre sessões: `.claude/handoff.md` (regenerado por `/handoff`).
 Destilar spec fechada para `docs/`: `/destilar NNN`. Revisão de spec
 implementada: `/revisar NNN`. Roteamento do que escrever e onde: `/document`.
+
+Por padrão o `.gitignore` mantém `.claude/handoff.md` fora do git. Para
+commitá-lo mesmo assim (ex.: mesmo autor em duas máquinas), adicione
+`!.claude/handoff.md` **depois** da linha `# <<< ray` — antes dela a negação
+não sobrevive à próxima regeneração do bloco.
