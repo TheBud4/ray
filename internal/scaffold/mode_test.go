@@ -10,9 +10,9 @@ import (
 	"testing"
 )
 
-func TestSystemFilesBuildIsSessionStartGuardAddAndGuardVocab(t *testing.T) {
+func TestSystemFilesBuildIsSessionStartGuardAddGuardVocabAndGuardPlans(t *testing.T) {
 	files := SystemFiles(ModeBuild)
-	want := []string{".claude/hooks/session-start.sh", ".claude/hooks/guard-add.sh", ".claude/hooks/guard-vocab.sh"}
+	want := []string{".claude/hooks/session-start.sh", ".claude/hooks/guard-add.sh", ".claude/hooks/guard-vocab.sh", ".claude/hooks/guard-plans.sh"}
 	if len(files) != len(want) {
 		t.Fatalf("SystemFiles(build) = %v, want %v", files, want)
 	}
@@ -29,6 +29,7 @@ func TestSystemFilesLearnAddsGuardAndRule(t *testing.T) {
 		".claude/hooks/session-start.sh":    false,
 		".claude/hooks/guard-add.sh":        false,
 		".claude/hooks/guard-vocab.sh":      false,
+		".claude/hooks/guard-plans.sh":      false,
 		".claude/rules/learn.md":            false,
 		".claude/hooks/guard-code.sh":       false,
 		".claude/rules/learning-journal.md": false,
@@ -49,7 +50,7 @@ func TestSystemFilesLearnAddsGuardAndRule(t *testing.T) {
 	}
 }
 
-func TestHookSettingsBuildHasOnlyGuardAddPreToolUse(t *testing.T) {
+func TestHookSettingsBuildHasGuardAddAndGuardPlansPreToolUse(t *testing.T) {
 	settings := HookSettings(ModeBuild)
 	hooks, ok := settings["hooks"].(map[string]any)
 	if !ok {
@@ -60,14 +61,18 @@ func TestHookSettingsBuildHasOnlyGuardAddPreToolUse(t *testing.T) {
 	}
 	pre, ok := hooks["PreToolUse"].([]any)
 	if !ok {
-		t.Fatalf("hooks = %#v, want PreToolUse in build mode (guard-add is unconditional)", hooks)
+		t.Fatalf("hooks = %#v, want PreToolUse in build mode (guard-add and guard-plans are unconditional)", hooks)
 	}
-	if len(pre) != 1 {
-		t.Fatalf("PreToolUse = %#v, want just the guard-add matcher in build mode", pre)
+	if len(pre) != 2 {
+		t.Fatalf("PreToolUse = %#v, want the guard-add and guard-plans matchers in build mode", pre)
 	}
-	entry, ok := pre[0].(map[string]any)
-	if !ok || entry["matcher"] != "Bash" {
+	first, ok := pre[0].(map[string]any)
+	if !ok || first["matcher"] != "Bash" {
 		t.Fatalf("PreToolUse[0] = %#v, want matcher \"Bash\" (guard-add.sh)", pre[0])
+	}
+	second, ok := pre[1].(map[string]any)
+	if !ok || second["matcher"] != "Write" {
+		t.Fatalf("PreToolUse[1] = %#v, want matcher \"Write\" (guard-plans.sh)", pre[1])
 	}
 }
 
@@ -81,16 +86,20 @@ func TestHookSettingsLearnHasPreToolUse(t *testing.T) {
 	if !ok {
 		t.Fatalf("hooks = %#v, want PreToolUse in learn mode", hooks)
 	}
-	if len(pre) != 2 {
-		t.Fatalf("PreToolUse = %#v, want guard-add (Bash) plus guard-code (Edit|Write|MultiEdit)", pre)
+	if len(pre) != 3 {
+		t.Fatalf("PreToolUse = %#v, want guard-add (Bash) plus guard-plans (Write) plus guard-code (Edit|Write|MultiEdit)", pre)
 	}
 	first, ok := pre[0].(map[string]any)
 	if !ok || first["matcher"] != "Bash" {
 		t.Fatalf("PreToolUse[0] = %#v, want matcher \"Bash\" (guard-add.sh)", pre[0])
 	}
 	second, ok := pre[1].(map[string]any)
-	if !ok || second["matcher"] != "Edit|Write|MultiEdit" {
-		t.Fatalf("PreToolUse[1] = %#v, want matcher \"Edit|Write|MultiEdit\" (guard-code.sh)", pre[1])
+	if !ok || second["matcher"] != "Write" {
+		t.Fatalf("PreToolUse[1] = %#v, want matcher \"Write\" (guard-plans.sh)", pre[1])
+	}
+	third, ok := pre[2].(map[string]any)
+	if !ok || third["matcher"] != "Edit|Write|MultiEdit" {
+		t.Fatalf("PreToolUse[2] = %#v, want matcher \"Edit|Write|MultiEdit\" (guard-code.sh)", pre[2])
 	}
 }
 
