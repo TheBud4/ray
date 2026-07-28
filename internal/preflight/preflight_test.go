@@ -63,7 +63,7 @@ func TestRunFixCommandsPresentWhereExpected(t *testing.T) {
 	checks := Run(stubLooker{}, true)
 
 	wantFix := map[string]bool{
-		"npx": false, "node": false, "python3.10+": false,
+		"npx": false, "node": false, "jq": false, "python3.10+": false,
 		"uv": true, "headroom": true, "graphify": true,
 	}
 	for _, c := range checks {
