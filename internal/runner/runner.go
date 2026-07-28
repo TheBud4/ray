@@ -36,7 +36,9 @@ type Result struct {
 }
 
 // Runner is the contract: it knows how to execute a Command.
-// Everything in ray depends on this interface, never on exec directly — that's what enables FakeRunner in tests.
+// Everything in ray depends on this interface rather than on exec directly — that's what enables FakeRunner in tests.
+// Única exceção: spawnEditor (internal/cmd/profile.go) — Result bufferiza stdout/stderr, e um editor interativo
+// precisa herdar o terminal cru.
 type Runner interface {
 	Run(ctx context.Context, c Command) (Result, error)
 }

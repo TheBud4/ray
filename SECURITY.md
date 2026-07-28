@@ -23,8 +23,14 @@ realmente faz.
 O risco central deste programa: ele roda `npx`, `uv`, `git` e outros com
 argumentos que saem de arquivos de receita.
 
-- **[MUST]** Todo processo externo passa por `internal/runner`. Nenhum pacote
-  chama `os/exec` direto — é o que mantém a superfície auditável em um lugar só.
+- **[MUST]** Todo processo externo passa por `internal/runner`. É o que mantém a
+  superfície auditável em um lugar só.
+  **Única exceção, e ela é fechada:** `spawnEditor` em `internal/cmd/profile.go`
+  chama `exec.Command` direto para abrir o `$EDITOR` do usuário, porque um editor
+  interativo precisa herdar o terminal e a interface do `runner` bufferiza
+  stdout/stderr em `Result` — ela não consegue entregar um TTY cru. Nenhum
+  `os/exec` novo entra fora dessas duas fronteiras; um terceiro caso exige
+  discussão, não precedente.
 - **[MUST]** Argumento de comando é passado como **elemento de slice**, nunca
   concatenado numa string de shell. Não invocar através de `sh -c` com entrada
   interpolada.

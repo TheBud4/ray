@@ -77,8 +77,11 @@ internal/
 Quem pode importar quem — e principalmente **quem não pode**, que é a metade que
 o código sozinho não conta:
 
-- Só `runner` executa processo externo. Nenhum outro pacote chama `os/exec`
-  direto — quem precisa de processo recebe um `Runner` por parâmetro.
+- Só `runner` executa processo externo — quem precisa de processo recebe um
+  `Runner` por parâmetro. **Uma exceção deliberada:** `spawnEditor`
+  (`internal/cmd/profile.go`) usa `exec.Command` direto para abrir o `$EDITOR`,
+  porque `runner.Result` bufferiza stdout/stderr e um editor interativo precisa
+  do terminal cru. São as duas únicas importações de `os/exec` no repo.
 - Só `preflight` decide se uma dependência externa existe. Não replique a
   checagem no pacote que vai usá-la.
 - `raypaths` é o único que resolve caminho de estado. Nenhum pacote monta
