@@ -35,7 +35,6 @@ var templateFor = map[string]string{
 	"docs/README.md":                    "docs/README.md.tmpl",
 	"docs/architecture.md":              "docs/architecture.md.tmpl",
 	"docs/conventions.md":               "docs/conventions.md.tmpl",
-	"docs/specs/TEMPLATE.md":            "docs/specs/TEMPLATE.md.tmpl",
 	".claude/commands/document.md":      "claude/commands/document.md.tmpl",
 	".claude/commands/handoff.md":       "claude/commands/handoff.md.tmpl",
 	".claude/commands/revisar.md":       "claude/commands/revisar.md.tmpl",

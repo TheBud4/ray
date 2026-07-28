@@ -18,7 +18,6 @@ var wantBasePaths = []string{
 	"docs/README.md",
 	"docs/architecture.md",
 	"docs/conventions.md",
-	"docs/specs/TEMPLATE.md",
 	".claude/commands/document.md",
 	".claude/commands/handoff.md",
 	".claude/commands/revisar.md",
@@ -401,44 +400,6 @@ func TestClaudeMdKeepsSectionOrder(t *testing.T) {
 	}
 }
 
-func TestSpecTemplateKeepsLoadBearingSections(t *testing.T) {
-	target := t.TempDir()
-
-	if _, err := WriteFiles([]profile.ScaffoldFile{{Path: "docs/specs/TEMPLATE.md"}}, Options{
-		Target: target,
-		Data:   Data{ProjectName: "demo", Stack: "go"},
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	body, err := os.ReadFile(filepath.Join(target, "docs", "specs", "TEMPLATE.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	txt := string(body)
-
-	// "Perguntas em aberto" é o portão do status: aprovada; "Fora de escopo"
-	// é o que impede o modelo de inventar feature adjacente; "Decisões durante
-	// a implementação" é o que impede a spec de virar ficção.
-	for _, s := range []string{
-		"## Fora de escopo",
-		"## Critérios de aceite",
-		"## Regras de negócio e invariantes",
-		"## Perguntas em aberto",
-		"## Decisões durante a implementação",
-	} {
-		if !strings.Contains(txt, s) {
-			t.Errorf("TEMPLATE.md perdeu a seção %q", s)
-		}
-	}
-	if !strings.Contains(txt, "status: rascunho") {
-		t.Error("TEMPLATE.md deve nascer com status: rascunho")
-	}
-	if !strings.Contains(txt, "CA-01") {
-		t.Error("TEMPLATE.md deve trazer os CAs numerados como exemplo")
-	}
-}
-
 func TestDestilarCommandCarriesLoadBearingRules(t *testing.T) {
 	target := t.TempDir()
 
@@ -495,6 +456,14 @@ func TestDocsReadmeLoopEndsInDistillation(t *testing.T) {
 	// docs/specs/, o laço contradiz a regra de roteamento.
 	if strings.Contains(txt, "docs/specs/") {
 		t.Error("docs/README.md não pode mandar publicar spec em docs/specs/")
+	}
+}
+
+func TestSpecTemplateIsNotScaffolded(t *testing.T) {
+	// A spec vive no cérebro; o template dela também. Scaffoldar um
+	// TEMPLATE.md no repo cria uma segunda fonte que diverge da primeira.
+	if _, ok := templateFor["docs/specs/TEMPLATE.md"]; ok {
+		t.Error("docs/specs/TEMPLATE.md não deve mais ser scaffoldado")
 	}
 }
 

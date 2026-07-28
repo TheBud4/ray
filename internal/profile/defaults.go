@@ -56,7 +56,6 @@ func baseScaffoldFiles() []ScaffoldFile {
 		"docs/README.md",
 		"docs/architecture.md",
 		"docs/conventions.md",
-		"docs/specs/TEMPLATE.md",
 		".claude/commands/document.md",
 		".claude/commands/handoff.md",
 		".claude/commands/revisar.md",
