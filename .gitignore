@@ -9,3 +9,7 @@
 
 # Estado vivo entre sessões — gerido pela IA, não viaja com o repo
 .claude/handoff.md
+
+# Métricas de runtime do session-start hook (I5) — mesma regra que o ray
+# grava em .gitignore de todo projeto scaffoldado (scaffold.go:190)
+.claude/.ray-metrics/
