@@ -6,3 +6,6 @@
 
 # Sessões do companheiro visual de brainstorming (superpowers)
 .superpowers/
+
+# Estado vivo entre sessões — gerido pela IA, não viaja com o repo
+.claude/handoff.md
