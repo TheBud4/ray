@@ -6,28 +6,30 @@ moram no cérebro (ver `<documentation_sources>` no `CLAUDE.md`).
 
 Fluxo de trabalho: **spec-driven development + TDD**.
 
-## Os três papéis
+## Os dois papéis
 
 | Arquivo | Muda com que frequência | Quem lê |
 |---|---|---|
 | `CLAUDE.md` (raiz) | Quase nunca — só em decisão de arquitetura | A IA, em todo turno |
-| `docs/specs/NNN-*.md` | Um novo por feature | Colado no turno junto com o pedido |
-| `docs/specs/TEMPLATE.md` | Nunca | Você, ao criar uma spec |
+| `architecture.md` · `conventions.md` | A cada spec que muda o sistema | Quem chega no projeto |
 
-A regra que sustenta tudo: **o que está no `CLAUDE.md` nunca se repete numa
-spec.** Se você está copiando stack, convenção ou gate para dentro de uma spec,
-ela está no lugar errado.
+As specs **não moram aqui**. Elas nascem, amadurecem e ficam no cérebro — são
+processo. Esta pasta é estado: o que alguém que clonasse o repo amanhã
+precisaria ler para entender o sistema como ele é hoje.
 
 ## O laço
 
 ```
-1. Copiar TEMPLATE.md → specs/NNN-nome-da-feature.md (no cérebro, enquanto abre)
+1. A spec nasce no cérebro, a partir do template de spec de lá.
 2. Preencher. Deixar "Perguntas em aberto" honesta — é aqui que a spec ganha ou perde.
 3. Revisar juntos. A spec só vira status: aprovada quando "Perguntas em aberto" está VAZIA.
-4. Publicar a spec aprovada em docs/specs/ e abrir o turno: "implemente a spec NNN".
+4. Abrir o turno: "implemente a spec NNN". O agente lê a spec direto do cérebro,
+   pelo MCP brain — ela não precisa estar no repo.
 5. Ciclo RED-GREEN-REFACTOR, um CA por vez (workflow no CLAUDE.md).
 6. Fechar: status: implementada + "Decisões durante a implementação" com o que divergiu.
-7. Revisar antes do commit com /revisar NNN.
+7. Destilar com /destilar NNN: o que a spec virou estado entra em docs/; o resto
+   fica no cérebro.
+8. Revisar antes do commit com /revisar NNN.
 ```
 
 ## A regra que impede a spec de apodrecer
@@ -54,4 +56,5 @@ vale tanto quanto o resto.
 - `conventions.md` — as convenções que o código segue hoje.
 
 Ambos descrevem estado, não intenção. Se um deles ficar defasado do código, ele
-virou ficção — corrija junto com a mudança que o defasou.
+virou ficção — corrija junto com a mudança que o defasou, ou deixe o `/destilar`
+fazer isso ao fechar a spec.

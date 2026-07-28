@@ -471,3 +471,29 @@ func TestDestilarCommandCarriesLoadBearingRules(t *testing.T) {
 		}
 	}
 }
+
+func TestDocsReadmeLoopEndsInDistillation(t *testing.T) {
+	target := t.TempDir()
+
+	if _, err := WriteFiles([]profile.ScaffoldFile{{Path: "docs/README.md"}}, Options{
+		Target: target,
+		Data:   Data{ProjectName: "demo", Stack: "go"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	body, err := os.ReadFile(filepath.Join(target, "docs", "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	txt := string(body)
+
+	if !strings.Contains(txt, "/destilar") {
+		t.Error("o laço precisa terminar em /destilar")
+	}
+	// A spec fica no cérebro. Se o README voltar a mandar publicá-la em
+	// docs/specs/, o laço contradiz a regra de roteamento.
+	if strings.Contains(txt, "docs/specs/") {
+		t.Error("docs/README.md não pode mandar publicar spec em docs/specs/")
+	}
+}
