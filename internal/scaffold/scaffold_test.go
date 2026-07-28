@@ -22,6 +22,7 @@ var wantBasePaths = []string{
 	".claude/commands/document.md",
 	".claude/commands/handoff.md",
 	".claude/commands/revisar.md",
+	".claude/commands/destilar.md",
 	".claude/handoff.md",
 }
 
@@ -435,5 +436,38 @@ func TestSpecTemplateKeepsLoadBearingSections(t *testing.T) {
 	}
 	if !strings.Contains(txt, "CA-01") {
 		t.Error("TEMPLATE.md deve trazer os CAs numerados como exemplo")
+	}
+}
+
+func TestDestilarCommandCarriesLoadBearingRules(t *testing.T) {
+	target := t.TempDir()
+
+	if _, err := WriteFiles([]profile.ScaffoldFile{{Path: ".claude/commands/destilar.md"}}, Options{
+		Target: target,
+		Data:   Data{ProjectName: "demo", Stack: "go"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	body, err := os.ReadFile(filepath.Join(target, ".claude", "commands", "destilar.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	txt := string(body)
+
+	// Cada string abaixo é uma regra que, se sumir, muda o que o comando faz.
+	// O portão de status impede destilar plano; a regra de evidência é o que
+	// impede docs/ de nascer mentindo; "espere OK" protege a decisão travada;
+	// "não invente trabalho" impede relatório inflado quando não há nada.
+	for _, s := range []string{
+		"status",
+		"implementada",
+		"não vira texto",
+		"espere OK",
+		"Não invente trabalho",
+	} {
+		if !strings.Contains(txt, s) {
+			t.Errorf("destilar.md perdeu a regra %q", s)
+		}
 	}
 }

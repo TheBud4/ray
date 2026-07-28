@@ -60,6 +60,7 @@ func TestDefaultsScaffoldFiles(t *testing.T) {
 		".claude/commands/document.md",
 		".claude/commands/handoff.md",
 		".claude/commands/revisar.md",
+		".claude/commands/destilar.md",
 		".claude/handoff.md",
 	}
 
