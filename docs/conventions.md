@@ -73,3 +73,4 @@ lista que impede o repo de acumular arquivo gerado defasado:
   `internal/scaffold/templates/`.
 - Mudança na árvore que o scaffold escreve → a árvore documentada em
   `docs/ray-build-guide.md`.
+- `internal/scaffold/templates/claude/hooks/*.sh.tmpl` → as cópias que o próprio ray usa em `.claude/hooks/` (regeneradas do template, nunca editadas à mão).

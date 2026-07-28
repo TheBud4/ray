@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# PreToolUse(Write): avisa — nunca bloqueia — quando um plano ou design está
-# sendo escrito dentro do repositório. Eles descrevem trabalho a fazer, que é
-# processo, e o repositório carrega estado atual.
+# PreToolUse(Edit|Write|MultiEdit): avisa — nunca bloqueia — quando um plano ou
+# design está sendo escrito dentro do repositório. Eles descrevem trabalho a
+# fazer, que é processo, e o repositório carrega estado atual.
 #
 # É PreToolUse, ao contrário do guard-vocab: o aviso chega antes da escrita, e
 # aí ainda dá para redirecionar. Avisar depois não redireciona nada.
