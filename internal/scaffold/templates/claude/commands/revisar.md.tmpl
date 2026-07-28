@@ -14,6 +14,17 @@ ou a lista do que corrigir.
 frontmatter é marcado `implementada` antes da revisão, por definição. Rode o gate
 de verdade e leia o diff. Prove que funciona; não assuma.
 
+**Quem revisa não deve ser quem escreveu, e de preferência nem da mesma família
+de modelo** — autor e revisor da mesma família compartilham **ponto cego**: o
+revisor tende a achar razoável exatamente o que o autor achou razoável. Se houver
+um revisor de **outra família** disponível nesta máquina, passe o diff por ele
+antes de dar o veredito, e diga no relatório se passou ou não. Não é redundância:
+é o jeito mais barato de furar o ponto cego.
+
+**A base da revisão é onde o trabalho começou de verdade** — inclusive o que foi
+escrito fora do laço de implementação. Código que ninguém revisou é onde os
+defeitos moram, e trabalho de coordenação é o que mais escapa.
+
 ## Passo 1 — reconciliar
 
 ```bash

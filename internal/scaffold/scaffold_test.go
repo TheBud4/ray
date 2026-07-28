@@ -591,3 +591,33 @@ func TestGitignoreIgnoresHandoff(t *testing.T) {
 		t.Error("got = handoff no whitelist, want na blacklist")
 	}
 }
+
+func TestRevisarAsksForCrossFamilyReview(t *testing.T) {
+	target := t.TempDir()
+
+	if _, err := WriteFiles([]profile.ScaffoldFile{{Path: ".claude/commands/revisar.md"}}, Options{
+		Target: target,
+		Data:   Data{ProjectName: "demo", Stack: "go"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	body, err := os.ReadFile(filepath.Join(target, ".claude", "commands", "revisar.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	txt := string(body)
+
+	// A política de assentos pede revisor de outra família de modelo: autor e
+	// revisor da mesma família compartilham ponto cego. O comando que executa a
+	// revisão precisa dizer isso, senão a regra fica só no CLAUDE.md e nunca
+	// vira ação.
+	for _, want := range []string{
+		"outra família",
+		"ponto cego",
+	} {
+		if !strings.Contains(txt, want) {
+			t.Errorf("revisar.md não pede revisor de outra família: falta %q", want)
+		}
+	}
+}
