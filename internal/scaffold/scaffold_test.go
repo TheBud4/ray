@@ -532,3 +532,62 @@ func TestHandoffAndRevisarDoNotReadDocsSpecs(t *testing.T) {
 		}
 	}
 }
+
+func TestBrainCommandsGuardMissingBrain(t *testing.T) {
+	target := t.TempDir()
+
+	if _, err := WriteFiles([]profile.ScaffoldFile{
+		{Path: ".claude/commands/destilar.md"},
+		{Path: ".claude/commands/revisar.md"},
+	}, Options{
+		Target: target,
+		Data:   Data{ProjectName: "demo", Stack: "go"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Os dois comandos leem a spec pelo MCP brain. Num projeto sem cérebro
+	// configurado, sem esta guarda eles falham no meio da leitura, sem dizer
+	// o que fazer. A guarda é a única saída acionável que o usuário tem.
+	for _, p := range []string{".claude/commands/destilar.md", ".claude/commands/revisar.md"} {
+		body, err := os.ReadFile(filepath.Join(target, filepath.FromSlash(p)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		txt := string(body)
+		for _, want := range []string{
+			"não estiver disponível",
+			"ray brain set",
+		} {
+			if !strings.Contains(txt, want) {
+				t.Errorf("%s perdeu a guarda de brain ausente: falta %q", p, want)
+			}
+		}
+	}
+}
+
+func TestGitignoreIgnoresHandoff(t *testing.T) {
+	target := t.TempDir()
+
+	if err := MergeGitignore(target, nil, Data{}, false, nil); err != nil {
+		t.Fatalf("MergeGitignore() error = %v", err)
+	}
+
+	body, err := os.ReadFile(filepath.Join(target, ".gitignore"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(body)
+
+	// O handoff descreve onde o trabalho parou — processo, não estado do
+	// sistema. Ele é regenerado inteiro a cada /handoff e é gerido pela IA.
+	// Sem uma linha explícita ele fica untracked para sempre e cada projeto
+	// decide por acidente.
+	if !strings.Contains(got, ".claude/handoff.md") {
+		t.Errorf("bloco do .gitignore não menciona .claude/handoff.md:\n%s", got)
+	}
+	// Precisa estar na blacklist, não negado no whitelist.
+	if strings.Contains(got, "!.claude/handoff.md") {
+		t.Error("got = handoff no whitelist, want na blacklist")
+	}
+}
