@@ -40,15 +40,16 @@ Todo teste referencia o ID do critério de aceite no nome:
 CA-03: rejeita pedido sem itens com 422
 ```
 
-Assim `grep -r "CA-03" test/` responde "isso está implementado?" em um segundo, e
-uma spec sem testes correspondentes fica visivelmente órfã. Sem essa convenção não
-vale a pena manter specs em arquivo — use issues.
+Assim `grep -r "CA-03" test/` responde "isso está implementado?" em um segundo. O
+teste que lê esse CA fica ligado à spec que o definiram, mesmo que a spec more no
+cérebro. A numeração sequencial da spec garante rastreabilidade — desde o turno
+até o commit que fecha a feature.
 
 ## Numeração
 
-`001`, `002`, … sequencial, nunca reaproveitado. Feature abandonada vira
-`status: descartada` e fica no repo: o histórico do que você decidiu *não* fazer
-vale tanto quanto o resto.
+As specs no cérebro seguem `001`, `002`, … sequencial, nunca reaproveitado.
+Feature abandonada fica com `status: descartada` e mora lá também: o histórico
+do que você decidiu *não* fazer vale tanto quanto o que foi implementado.
 
 ## Os outros arquivos
 
