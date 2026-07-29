@@ -6,7 +6,7 @@
 > incorporar nesta segunda volta. Auto-contido: dá pra apagar o repositório
 > antigo e construir só com isto.
 >
-> **Stack:** Go 1.25 · Cobra · `gopkg.in/yaml.v3` · módulo `github.com/murilopmr/ray`.
+> **Stack:** Go 1.25 · Cobra · `gopkg.in/yaml.v3` · módulo `github.com/TheBud4/ray`.
 > **Política de commits:** SEM trailer `Co-Authored-By` (nenhum co-autor de IA).
 >
 > **Alinhamento com o design v2 (2026-07-01).** As seções afetadas pelo modelo de
