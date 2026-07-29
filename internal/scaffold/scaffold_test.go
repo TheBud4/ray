@@ -731,6 +731,12 @@ func TestGuardVocabWarnsOnDeliveredArtifacts(t *testing.T) {
 		// e ruído é o que faz um hook de aviso deixar de ser lido.
 		{"superpowers e sessao local", ".superpowers/sdd/progress.md", "Task 1 fecha o CA-01 da spec 012.\n", false},
 		{"superpowers aninhado", "sub/.superpowers/x.md", "Ver spec 012.\n", false},
+		// Simétrico aos casos de "latest"/"attestation" acima: a isenção vale
+		// pelo segmento `.superpowers` inteiro, com o ponto. Sem estes dois, um
+		// padrão frouxo (`*superpowers*`) passa na suíte e cala o hook justamente
+		// em docs/superpowers/, que é artefato entregue — não sessão local.
+		{"docs superpowers e artefato entregue", "docs/superpowers/plans/x.md", "Ver spec 012.\n", true},
+		{"superpowers sem ponto nao e isento", "superpowers/x.md", "Ver spec 012.\n", true},
 	}
 
 	for _, tc := range cases {
