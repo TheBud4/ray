@@ -26,8 +26,8 @@ func JournalDir(target string) string {
 	return filepath.Join(target, ".claude", ".local")
 }
 
-// HeadPath é o head vivo do diário — sempre reescrito, o único trecho que o
-// hook de sessão injeta.
+// HeadPath é o diário de aprendizado — dono é a IA, o ray nunca escreve nele.
+// O hook de sessão injeta este arquivo junto com o milestones-progress.md.
 func HeadPath(target string) string {
 	return filepath.Join(JournalDir(target), "learning-journal.md")
 }
