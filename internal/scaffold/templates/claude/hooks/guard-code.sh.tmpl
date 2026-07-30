@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # PreToolUse guard for --mode learn. Denies Edit/Write/MultiEdit outside the
-# docs allowlist (*.md, docs/**, .claude/**), per learn overlay (see
-# .claude/rules/learn.md). Reads the hook's JSON payload from stdin.
+# docs allowlist, per learn overlay (see .claude/rules/learn.md). Reads the
+# hook's JSON payload from stdin.
+#
+# A allowlist é `*.md`, `docs/*` e `.claude/*` — exatamente como no `case` lá
+# embaixo, e não `docs/**`/`.claude/**` como este comentário já dizia. No `case`
+# do bash o `*` casa `/`, então um único `*` já é recursivo; escrever `**` aqui
+# sugeria uma sintaxe de glob que o `case` não tem.
 #
 # A negação usa `hookSpecificOutput.permissionDecision`, a forma que a doc do
 # Claude Code manda usar em PreToolUse. O `{"decision":"block"}` de topo ainda
