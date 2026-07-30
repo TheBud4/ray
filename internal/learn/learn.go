@@ -121,19 +121,43 @@ func savePassed(target string, passed []string) error {
 	return os.WriteFile(PassedPath(target), data, 0o644)
 }
 
+func passedSetOf(passed []string) map[string]bool {
+	set := make(map[string]bool, len(passed))
+	for _, p := range passed {
+		set[p] = true
+	}
+	return set
+}
+
 // Current devolve o primeiro marco de milestones cujo Goal ainda não está em
 // passed. ok=false se não há marcos ou todos já passaram.
 func Current(milestones []profile.Milestone, passed []string) (profile.Milestone, bool) {
-	passedSet := make(map[string]bool, len(passed))
-	for _, p := range passed {
-		passedSet[p] = true
-	}
+	passedSet := passedSetOf(passed)
 	for _, m := range milestones {
 		if !passedSet[m.Goal] {
 			return m, true
 		}
 	}
 	return profile.Milestone{}, false
+}
+
+// countCurrentPassed conta quantos goals da lista corrente de milestones já
+// estão em passed — a interseção, não len(passed). passed é o histórico de
+// goals cruzados de sempre; milestones é a lista corrente, e desde que
+// marcos passaram a ser renegociáveis na sessão (LocalMilestonesPath) os dois
+// podem divergir: uma renegociação troca milestones por uma lista nova, mas
+// o histórico em passed sobrevive à troca. Usar len(passed) como numerador
+// faz o progresso ultrapassar o denominador (ex. "3/2") assim que a lista
+// corrente encolhe.
+func countCurrentPassed(milestones []profile.Milestone, passed []string) int {
+	passedSet := passedSetOf(passed)
+	n := 0
+	for _, m := range milestones {
+		if passedSet[m.Goal] {
+			n++
+		}
+	}
+	return n
 }
 
 // Result é o desfecho de checar um marco.
@@ -146,9 +170,13 @@ type Result struct {
 // Check roda o verify do marco corrente de target via r. ok=false significa
 // que não havia nada a checar (nenhum marco definido, ou todos já
 // passaram) — não é erro. Em caso de aprovação, grava o estado de máquina e
-// reescreve o progresso de marcos — nunca o diário, que é da IA. Em caso de
-// reprovação, nenhum arquivo é tocado — design §9.2 exclui blow-by-blow de
-// tentativas do diário; só deltas de entendimento entram lá.
+// reescreve o progresso de marcos. Em caso de reprovação, o estado de
+// máquina (milestones-passed.yaml) e o diário da IA (learning-journal.md)
+// não são tocados — design §9.2 exclui blow-by-blow de tentativas do
+// diário; só deltas de entendimento entram lá — mas o progresso é
+// re-renderizado do mesmo jeito, porque milestones reflete a lista corrente
+// (possivelmente recém-renegociada) a cada chamada, e sem isso o "Next:"
+// ficaria anunciando o marco da lista velha até o próximo cair.
 func Check(r runner.Runner, target string, milestones []profile.Milestone) (Result, bool, error) {
 	passed, err := loadPassed(target)
 	if err != nil {
@@ -170,6 +198,9 @@ func Check(r runner.Runner, target string, milestones []profile.Milestone) (Resu
 	}
 	output := res.Stdout + res.Stderr
 	if res.ExitCode != 0 {
+		if err := writeMilestones(target, milestones, passed); err != nil {
+			return Result{}, true, err
+		}
 		return Result{Milestone: m, Passed: false, Output: output}, true, nil
 	}
 
@@ -192,7 +223,7 @@ func writeMilestones(target string, milestones []profile.Milestone, passed []str
 	if !ok {
 		body = "All milestones complete.\n"
 	} else {
-		body = fmt.Sprintf("Milestones passed: %d/%d\nNext: %s\n", len(passed), len(milestones), next.Goal)
+		body = fmt.Sprintf("Milestones passed: %d/%d\nNext: %s\n", countCurrentPassed(milestones, passed), len(milestones), next.Goal)
 	}
 	if err := os.MkdirAll(JournalDir(target), 0o755); err != nil {
 		return err

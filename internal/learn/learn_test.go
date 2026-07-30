@@ -95,6 +95,82 @@ func TestCheckPassRecordsStateAndProgress(t *testing.T) {
 	}
 }
 
+// TestCheckProgressCountsIntersectionAfterRenegotiation cobre a correção 1a:
+// o numerador do progresso é a interseção entre a lista corrente de
+// milestones e o histórico de passed, não len(passed). Receita original A+B
+// foi cruzada por inteiro (passed = [A, B]); a sessão renegocia para C+D;
+// cruzar C deve mostrar "1/2", nunca "3/2" (len(passed)+1 sobre len([C,D])).
+func TestCheckProgressCountsIntersectionAfterRenegotiation(t *testing.T) {
+	target := t.TempDir()
+	if err := savePassed(target, []string{"A", "B"}); err != nil {
+		t.Fatal(err)
+	}
+
+	renegotiated := []profile.Milestone{
+		{Goal: "C", Verify: "true"},
+		{Goal: "D", Verify: "true"},
+	}
+	fr := &runner.FakeRunner{Results: map[string]runner.Result{"true": {ExitCode: 0}}}
+
+	res, ok, err := Check(fr, target, renegotiated)
+	if err != nil {
+		t.Fatalf("Check() error = %v", err)
+	}
+	if !ok || !res.Passed || res.Milestone.Goal != "C" {
+		t.Fatalf("Check() = (%+v, %v), want C passar", res, ok)
+	}
+
+	progress, err := os.ReadFile(MilestonesProgressPath(target))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(progress), "1/2") {
+		t.Errorf("progresso = %q, want \"1/2\" (interseção com a lista corrente, não len(passed)=3 sobre len(milestones)=2)", progress)
+	}
+	if strings.Contains(string(progress), "3/2") {
+		t.Errorf("progresso = %q, contém o bug \"3/2\" (histórico usado como numerador)", progress)
+	}
+}
+
+// TestCheckReRendersProgressAfterRenegotiationWithoutApproval cobre a
+// correção 1b: mesmo quando o check reprova, o progresso é re-renderizado
+// contra a lista corrente de milestones — senão "Next:" continuaria
+// anunciando o marco da lista velha até o próximo marco cruzar.
+func TestCheckReRendersProgressAfterRenegotiationWithoutApproval(t *testing.T) {
+	target := t.TempDir()
+	old := []profile.Milestone{{Goal: "Old goal", Verify: "true"}}
+	fr := &runner.FakeRunner{Results: map[string]runner.Result{"true": {ExitCode: 0}}}
+	if _, _, err := Check(fr, target, old); err != nil {
+		t.Fatal(err)
+	}
+	progressBefore, err := os.ReadFile(MilestonesProgressPath(target))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(progressBefore), "All milestones complete") {
+		t.Fatalf("progresso antes = %q, want \"All milestones complete\" (setup)", progressBefore)
+	}
+
+	renegotiated := []profile.Milestone{
+		{Goal: "New goal", Verify: "false"},
+	}
+	frFail := &runner.FakeRunner{Results: map[string]runner.Result{"false": {ExitCode: 1, Stderr: "boom"}}}
+	if _, _, err := Check(frFail, target, renegotiated); err != nil {
+		t.Fatal(err)
+	}
+
+	progressAfter, err := os.ReadFile(MilestonesProgressPath(target))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(progressAfter), "New goal") {
+		t.Errorf("progresso = %q, want mencionar o marco renegociado \"New goal\" mesmo sem aprovação", progressAfter)
+	}
+	if strings.Contains(string(progressAfter), "All milestones complete") {
+		t.Errorf("progresso = %q, ainda mostra o estado velho (\"All milestones complete\") depois da renegociação", progressAfter)
+	}
+}
+
 func TestCheckNeverTouchesTheJournal(t *testing.T) {
 	target := t.TempDir()
 	if err := os.MkdirAll(JournalDir(target), 0o755); err != nil {
@@ -153,8 +229,22 @@ func TestCheckFailTouchesNothing(t *testing.T) {
 		t.Errorf("Output = %q, want it to include the failure output", res.Output)
 	}
 
-	if _, err := os.Stat(JournalDir(target)); !os.IsNotExist(err) {
-		t.Error("journal dir should not exist after a failed check — no blow-by-blow in the diary")
+	// Reprovação não toca o diário (dono é a IA) nem o estado de máquina de
+	// marcos cruzados — mas o progresso pode e deve ser re-renderizado, já
+	// que ele reflete a lista corrente de milestones a cada chamada, não só
+	// nas aprovações (correção 1b).
+	if _, err := os.Stat(HeadPath(target)); !os.IsNotExist(err) {
+		t.Error("diário não deveria existir após reprovação — é da IA, ray nunca escreve nele")
+	}
+	if _, err := os.Stat(PassedPath(target)); !os.IsNotExist(err) {
+		t.Error("milestones-passed.yaml não deveria existir após reprovação — nenhum marco cruzou")
+	}
+	progress, err := os.ReadFile(MilestonesProgressPath(target))
+	if err != nil {
+		t.Fatalf("progresso deveria ser re-renderizado mesmo em reprovação: %v", err)
+	}
+	if !strings.Contains(string(progress), "0/2") {
+		t.Errorf("progresso = %q, want conter \"0/2\"", progress)
 	}
 }
 
