@@ -275,13 +275,22 @@ receita + os de sistema são deduplicados por path (receita ganha).
      `Bash`, então um `bash -c 'cat > x.go'` passa. O limite é deliberado —
      fechar exigiria guardar `Bash`, superfície grande e cheia de falso
      positivo.
-  2. **Regra** `.claude/rules/learn.md` (+ destaque no `CLAUDE.md`).
+  2. **Regra** `.claude/rules/learn.md`.
   3. **Prompt de ensino** `.claude/rules/learn-teaching.md`: contrato negociado
      na primeira sessão, escada de 4 degraus, e a regra de que fatos são
      respondidos direto.
   4. **Diário** `.claude/rules/learning-journal.md` — o diário é da IA e vive
      em `.claude/.local/`; o `ray` só escreve o progresso de marcos.
   5. Viés de agentes p/ review/exploração.
+
+Contrato dos arquivos de `.claude/.local/` (I6a/I6b — nenhum é vendorizado):
+
+| Arquivo | Escrito por | Lido por |
+|---|---|---|
+| `learning-journal.md` | só a IA | `session-start.sh` (injeta) |
+| `milestones-progress.md` | só o `ray` (`ray learn check`) | `session-start.sh` (injeta) |
+| `milestones.yaml` | a IA (marcos negociados na sessão) | o `ray` (`LoadMilestones`); ganha da receita quando existe |
+| `milestones-passed.yaml` | o `ray` | o `ray` — estado de máquina, não é injetado |
 
 `scaffold.HookSettings(mode)` devolve o bloco `hooks` p/ mesclar no
 `settings.json`: `SessionStart` (sempre, injeta o handoff) + `PreToolUse` (só no
