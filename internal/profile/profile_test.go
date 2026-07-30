@@ -342,3 +342,48 @@ func TestLoadForTargetMissingBothErrors(t *testing.T) {
 		t.Fatal("LoadForTarget() = nil error, want error when no record and no override")
 	}
 }
+
+// ValidateMilestones existe para desacoplar os marcos negociados na sessão
+// (.claude/.local/milestones.yaml) das regras globais de receita. O teste
+// demonstra o desacoplamento em vez de descrevê-lo: a mesma lista de marcos
+// passa isolada e reprova dentro de um Profile que viola uma regra global —
+// aqui, o Name obrigatório. Antes, learn.LoadMilestones montava um Profile
+// falso só para driblar exatamente essa regra.
+func TestValidateMilestonesIsIndependentOfProfileRules(t *testing.T) {
+	ms := []Milestone{{Goal: "rodar os testes", Verify: "go test ./..."}}
+
+	if err := ValidateMilestones(ms); err != nil {
+		t.Fatalf("ValidateMilestones() = %v, want nil", err)
+	}
+
+	p := Profile{Milestones: ms} // sem Name: viola regra de receita
+	if err := p.Validate(); err == nil {
+		t.Fatal("Profile.Validate() = nil, want erro de name — a regra global precisa continuar valendo para receita")
+	}
+}
+
+func TestValidateMilestonesRejectsIncompleteItems(t *testing.T) {
+	cases := []struct {
+		name string
+		ms   []Milestone
+	}{
+		{"sem goal", []Milestone{{Verify: "go test ./..."}}},
+		{"sem verify", []Milestone{{Goal: "rodar os testes"}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := ValidateMilestones(tc.ms); err == nil {
+				t.Fatal("ValidateMilestones() = nil, want erro")
+			}
+		})
+	}
+}
+
+// Profile.Validate delega para ValidateMilestones: marco quebrado numa receita
+// continua sendo erro de receita.
+func TestProfileValidateStillCatchesBrokenMilestone(t *testing.T) {
+	p := Profile{Name: "go", Milestones: []Milestone{{Goal: "sem verify"}}}
+	if err := p.Validate(); err == nil {
+		t.Fatal("Profile.Validate() = nil, want erro do marco sem verify")
+	}
+}

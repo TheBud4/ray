@@ -10,6 +10,7 @@ package learn
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -26,9 +27,13 @@ func JournalDir(target string) string {
 	return filepath.Join(target, ".claude", ".local")
 }
 
-// HeadPath é o diário de aprendizado — dono é a IA, o ray nunca escreve nele.
-// O hook de sessão injeta este arquivo junto com o milestones-progress.md.
-func HeadPath(target string) string {
+// headPath é o diário de aprendizado — dono é a IA, o ray nunca escreve nele.
+// Não é exportada: nenhum consumidor de produção em Go conhece este caminho.
+// Quem o conhece é o `session-start.sh`, que injeta o arquivo e traz a string
+// literal no próprio template — a duplicação é entre Go e shell, e é o
+// TestSessionStartInjectsJournal, em internal/scaffold, que impede as duas de
+// divergirem.
+func headPath(target string) string {
 	return filepath.Join(JournalDir(target), "learning-journal.md")
 }
 
@@ -78,14 +83,12 @@ func LoadMilestones(target string, recipe []profile.Milestone) ([]profile.Milest
 	if len(local.Milestones) == 0 {
 		return nil, fmt.Errorf("%s exists but defines no milestones (missing 'milestones:' key, or the key is empty)", path)
 	}
-	// Reaproveita profile.Profile.Validate — que por sua vez chama
-	// Milestone.validate() em cada item — em vez de duplicar a checagem de
-	// goal/verify aqui. Milestone.validate não é exportado, mas
-	// Profile.Validate já o invoca por dentro; Name é só um valor descartável
-	// pra não disparar o checável de nome de receita antes de chegar aos
-	// marcos.
-	p := profile.Profile{Name: "local milestones", Milestones: local.Milestones}
-	if err := p.Validate(); err != nil {
+	// Valida só os marcos. Este arquivo não é uma receita: montar um
+	// profile.Profile falso só para alcançar a checagem prendia o
+	// milestones.yaml a toda regra global de receita, e uma regra nova em
+	// Profile.Validate passaria a rejeitá-lo por um campo que este formato
+	// nem tem — com mensagem que a IA que o escreveu não teria como corrigir.
+	if err := profile.ValidateMilestones(local.Milestones); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	return local.Milestones, nil
@@ -194,6 +197,22 @@ func Check(r runner.Runner, target string, milestones []profile.Milestone) (Resu
 	}
 	res, err := r.Run(context.Background(), runner.Command{Name: fields[0], Args: fields[1:], Dir: target})
 	if err != nil {
+		// Progresso já existente é re-renderizado mesmo quando o verify não
+		// chega a executar (binário ausente, permissão): o
+		// milestones-progress.md é injetado no início de toda sessão, e sem
+		// isto ele segue anunciando o marco da lista anterior depois de uma
+		// renegociação, até que alguma chamada consiga rodar — o aluno leria
+		// um "Next:" que não corresponde ao contrato vigente.
+		//
+		// Só re-renderiza o que já existe. Uma checagem que não rodou não
+		// materializa diário do nada: não há progresso a corrigir quando não
+		// havia progresso, e criar um sugere que algo foi medido quando nada
+		// foi.
+		if _, statErr := os.Stat(MilestonesProgressPath(target)); statErr == nil {
+			if werr := writeMilestones(target, milestones, passed); werr != nil {
+				return Result{Milestone: m}, true, errors.Join(err, werr)
+			}
+		}
 		return Result{Milestone: m}, true, err
 	}
 	output := res.Stdout + res.Stderr

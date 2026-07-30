@@ -104,7 +104,21 @@ func (p *Profile) Validate() error {
 			return fmt.Errorf("scaffold file %d: path is required", i)
 		}
 	}
-	for i, m := range p.Milestones {
+	return ValidateMilestones(p.Milestones)
+}
+
+// ValidateMilestones valida uma lista de marcos isolada de qualquer receita.
+// Existe porque `.claude/.local/milestones.yaml` — os marcos negociados na
+// sessão — não é uma receita e não deve ser validado como se fosse.
+//
+// O `learn.LoadMilestones` montava um `Profile{Name: "local milestones"}` falso
+// só para alcançar esta checagem. Funcionava, mas prendia a validação dos marcos
+// a toda regra global de receita: bastaria `Validate` passar a exigir, digamos,
+// uma `Description`, para todo `milestones.yaml` falhar com "description is
+// required" — mensagem que a IA que escreveu o arquivo não tem como corrigir,
+// porque o campo não existe naquele formato.
+func ValidateMilestones(milestones []Milestone) error {
+	for i, m := range milestones {
 		if err := m.validate(); err != nil {
 			return fmt.Errorf("milestone %d: %w", i, err)
 		}

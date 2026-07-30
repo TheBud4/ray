@@ -69,12 +69,23 @@ func TestLearnOverlayWritesTeachingPrompt(t *testing.T) {
 		t.Fatalf("prompt de ensino não foi escrito: %v", err)
 	}
 
-	// Os quatro pilares do redesenho, mais o exemplo de milestones.yaml (o
-	// bloco que ensina a IA o formato goal/verify). Se algum pilar sumir, o
-	// modo volta a ser proibição sem pedagogia; se o exemplo sumir ou
-	// corromper, a IA passa a gravar milestones.yaml que a validação da
-	// correção 2 (profile.Profile.Validate via LoadMilestones) recusa.
-	for _, want := range []string{"Combinado", "escada", "fatos", "o que você já tentou", "npm test -- tasks.e2e"} {
+	// Os pilares do redesenho, mais o exemplo de milestones.yaml. Se um pilar
+	// sumir, o modo volta a ser proibição sem pedagogia.
+	//
+	// As âncoras são *proposições*, não vocabulário: "escada" e "fatos" — que
+	// estavam aqui antes — casariam quase qualquer prosa sobre ensino e
+	// passariam mesmo com o pilar arrancado. Cada frase abaixo só existe se a
+	// regra que ela enuncia existir. A última é o bloco YAML de exemplo: se
+	// ele sumir ou corromper, a IA grava um milestones.yaml que
+	// profile.ValidateMilestones recusa.
+	for _, want := range []string{
+		"Fatos se respondem direto",            // fato não entra na escada
+		"O aluno puxa",                         // quem controla o degrau
+		"O degrau reseta a cada problema novo", // impede a catraca até o topo
+		"Você sobe sozinha só com evidência",   // a exceção ao "aluno puxa"
+		"o que você já tentou",                 // o portão do degrau 4
+		"npm test -- tasks.e2e",                // exemplo de milestones.yaml
+	} {
 		if !strings.Contains(string(got), want) {
 			t.Errorf("prompt de ensino não menciona %q", want)
 		}

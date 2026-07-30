@@ -2,6 +2,7 @@ package learn
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -180,7 +181,7 @@ func TestCheckNeverTouchesTheJournal(t *testing.T) {
 	// O diário é da IA: um contrato escrito por ela precisa sobreviver a
 	// quantas passagens de marco vierem.
 	journal := "## Combinado\n- Degrau inicial: 2\n"
-	if err := os.WriteFile(HeadPath(target), []byte(journal), 0o644); err != nil {
+	if err := os.WriteFile(headPath(target), []byte(journal), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -192,7 +193,7 @@ func TestCheckNeverTouchesTheJournal(t *testing.T) {
 		t.Fatal("Check() ok = false, want true com marcos definidos")
 	}
 
-	got, err := os.ReadFile(HeadPath(target))
+	got, err := os.ReadFile(headPath(target))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +234,7 @@ func TestCheckFailTouchesNothing(t *testing.T) {
 	// marcos cruzados — mas o progresso pode e deve ser re-renderizado, já
 	// que ele reflete a lista corrente de milestones a cada chamada, não só
 	// nas aprovações (correção 1b).
-	if _, err := os.Stat(HeadPath(target)); !os.IsNotExist(err) {
+	if _, err := os.Stat(headPath(target)); !os.IsNotExist(err) {
 		t.Error("diário não deveria existir após reprovação — é da IA, ray nunca escreve nele")
 	}
 	if _, err := os.Stat(PassedPath(target)); !os.IsNotExist(err) {
@@ -423,8 +424,8 @@ func TestPathHelpers(t *testing.T) {
 	if got := JournalDir(target); got != filepath.Join(target, ".claude", ".local") {
 		t.Errorf("JournalDir() = %q", got)
 	}
-	if got := HeadPath(target); got != filepath.Join(JournalDir(target), "learning-journal.md") {
-		t.Errorf("HeadPath() = %q", got)
+	if got := headPath(target); got != filepath.Join(JournalDir(target), "learning-journal.md") {
+		t.Errorf("headPath() = %q", got)
 	}
 	if got := MilestonesProgressPath(target); got != filepath.Join(JournalDir(target), "milestones-progress.md") {
 		t.Errorf("MilestonesProgressPath() = %q", got)
@@ -434,5 +435,37 @@ func TestPathHelpers(t *testing.T) {
 	}
 	if got := LocalMilestonesPath(target); got != filepath.Join(JournalDir(target), "milestones.yaml") {
 		t.Errorf("LocalMilestonesPath() = %q", got)
+	}
+}
+
+// O progresso é injetado no início de toda sessão, então ele não pode ficar
+// para trás quando o verify não chega a executar (binário ausente, permissão).
+// Antes, só a reprovação por exit code re-renderizava: depois de renegociar os
+// marcos, um erro de execução deixava o "Next:" anunciando o marco da lista
+// anterior até alguma chamada conseguir rodar.
+func TestCheckRerendersProgressWhenVerifyCannotRun(t *testing.T) {
+	target := t.TempDir()
+
+	antigos := []profile.Milestone{{Goal: "marco antigo", Verify: "true"}}
+	if _, _, err := Check(&runner.FakeRunner{}, target, antigos); err != nil {
+		t.Fatalf("Check() inicial: %v", err)
+	}
+
+	// Renegociação: a lista corrente troca inteira.
+	novos := []profile.Milestone{{Goal: "marco novo", Verify: "binario-que-nao-existe"}}
+	falha := &runner.FakeRunner{Err: errors.New("exec: binário não encontrado")}
+	if _, _, err := Check(falha, target, novos); err == nil {
+		t.Fatal("Check() = nil error, want o erro de execução do runner")
+	}
+
+	got, err := os.ReadFile(MilestonesProgressPath(target))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), "marco novo") {
+		t.Errorf("progresso não acompanhou a renegociação: %q", got)
+	}
+	if strings.Contains(string(got), "marco antigo") {
+		t.Errorf("progresso ainda anuncia o marco da lista anterior: %q", got)
 	}
 }
