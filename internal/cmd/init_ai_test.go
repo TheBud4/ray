@@ -94,6 +94,7 @@ func TestRunInitAIPrintsSummaryAndErrorsOnFailure(t *testing.T) {
 		TemplatesDir: filepath.Join(base, "templates"),
 		ConfigPath:   filepath.Join(base, "config.yaml"),
 		StatePath:    filepath.Join(base, "state.yaml"),
+		StoreDir:     filepath.Join(base, "store"),
 	}
 	target := t.TempDir()
 

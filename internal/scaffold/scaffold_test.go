@@ -13,6 +13,7 @@ import (
 
 	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/runner"
+	"github.com/TheBud4/ray/internal/store"
 )
 
 var wantBasePaths = []string{
@@ -197,7 +198,7 @@ func TestWriteFilesUnknownPathErrors(t *testing.T) {
 
 func TestEnsureTemplatesOverlayWinsOverEmbed(t *testing.T) {
 	overlayDir := t.TempDir()
-	if err := EnsureTemplates(overlayDir); err != nil {
+	if _, err := EnsureTemplates(overlayDir, EnsureOptions{}); err != nil {
 		t.Fatalf("EnsureTemplates() error = %v", err)
 	}
 
@@ -335,7 +336,7 @@ func TestMergeGitignoreDryRunDoesNotWrite(t *testing.T) {
 	}
 }
 
-func TestEnsureTemplatesNeverOverwrites(t *testing.T) {
+func TestEnsureTemplatesKeepsLocallyEditedFile(t *testing.T) {
 	overlayDir := t.TempDir()
 	overlayFile := filepath.Join(overlayDir, "CLAUDE.md.tmpl")
 	if err := os.MkdirAll(overlayDir, 0o755); err != nil {
@@ -346,7 +347,8 @@ func TestEnsureTemplatesNeverOverwrites(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := EnsureTemplates(overlayDir); err != nil {
+	synced, err := EnsureTemplates(overlayDir, EnsureOptions{})
+	if err != nil {
 		t.Fatalf("EnsureTemplates() error = %v", err)
 	}
 
@@ -355,7 +357,109 @@ func TestEnsureTemplatesNeverOverwrites(t *testing.T) {
 		t.Fatal(err)
 	}
 	if string(got) != string(custom) {
-		t.Fatalf("EnsureTemplates overwrote a pre-existing overlay file: got %q, want %q", got, custom)
+		t.Fatalf("EnsureTemplates sobrescreveu arquivo editado: got %q, want %q", got, custom)
+	}
+	if act := actionFor(synced, "CLAUDE.md.tmpl"); act.Action != TemplateKept {
+		t.Fatalf("action = %q, want %q", act.Action, TemplateKept)
+	} else if act.Reason == "" {
+		t.Error("Kept sem Reason — o usuário não fica sabendo por que o arquivo não atualizou")
+	}
+}
+
+func actionFor(synced []TemplateSync, rel string) TemplateSync {
+	for _, s := range synced {
+		if s.Rel == rel {
+			return s
+		}
+	}
+	return TemplateSync{}
+}
+
+// A regressão que motivou a mudança: overlay gerado por uma versão antiga do
+// ray continuava ganhando do embed depois de o binário atualizar, porque
+// EnsureTemplates só criava o que faltava. Como o `render` prefere o overlay,
+// atualizar o ray deixava de atualizar os templates — em silêncio.
+func TestEnsureTemplatesRefreshesUntouchedStaleFile(t *testing.T) {
+	overlayDir := t.TempDir()
+	rel := "CLAUDE.md.tmpl"
+	overlayFile := filepath.Join(overlayDir, rel)
+
+	stale := []byte("conteúdo de uma versão antiga do ray")
+	if err := os.WriteFile(overlayFile, stale, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Linha-base: o ray gravou este hash quando escreveu o arquivo, então
+	// ninguém o editou desde então.
+	pristine := map[string]string{rel: store.HashBytes(stale)}
+
+	synced, err := EnsureTemplates(overlayDir, EnsureOptions{
+		Pristine: func(r string) (string, bool) { h, ok := pristine[r]; return h, ok },
+	})
+	if err != nil {
+		t.Fatalf("EnsureTemplates() error = %v", err)
+	}
+
+	got, err := os.ReadFile(overlayFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) == string(stale) {
+		t.Fatal("overlay intocado e defasado não foi atualizado — o embed segue sombreado")
+	}
+	fresh, err := embedded.ReadFile(templatesRoot + "/" + rel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(fresh) {
+		t.Error("overlay atualizado não bate com o embed")
+	}
+
+	act := actionFor(synced, rel)
+	if act.Action != TemplateRefreshed {
+		t.Fatalf("action = %q, want %q", act.Action, TemplateRefreshed)
+	}
+	if act.Hash != store.HashBytes(fresh) {
+		t.Error("Hash devolvido não é o do conteúdo gravado — a linha-base nova ficaria errada")
+	}
+}
+
+// --force atropela mesmo edição local, igual ao `ray update`.
+func TestEnsureTemplatesForceOverwritesEditedFile(t *testing.T) {
+	overlayDir := t.TempDir()
+	rel := "CLAUDE.md.tmpl"
+	overlayFile := filepath.Join(overlayDir, rel)
+	if err := os.WriteFile(overlayFile, []byte("editado à mão"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := EnsureTemplates(overlayDir, EnsureOptions{Force: true}); err != nil {
+		t.Fatalf("EnsureTemplates() error = %v", err)
+	}
+
+	got, err := os.ReadFile(overlayFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) == "editado à mão" {
+		t.Error("--force não sobrescreveu o overlay editado")
+	}
+}
+
+// Caso mais comum de todos: overlay já igual ao embed. Não é "editado" nem
+// precisa de escrita, e não deve gerar aviso.
+func TestEnsureTemplatesCurrentFileIsSilent(t *testing.T) {
+	overlayDir := t.TempDir()
+	if _, err := EnsureTemplates(overlayDir, EnsureOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	synced, err := EnsureTemplates(overlayDir, EnsureOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range synced {
+		if s.Action != TemplateCurrent {
+			t.Errorf("%s: action = %q na segunda passada, want %q", s.Rel, s.Action, TemplateCurrent)
+		}
 	}
 }
 

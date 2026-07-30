@@ -157,6 +157,45 @@ func HashTree(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
+// DecideOverwrite é a política de detecção de fork por conteúdo (design §6,
+// §13): pura, sem tocar disco — recebe os hashes já calculados pelo chamador.
+//   - force: sempre sobrescreve.
+//   - sem conteúdo no disco ainda: sobrescreve (primeira instalação do leaf).
+//   - com pristino conhecido: disco == pristino → sobrescreve (não editado);
+//     disco != pristino → você editou → pula.
+//   - sem pristino (clone novo, degradação graciosa): disco == fresco →
+//     não é fork, sobrescreve; disco != fresco → ambíguo → pula.
+//
+// Usada pelo `ray update` (conteúdo vendorizado) e pelo overlay de templates
+// em `scaffold.EnsureTemplates`. São dois domínios com a mesma pergunta — "o
+// usuário editou isto?" — e a resposta não deve divergir entre eles.
+func DecideOverwrite(force, onDiskExists bool, onDiskHash, freshHash, pristineHash string, hasPristine bool) (overwrite bool, reason string) {
+	if force {
+		return true, ""
+	}
+	if !onDiskExists {
+		return true, ""
+	}
+	if hasPristine {
+		if onDiskHash == pristineHash {
+			return true, ""
+		}
+		return false, "edited locally (differs from last pristine); use --force to overwrite"
+	}
+	if onDiskHash == freshHash {
+		return true, ""
+	}
+	return false, "edited locally (no pristine baseline; differs from upstream); use --force to overwrite"
+}
+
+// HashBytes é o sha256 hex de um conteúdo solto. HashTree existe para árvore
+// vendorizada, onde o rel-path entra no hash; aqui o arquivo já é identificado
+// pela chave do pristino, então só o conteúdo importa.
+func HashBytes(content []byte) string {
+	sum := sha256.Sum256(content)
+	return hex.EncodeToString(sum[:])
+}
+
 // PristineHash devolve o hash que o store gravou por último para proj×coord
 // (I3: linha-base contra a qual `ray update` detecta fork por conteúdo), ou
 // ok=false se nunca foi gravado.

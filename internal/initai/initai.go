@@ -84,8 +84,31 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	if err := profile.EnsureDir(home.ProfilesDir); err != nil {
 		return Summary{}, err
 	}
-	if err := scaffold.EnsureTemplates(home.TemplatesDir); err != nil {
+	// O overlay de templates é sincronizado, não só criado: sem isso ele
+	// sombreia o embed em silêncio, e atualizar o `ray` deixa de atualizar os
+	// templates. A política de "editado?" é a mesma do `ray update`
+	// (store.DecideOverwrite), com a mesma saída para --force.
+	st := store.New(home.StoreDir)
+	synced, err := scaffold.EnsureTemplates(home.TemplatesDir, scaffold.EnsureOptions{
+		Force:    opts.Force,
+		Pristine: func(rel string) (string, bool) { return st.PristineHash(home.TemplatesDir, rel) },
+	})
+	if err != nil {
 		return Summary{}, err
+	}
+	for _, s := range synced {
+		switch s.Action {
+		case scaffold.TemplateCreated, scaffold.TemplateRefreshed:
+			// Falha ao gravar a linha-base não derruba o `init ai`: sem
+			// pristino, DecideOverwrite já cai na degradação graciosa
+			// (disco == embed → atualiza; divergiu → preserva). Abortar aqui
+			// trocaria um efeito recuperável por um comando morto.
+			if err := st.SetPristine(home.TemplatesDir, s.Rel, s.Hash); err != nil {
+				sum.Warnings = append(sum.Warnings, fmt.Sprintf("template %s: linha-base pristina não gravada (%v)", s.Rel, err))
+			}
+		case scaffold.TemplateKept:
+			sum.Warnings = append(sum.Warnings, fmt.Sprintf("template %s: %s", s.Rel, s.Reason))
+		}
 	}
 
 	// 3. carrega a receita.
@@ -168,7 +191,6 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	// pelo store nem é vendorizado no projeto. Roda ANTES de 7c: o
 	// `graphify update .` (integração code_graph) precisa achar conteúdo
 	// real em `.claude/` para ter o que indexar.
-	st := store.New(home.StoreDir)
 	for _, c := range prof.Components {
 		if opts.Global && c.Via == profile.ViaSkills {
 			cmd, err := acquire.GlobalInstallCommand(c)

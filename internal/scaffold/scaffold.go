@@ -15,6 +15,7 @@ import (
 	"text/template"
 
 	"github.com/TheBud4/ray/internal/profile"
+	"github.com/TheBud4/ray/internal/store"
 )
 
 //go:embed templates
@@ -284,10 +285,50 @@ func mergeMarkedBlock(existing, block string) (string, bool) {
 	return newContent, newContent != existing
 }
 
-// EnsureTemplates copia os templates embutidos para dir como overlay editável,
-// nunca sobrescrevendo o que já existir.
-func EnsureTemplates(dir string) error {
-	return fs.WalkDir(embedded, templatesRoot, func(path string, d fs.DirEntry, err error) error {
+// TemplateAction é o que EnsureTemplates fez com um arquivo do overlay.
+type TemplateAction string
+
+const (
+	TemplateCreated   TemplateAction = "created"   // não existia
+	TemplateRefreshed TemplateAction = "refreshed" // existia intocado e defasou
+	TemplateCurrent   TemplateAction = "current"   // existia e já era igual ao embed
+	TemplateKept      TemplateAction = "kept"      // editado localmente: preservado
+)
+
+// TemplateSync é o resultado por arquivo. O chamador usa Hash para gravar a
+// linha-base pristina (só em Created/Refreshed) e Reason para avisar (Kept).
+type TemplateSync struct {
+	Rel    string
+	Action TemplateAction
+	Reason string
+	Hash   string
+}
+
+// EnsureOptions injeta o que EnsureTemplates não tem como saber sozinho.
+type EnsureOptions struct {
+	// Pristine devolve o hash gravado por último para um template do overlay.
+	// Nil ou ok=false cai na degradação graciosa de store.DecideOverwrite.
+	Pristine func(rel string) (string, bool)
+	// Force sobrescreve mesmo template editado localmente.
+	Force bool
+}
+
+// EnsureTemplates sincroniza o overlay editável em dir com os templates
+// embutidos, e devolve o que fez com cada arquivo.
+//
+// Antes, ele só criava o que faltava e devolvia sem tocar no resto. Isso fazia
+// o overlay **sombrear o embed em silêncio**: gerado por uma versão antiga, ele
+// continuava ganhando do binário novo — porque o `render` prefere o overlay —
+// mesmo sem ninguém o ter editado. Atualizar o `ray` não atualizava os
+// templates, e nada avisava.
+//
+// A política de "o usuário editou isto?" é store.DecideOverwrite, a mesma do
+// `ray update` para conteúdo vendorizado: intocado é reescrito em silêncio,
+// editado é preservado com motivo, e --force atropela. Duas perguntas iguais
+// não devem ter respostas diferentes.
+func EnsureTemplates(dir string, opts EnsureOptions) ([]TemplateSync, error) {
+	var synced []TemplateSync
+	err := fs.WalkDir(embedded, templatesRoot, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -296,16 +337,50 @@ func EnsureTemplates(dir string) error {
 		}
 		rel := strings.TrimPrefix(path, templatesRoot+"/")
 		dest := filepath.Join(dir, filepath.FromSlash(rel))
-		if _, err := os.Stat(dest); err == nil {
-			return nil // já existe: respeita
-		}
-		data, err := embedded.ReadFile(path)
+
+		fresh, err := embedded.ReadFile(path)
 		if err != nil {
 			return err
 		}
+		freshHash := store.HashBytes(fresh)
+
+		onDisk, readErr := os.ReadFile(dest)
+		exists := readErr == nil
+		if readErr != nil && !os.IsNotExist(readErr) {
+			return readErr
+		}
+
+		// Igual ao embed: nada a fazer, e não é "editado". Sai antes da
+		// política para não gerar ruído no caso mais comum de todos.
+		onDiskHash := store.HashBytes(onDisk)
+		if exists && onDiskHash == freshHash {
+			synced = append(synced, TemplateSync{Rel: rel, Action: TemplateCurrent, Hash: freshHash})
+			return nil
+		}
+
+		var pristineHash string
+		var hasPristine bool
+		if opts.Pristine != nil {
+			pristineHash, hasPristine = opts.Pristine(rel)
+		}
+		overwrite, reason := store.DecideOverwrite(opts.Force, exists, onDiskHash, freshHash, pristineHash, hasPristine)
+		if !overwrite {
+			synced = append(synced, TemplateSync{Rel: rel, Action: TemplateKept, Reason: reason})
+			return nil
+		}
+
 		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 			return err
 		}
-		return os.WriteFile(dest, data, 0o644)
+		if err := os.WriteFile(dest, fresh, 0o644); err != nil {
+			return err
+		}
+		action := TemplateCreated
+		if exists {
+			action = TemplateRefreshed
+		}
+		synced = append(synced, TemplateSync{Rel: rel, Action: action, Hash: freshHash})
+		return nil
 	})
+	return synced, err
 }

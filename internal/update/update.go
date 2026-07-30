@@ -155,31 +155,12 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 	return sum, nil
 }
 
-// decideOverwrite é a política de detecção de fork por conteúdo (design §6,
-// §13): pura, sem tocar disco — recebe os hashes já calculados por Run.
-//   - force: sempre sobrescreve.
-//   - sem conteúdo no disco ainda: sobrescreve (primeira instalação do leaf).
-//   - com pristino conhecido: disco == pristino → sobrescreve (não editado);
-//     disco != pristino → você editou → pula.
-//   - sem pristino (clone novo, degradação graciosa): disco == fresco →
-//     não é fork, sobrescreve; disco != fresco → ambíguo → pula.
+// decideOverwrite delega para store.DecideOverwrite. A política mora no
+// `store` porque é sobre linha-base pristina, que é o que o `store` guarda —
+// e porque o overlay de templates (`scaffold.EnsureTemplates`) precisa da
+// mesma decisão sem depender deste pacote.
 func decideOverwrite(force, onDiskExists bool, onDiskHash, freshHash, pristineHash string, hasPristine bool) (overwrite bool, reason string) {
-	if force {
-		return true, ""
-	}
-	if !onDiskExists {
-		return true, ""
-	}
-	if hasPristine {
-		if onDiskHash == pristineHash {
-			return true, ""
-		}
-		return false, "edited locally (differs from last pristine); use --force to overwrite"
-	}
-	if onDiskHash == freshHash {
-		return true, ""
-	}
-	return false, "edited locally (no pristine baseline; differs from upstream); use --force to overwrite"
+	return store.DecideOverwrite(force, onDiskExists, onDiskHash, freshHash, pristineHash, hasPristine)
 }
 
 // isTreeDirty roda `git status --porcelain` em target via check. Devolve
