@@ -285,6 +285,81 @@ func TestGuardCodeBlocksWhenJQMissing(t *testing.T) {
 	}
 }
 
+// runGuardCodeIn roda o hook com um cwd e um $PWD escolhidos separadamente — é
+// o que permite simular projeto alcançado por symlink, onde o bash herda o
+// caminho lógico e `pwd -P` devolve o físico.
+func runGuardCodeIn(t *testing.T, scriptPath, dir, pwd, filePath string) string {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{
+		"tool_input": map[string]any{"file_path": filePath},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Stdin = bytes.NewReader(payload)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "PWD="+pwd)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("guard-code.sh failed: %v\noutput: %s", err, out.String())
+	}
+	return out.String()
+}
+
+// O strip de prefixo tem de casar tanto quando o projeto é alcançado pelo
+// caminho lógico quanto pelo físico. Se só uma forma fosse tentada, escrita
+// legítima em .claude/** viraria falso bloqueio — e .claude/.local/ é o fluxo
+// principal do modo learn (milestones.yaml, diário, rascunho/).
+func TestGuardCodeAllowsClaudeDirReachedThroughSymlink(t *testing.T) {
+	requireBashAndJQ(t)
+
+	root := t.TempDir()
+	physical := filepath.Join(root, "fisico")
+	if err := os.MkdirAll(physical, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := WriteFiles(SystemFiles(ModeLearn), Options{Target: physical}); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "link")
+	if err := os.Symlink(physical, link); err != nil {
+		t.Skipf("symlink não suportado: %v", err)
+	}
+	scriptPath := filepath.Join(physical, ".claude/hooks/guard-code.sh")
+
+	// t.TempDir() pode conter symlink por si (macOS: /var → /private/var), então
+	// a forma física é derivada, não presumida.
+	realRoot, err := filepath.EvalSymlinks(physical)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name     string
+		pwd      string
+		filePath string
+	}{
+		{"pwd lógico, file_path físico", link, filepath.Join(realRoot, ".claude/.local/milestones.yaml")},
+		{"pwd lógico, file_path lógico", link, filepath.Join(link, ".claude/.local/milestones.yaml")},
+		{"pwd físico, file_path físico", realRoot, filepath.Join(realRoot, ".claude/.local/milestones.yaml")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out := runGuardCodeIn(t, scriptPath, link, tc.pwd, tc.filePath)
+			if strings.TrimSpace(out) != "" {
+				t.Errorf("guard-code bloqueou escrita legítima em .claude/.local/: %q", out)
+			}
+		})
+	}
+
+	// O contrário segue valendo: código continua negado por qualquer das formas.
+	out := runGuardCodeIn(t, scriptPath, link, link, filepath.Join(realRoot, "main.go"))
+	requireDeny(t, out, "main.go via symlink")
+}
+
 func TestGuardCodeAllowsTheScratchDir(t *testing.T) {
 	requireBashAndJQ(t)
 

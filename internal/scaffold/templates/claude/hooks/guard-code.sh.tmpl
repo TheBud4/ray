@@ -34,7 +34,27 @@ if [[ -z "$file_path" ]]; then
   exit 0
 fi
 
-rel="${file_path#"$PWD"/}"
+# O strip é tentado contra as duas formas do diretório atual: `$PWD`, que o bash
+# herda e costuma ser o caminho **lógico** (com symlink), e `pwd -P`, que é o
+# **físico**. O `file_path` chega absoluto numa das duas formas, e qual delas
+# depende de como a sessão foi aberta — projeto alcançado por symlink é o caso
+# comum no macOS (`/tmp` → `/private/tmp`, `TMPDIR` sob `/var/folders`), em
+# worktree, em gerenciador de dotfiles e em montagem Docker.
+#
+# Se só uma forma fosse tentada e as duas divergissem, o strip não casaria, `rel`
+# ficaria absoluto, e absoluto não casa `docs/*` nem `.claude/*` — que são globs
+# de **prefixo**. O efeito seria **falso bloqueio** de escrita legítima em
+# `.claude/**`, com a mensagem errada ("modo learn não edita código"). O `*.md`
+# mascarava isso por ser glob de sufixo.
+rel="$file_path"
+for base in "$PWD" "$(pwd -P)"; do
+  [[ -n "$base" ]] || continue
+  stripped="${file_path#"$base"/}"
+  if [[ "$stripped" != "$file_path" ]]; then
+    rel="$stripped"
+    break
+  fi
+done
 
 case "$rel" in
   *.md|docs/*|.claude/*)
