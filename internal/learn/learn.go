@@ -58,10 +58,13 @@ type localMilestones struct {
 
 // LoadMilestones resolve de onde vêm os marcos: os negociados na sessão
 // ganham dos da receita, porque descrevem o que este aluno combinou construir
-// neste projeto. Sem arquivo local, a receita vale. Arquivo local ilegível é
-// erro, não fallback silencioso.
+// neste projeto. Sem arquivo local, a receita vale. Arquivo local ilegível,
+// vazio ou com item inválido é erro, não fallback silencioso — quem escreve
+// esse YAML é a IA, não um humano revisando, então vazio ou item incompleto
+// são os modos de falha esperados, não exceções.
 func LoadMilestones(target string, recipe []profile.Milestone) ([]profile.Milestone, error) {
-	data, err := os.ReadFile(LocalMilestonesPath(target))
+	path := LocalMilestonesPath(target)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return recipe, nil
@@ -70,7 +73,20 @@ func LoadMilestones(target string, recipe []profile.Milestone) ([]profile.Milest
 	}
 	var local localMilestones
 	if err := yaml.Unmarshal(data, &local); err != nil {
-		return nil, fmt.Errorf("parsing %s: %w", LocalMilestonesPath(target), err)
+		return nil, fmt.Errorf("parsing %s: %w", path, err)
+	}
+	if len(local.Milestones) == 0 {
+		return nil, fmt.Errorf("%s exists but defines no milestones (missing 'milestones:' key, or the key is empty)", path)
+	}
+	// Reaproveita profile.Profile.Validate — que por sua vez chama
+	// Milestone.validate() em cada item — em vez de duplicar a checagem de
+	// goal/verify aqui. Milestone.validate não é exportado, mas
+	// Profile.Validate já o invoca por dentro; Name é só um valor descartável
+	// pra não disparar o checável de nome de receita antes de chegar aos
+	// marcos.
+	p := profile.Profile{Name: "local milestones", Milestones: local.Milestones}
+	if err := p.Validate(); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	return local.Milestones, nil
 }

@@ -254,6 +254,80 @@ func TestLoadMilestonesRejectsBrokenLocalFile(t *testing.T) {
 	}
 }
 
+func TestLoadMilestonesRejectsEmptyFile(t *testing.T) {
+	target := t.TempDir()
+	if err := os.MkdirAll(JournalDir(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(LocalMilestonesPath(target), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadMilestones(target, milestones())
+	if err == nil {
+		t.Fatal("LoadMilestones() error = nil, want erro: arquivo vazio não pode virar [] silenciosamente")
+	}
+	if !strings.Contains(err.Error(), LocalMilestonesPath(target)) {
+		t.Errorf("erro = %q, want citar %q", err, LocalMilestonesPath(target))
+	}
+}
+
+func TestLoadMilestonesRejectsMilestonesKeyWithoutItems(t *testing.T) {
+	target := t.TempDir()
+	if err := os.MkdirAll(JournalDir(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(LocalMilestonesPath(target), []byte("milestones:\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadMilestones(target, milestones())
+	if err == nil {
+		t.Fatal("LoadMilestones() error = nil, want erro: chave milestones sem itens")
+	}
+	if !strings.Contains(err.Error(), LocalMilestonesPath(target)) {
+		t.Errorf("erro = %q, want citar %q", err, LocalMilestonesPath(target))
+	}
+}
+
+func TestLoadMilestonesRejectsItemWithoutGoal(t *testing.T) {
+	target := t.TempDir()
+	if err := os.MkdirAll(JournalDir(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	local := "milestones:\n  - verify: \"true\"\n"
+	if err := os.WriteFile(LocalMilestonesPath(target), []byte(local), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadMilestones(target, milestones())
+	if err == nil {
+		t.Fatal("LoadMilestones() error = nil, want erro: item sem goal viraria \"\" e contaria como cruzado para sempre")
+	}
+	if !strings.Contains(err.Error(), LocalMilestonesPath(target)) {
+		t.Errorf("erro = %q, want citar %q", err, LocalMilestonesPath(target))
+	}
+}
+
+func TestLoadMilestonesRejectsItemWithoutVerify(t *testing.T) {
+	target := t.TempDir()
+	if err := os.MkdirAll(JournalDir(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	local := "milestones:\n  - goal: \"API responde GET /tasks\"\n"
+	if err := os.WriteFile(LocalMilestonesPath(target), []byte(local), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadMilestones(target, milestones())
+	if err == nil {
+		t.Fatal("LoadMilestones() error = nil, want erro em vez de estourar só na hora do check")
+	}
+	if !strings.Contains(err.Error(), LocalMilestonesPath(target)) {
+		t.Errorf("erro = %q, want citar %q", err, LocalMilestonesPath(target))
+	}
+}
+
 func TestPathHelpers(t *testing.T) {
 	target := "/proj"
 	if got := JournalDir(target); got != filepath.Join(target, ".claude", ".local") {
