@@ -431,7 +431,7 @@ func TestRunWritesPristineHashForAcquiredComponent(t *testing.T) {
 	}
 }
 
-func TestRunLearnModeThreadsLevelIntoScaffoldData(t *testing.T) {
+func TestRunLearnModeWritesLearnOverlay(t *testing.T) {
 	home := newHome(t)
 	writeProfile(t, home.ProfilesDir, testProfile())
 	target := t.TempDir()
@@ -446,6 +446,12 @@ func TestRunLearnModeThreadsLevelIntoScaffoldData(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(target, ".claude/rules/learning-journal.md")); err != nil {
 		t.Fatalf("stat learning-journal.md: %v", err)
+	}
+	// O prompt de ensino (escada de 4 degraus, contrato negociado) é parte do
+	// overlay de learn desde 4822605, mas não tinha cobertura ponta-a-ponta a
+	// partir do initai — só no pacote scaffold.
+	if _, err := os.Stat(filepath.Join(target, ".claude/rules/learn-teaching.md")); err != nil {
+		t.Fatalf("stat learn-teaching.md: %v", err)
 	}
 }
 

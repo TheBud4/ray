@@ -69,9 +69,12 @@ func TestLearnOverlayWritesTeachingPrompt(t *testing.T) {
 		t.Fatalf("prompt de ensino não foi escrito: %v", err)
 	}
 
-	// Os quatro pilares do redesenho. Se algum sumir do texto, o modo volta a
-	// ser proibição sem pedagogia.
-	for _, want := range []string{"Combinado", "escada", "fatos", "o que você já tentou"} {
+	// Os quatro pilares do redesenho, mais o exemplo de milestones.yaml (o
+	// bloco que ensina a IA o formato goal/verify). Se algum pilar sumir, o
+	// modo volta a ser proibição sem pedagogia; se o exemplo sumir ou
+	// corromper, a IA passa a gravar milestones.yaml que a validação da
+	// correção 2 (profile.Profile.Validate via LoadMilestones) recusa.
+	for _, want := range []string{"Combinado", "escada", "fatos", "o que você já tentou", "npm test -- tasks.e2e"} {
 		if !strings.Contains(string(got), want) {
 			t.Errorf("prompt de ensino não menciona %q", want)
 		}
