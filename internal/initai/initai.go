@@ -36,13 +36,9 @@ type Home struct {
 
 // Options são os parâmetros de `ray init ai` (build guide §5, §8).
 type Options struct {
-	Profile string
-	Target  string
-	Mode    string
-	// Level (design §9.1, I6a) só é válido com Mode == scaffold.ModeLearn;
-	// vazio nesse caso vira scaffold.LevelIntermediate. Fora de learn, deve
-	// vir vazio.
-	Level           string
+	Profile         string
+	Target          string
+	Mode            string
 	Global          bool
 	Force           bool
 	NoGlobal        bool
@@ -72,13 +68,9 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		out = io.Discard
 	}
 
-	// 1. modo + level + target + writability.
+	// 1. modo + target + writability.
 	if opts.Mode != scaffold.ModeBuild && opts.Mode != scaffold.ModeLearn {
 		return Summary{}, fmt.Errorf("invalid --mode %q (want %q or %q)", opts.Mode, scaffold.ModeBuild, scaffold.ModeLearn)
-	}
-	level, err := resolveLevel(opts.Mode, opts.Level)
-	if err != nil {
-		return Summary{}, err
 	}
 	target, err := filepath.Abs(opts.Target)
 	if err != nil {
@@ -274,7 +266,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	files := dedupScaffoldFiles(prof.Scaffold.Files, scaffold.SystemFiles(opts.Mode))
 	res, err := scaffold.WriteFiles(files, scaffold.Options{
 		Target:       target,
-		Data:         scaffold.Data{ProjectName: filepath.Base(target), Stack: prof.Name, Level: level},
+		Data:         scaffold.Data{ProjectName: filepath.Base(target), Stack: prof.Name},
 		Force:        opts.Force,
 		DryRun:       opts.DryRun,
 		Out:          out,

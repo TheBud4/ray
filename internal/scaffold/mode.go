@@ -8,15 +8,6 @@ const (
 	ModeLearn = "learn"
 )
 
-// Níveis suportados por `ray init ai --level` (design §9.1) — só válidos com
-// --mode learn. Selecionam a variante do conteúdo de ensino (I6b); I6a só
-// valida e rosqueia o valor.
-const (
-	LevelBeginner     = "beginner"
-	LevelIntermediate = "intermediate"
-	LevelAdvanced     = "advanced"
-)
-
 // SystemFiles são os arquivos "de sistema" que o ray sempre escreve, fora da
 // receita — garante que todo hook referenciado em settings.json exista no
 // disco. No initai (Fase 8), estes se somam a prof.Files (dedup por path,

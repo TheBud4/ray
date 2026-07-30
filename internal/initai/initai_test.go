@@ -431,45 +431,12 @@ func TestRunWritesPristineHashForAcquiredComponent(t *testing.T) {
 	}
 }
 
-func TestResolveLevel(t *testing.T) {
-	cases := []struct {
-		name      string
-		mode      string
-		level     string
-		want      string
-		wantError bool
-	}{
-		{"build mode, no level", scaffold.ModeBuild, "", "", false},
-		{"build mode with level errors", scaffold.ModeBuild, scaffold.LevelBeginner, "", true},
-		{"learn mode, no level defaults to intermediate", scaffold.ModeLearn, "", scaffold.LevelIntermediate, false},
-		{"learn mode, explicit level", scaffold.ModeLearn, scaffold.LevelBeginner, scaffold.LevelBeginner, false},
-		{"learn mode, invalid level errors", scaffold.ModeLearn, "bogus", "", true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := resolveLevel(tc.mode, tc.level)
-			if tc.wantError {
-				if err == nil {
-					t.Fatal("resolveLevel() = nil error, want error")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("resolveLevel() error = %v", err)
-			}
-			if got != tc.want {
-				t.Errorf("resolveLevel() = %q, want %q", got, tc.want)
-			}
-		})
-	}
-}
-
 func TestRunLearnModeThreadsLevelIntoScaffoldData(t *testing.T) {
 	home := newHome(t)
 	writeProfile(t, home.ProfilesDir, testProfile())
 	target := t.TempDir()
 
-	opts := Options{Profile: "test", Target: target, Mode: scaffold.ModeLearn, Level: scaffold.LevelAdvanced, Out: &bytes.Buffer{}}
+	opts := Options{Profile: "test", Target: target, Mode: scaffold.ModeLearn, Out: &bytes.Buffer{}}
 	sum, err := Run(&seedingRunner{}, allFound, opts, home)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)

@@ -2,13 +2,11 @@ package initai
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/runner"
-	"github.com/TheBud4/ray/internal/scaffold"
 )
 
 // ensureWritableDir garante que dir existe e é gravável, escrevendo e
@@ -50,28 +48,6 @@ func dedupScaffoldFiles(base, extra []profile.ScaffoldFile) []profile.ScaffoldFi
 		seen[f.Path] = true
 	}
 	return out
-}
-
-// resolveLevel valida --level contra mode (design §9.1, I6a): só é válido
-// com mode == scaffold.ModeLearn (senão erro); vazio em learn vira
-// scaffold.LevelIntermediate; qualquer outro valor precisa ser um dos três
-// níveis conhecidos.
-func resolveLevel(mode, level string) (string, error) {
-	if mode != scaffold.ModeLearn {
-		if level != "" {
-			return "", fmt.Errorf("--level is only valid with --mode %s", scaffold.ModeLearn)
-		}
-		return "", nil
-	}
-	if level == "" {
-		return scaffold.LevelIntermediate, nil
-	}
-	switch level {
-	case scaffold.LevelBeginner, scaffold.LevelIntermediate, scaffold.LevelAdvanced:
-		return level, nil
-	default:
-		return "", fmt.Errorf("invalid --level %q (want %q, %q or %q)", level, scaffold.LevelBeginner, scaffold.LevelIntermediate, scaffold.LevelAdvanced)
-	}
 }
 
 // mergeMaps é uma união rasa: b sobrescreve chaves de a.

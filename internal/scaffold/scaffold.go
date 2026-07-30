@@ -53,11 +53,6 @@ var templateFor = map[string]string{
 type Data struct {
 	ProjectName string
 	Stack       string
-	// Level é iniciante|intermediário|avançado (LevelBeginner/Intermediate/
-	// Advanced), só relevante em --mode learn — I6a só rosqueia o valor até
-	// aqui; quem de fato varia o template por Level é o conteúdo de ensino
-	// do I6b.
-	Level string
 }
 
 // Options controla como WriteFiles escreve em Target.

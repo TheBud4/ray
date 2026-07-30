@@ -53,7 +53,6 @@ func newNewCmd() *cobra.Command {
 		},
 	}
 	c.Flags().StringVar(&flagMode, "mode", scaffold.ModeBuild, "build|learn")
-	c.Flags().StringVar(&flagLevel, "level", "", "beginner|intermediate|advanced (--mode learn only; defaults to intermediate)")
 	c.Flags().BoolVarP(&flagGlobal, "global", "g", false, "install content-producing skills globally instead of project-local")
 	c.Flags().BoolVar(&flagForce, "force", false, "regenerate scaffold files that already exist (never touches .claude/handoff.md)")
 	c.Flags().BoolVar(&flagNoGlobal, "no-global", false, "skip all install-once global steps")

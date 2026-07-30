@@ -17,12 +17,12 @@ import (
 
 func resetInitAIFlags(t *testing.T) {
 	t.Helper()
-	prevProfile, prevMode, prevLevel := flagProfile, flagMode, flagLevel
+	prevProfile, prevMode := flagProfile, flagMode
 	prevGlobal, prevForce := flagGlobal, flagForce
 	prevNoGlobal, prevReinstall := flagNoGlobal, flagReinstallGlobal
 	prevDryRun := flagDryRun
 	t.Cleanup(func() {
-		flagProfile, flagMode, flagLevel = prevProfile, prevMode, prevLevel
+		flagProfile, flagMode = prevProfile, prevMode
 		flagGlobal, flagForce = prevGlobal, prevForce
 		flagNoGlobal, flagReinstallGlobal = prevNoGlobal, prevReinstall
 		flagDryRun = prevDryRun
@@ -33,7 +33,6 @@ func TestBuildInitAIOptionsMapsFlags(t *testing.T) {
 	resetInitAIFlags(t)
 	flagProfile = "go"
 	flagMode = scaffold.ModeLearn
-	flagLevel = scaffold.LevelBeginner
 	flagGlobal = true
 	flagForce = true
 	flagNoGlobal = true
@@ -42,11 +41,32 @@ func TestBuildInitAIOptionsMapsFlags(t *testing.T) {
 
 	opts := buildInitAIOptions("/tmp/project", &bytes.Buffer{})
 
-	if opts.Profile != "go" || opts.Mode != scaffold.ModeLearn || opts.Level != scaffold.LevelBeginner || opts.Target != "/tmp/project" {
-		t.Fatalf("opts = %+v, want Profile=go Mode=learn Level=beginner Target=/tmp/project", opts)
+	if opts.Profile != "go" || opts.Mode != scaffold.ModeLearn || opts.Target != "/tmp/project" {
+		t.Fatalf("opts = %+v, want Profile=go Mode=learn Target=/tmp/project", opts)
 	}
 	if !opts.Global || !opts.Force || !opts.NoGlobal || !opts.ReinstallGlobal || !opts.DryRun {
 		t.Fatalf("opts = %+v, want all bool flags true", opts)
+	}
+}
+
+func TestInitAiRejectsRemovedLevelFlag(t *testing.T) {
+	// O nível passou a ser combinado na primeira sessão (ver o redesenho do
+	// modo learn). Aceitar a flag calada faria o ray prometer de novo um
+	// comportamento que ele não tem.
+	// Atenção ao nome: o construtor é newInitAICmd, com AI maiúsculo.
+	c := newInitAICmd()
+	c.SetArgs([]string{"--mode", "learn", "--level", "beginner", t.TempDir()})
+	// bytes.Buffer e não io.Discard: o pacote de teste já importa bytes e não
+	// importa io.
+	c.SetOut(&bytes.Buffer{})
+	c.SetErr(&bytes.Buffer{})
+
+	err := c.Execute()
+	if err == nil {
+		t.Fatal("Execute() error = nil, want erro de flag desconhecida")
+	}
+	if !strings.Contains(err.Error(), "level") {
+		t.Errorf("erro = %v, want mencionar a flag level", err)
 	}
 }
 
