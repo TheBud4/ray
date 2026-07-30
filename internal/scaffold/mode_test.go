@@ -160,6 +160,67 @@ func TestGuardCodeAllowsDocsBlocksCode(t *testing.T) {
 	}
 }
 
+// runGuardCodeWithoutJQ roda o hook com PATH vazio. Como a checagem de jq usa
+// só builtins de bash (`command`, `echo`), o hook consegue decidir mesmo sem
+// nenhum binário externo disponível.
+func runGuardCodeWithoutJQ(t *testing.T, scriptPath, filePath string) string {
+	t.Helper()
+	payload, err := json.Marshal(map[string]any{
+		"tool_input": map[string]any{"file_path": filePath},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Stdin = bytes.NewReader(payload)
+	cmd.Dir = filepath.Dir(scriptPath)
+	cmd.Env = []string{"PATH="}
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("guard-code.sh sem jq falhou: %v\noutput: %s", err, out.String())
+	}
+	return out.String()
+}
+
+func TestGuardCodeBlocksWhenJQMissing(t *testing.T) {
+	requireBashAndJQ(t)
+
+	target := t.TempDir()
+	if _, err := WriteFiles(SystemFiles(ModeLearn), Options{Target: target}); err != nil {
+		t.Fatal(err)
+	}
+	scriptPath := filepath.Join(target, ".claude/hooks/guard-code.sh")
+
+	// Um .md é permitido quando jq existe; sem jq o hook não tem como saber
+	// disso, e a resposta certa é bloquear, não deixar passar.
+	out := runGuardCodeWithoutJQ(t, scriptPath, filepath.Join(target, "docs/x.md"))
+	if !strings.Contains(out, "block") {
+		t.Fatalf("guard-code.sh sem jq = %q, want bloqueio — hook que bloqueia falha fechado", out)
+	}
+	if !strings.Contains(out, "jq") {
+		t.Errorf("a mensagem não diz que falta jq: %q", out)
+	}
+}
+
+func TestGuardCodeAllowsTheScratchDir(t *testing.T) {
+	requireBashAndJQ(t)
+
+	target := t.TempDir()
+	if _, err := WriteFiles(SystemFiles(ModeLearn), Options{Target: target}); err != nil {
+		t.Fatal(err)
+	}
+	scriptPath := filepath.Join(target, ".claude/hooks/guard-code.sh")
+
+	// .claude/.local/rascunho/ é onde a IA escreve demonstração rodável: já é
+	// permitido pelo padrão .claude/* e já é gitignorado pelo I1.
+	out := runGuardCode(t, scriptPath, filepath.Join(target, ".claude/.local/rascunho/demo.go"))
+	if strings.TrimSpace(out) != "" {
+		t.Errorf("guard-code bloqueou o rascunho: %q", out)
+	}
+}
+
 func runSessionStart(t *testing.T, scriptPath string) string {
 	t.Helper()
 	cmd := exec.Command("bash", scriptPath)

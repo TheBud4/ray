@@ -4,6 +4,20 @@
 # .claude/rules/learn.md). Reads the hook's JSON payload from stdin.
 set -euo pipefail
 
+# Falha fechado: sem jq o hook não consegue ler o payload e, portanto, não
+# consegue decidir. Um hook que bloqueia nunca deve deixar passar por não
+# saber — o guard-vocab pode fazer no-op porque só avisa, este não pode.
+# `command` e `echo` são builtins, então esta checagem funciona sem PATH.
+if ! command -v jq >/dev/null 2>&1; then
+  echo '{"decision":"block","reason":"guard-code: modo learn precisa do jq para decidir e ele não está instalado; edição negada. Rode `ray doctor --fix`."}'
+  exit 0
+fi
+
+# Mude para a raiz do projeto para que cálculos de caminho relativo funcionem
+# independentemente de onde o hook foi invocado.
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$script_dir/../.."
+
 payload="$(cat)"
 file_path="$(jq -r '.tool_input.file_path // empty' <<<"$payload")"
 
