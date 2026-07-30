@@ -166,6 +166,38 @@ func runGuardCode(t *testing.T, scriptPath, filePath string) string {
 	return out.String()
 }
 
+// requireDeny trava a *forma* da negação, não só o fato dela. Em PreToolUse a
+// doc do Claude Code manda usar hookSpecificOutput.permissionDecision; o
+// {"decision":"block"} de topo ainda é honrado (verificado em 2.1.220) mas é
+// desaconselhado, e este hook é o único bloqueio do modo learn. Um teste que só
+// procurasse a substring "block" passaria com a forma legada de volta.
+func requireDeny(t *testing.T, out, ctx string) {
+	t.Helper()
+	var got struct {
+		Decision           string `json:"decision"`
+		HookSpecificOutput struct {
+			HookEventName            string `json:"hookEventName"`
+			PermissionDecision       string `json:"permissionDecision"`
+			PermissionDecisionReason string `json:"permissionDecisionReason"`
+		} `json:"hookSpecificOutput"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("%s: saída não é JSON válido (%v): %q", ctx, err, out)
+	}
+	if got.Decision != "" {
+		t.Errorf("%s: usa o campo legado \"decision\" de topo, desaconselhado em PreToolUse: %q", ctx, out)
+	}
+	if got.HookSpecificOutput.HookEventName != "PreToolUse" {
+		t.Errorf("%s: hookEventName = %q, want \"PreToolUse\"", ctx, got.HookSpecificOutput.HookEventName)
+	}
+	if got.HookSpecificOutput.PermissionDecision != "deny" {
+		t.Fatalf("%s: permissionDecision = %q, want \"deny\" — o piso do modo learn não está negando", ctx, got.HookSpecificOutput.PermissionDecision)
+	}
+	if strings.TrimSpace(got.HookSpecificOutput.PermissionDecisionReason) == "" {
+		t.Errorf("%s: negação sem motivo — a IA não tem o que explicar ao aluno", ctx)
+	}
+}
+
 func TestGuardCodeAllowsDocsBlocksCode(t *testing.T) {
 	requireBashAndJQ(t)
 
@@ -188,8 +220,24 @@ func TestGuardCodeAllowsDocsBlocksCode(t *testing.T) {
 	}
 
 	codeOut := runGuardCode(t, scriptPath, filepath.Join(target, "lib/main.dart"))
-	if !strings.Contains(codeOut, "block") {
-		t.Fatalf("guard-code.sh on lib/main.dart = %q, want it to contain \"block\"", codeOut)
+	requireDeny(t, codeOut, "lib/main.dart")
+}
+
+// Um caminho com aspas ou barra invertida já quebrou JSON montado à mão. JSON
+// inválido num hook que nega é falha *aberta*: o Claude Code não lê uma decisão
+// e a edição passa. Por isso a negação é montada com jq, e por isso isto é teste.
+func TestGuardCodeDenialIsValidJSONForHostilePaths(t *testing.T) {
+	requireBashAndJQ(t)
+
+	target := t.TempDir()
+	if _, err := WriteFiles(SystemFiles(ModeLearn), Options{Target: target}); err != nil {
+		t.Fatal(err)
+	}
+	scriptPath := filepath.Join(target, ".claude/hooks/guard-code.sh")
+
+	for _, name := range []string{`lib/a"b.go`, `lib/a\b.go`, "lib/a\tb.go"} {
+		out := runGuardCode(t, scriptPath, filepath.Join(target, name))
+		requireDeny(t, out, name)
 	}
 }
 
@@ -231,9 +279,7 @@ func TestGuardCodeBlocksWhenJQMissing(t *testing.T) {
 	// Um .md é permitido quando jq existe; sem jq o hook não tem como saber
 	// disso, e a resposta certa é bloquear, não deixar passar.
 	out := runGuardCodeWithoutJQ(t, scriptPath, filepath.Join(target, "docs/x.md"))
-	if !strings.Contains(out, "block") {
-		t.Fatalf("guard-code.sh sem jq = %q, want bloqueio — hook que bloqueia falha fechado", out)
-	}
+	requireDeny(t, out, "sem jq")
 	if !strings.Contains(out, "jq") {
 		t.Errorf("a mensagem não diz que falta jq: %q", out)
 	}

@@ -306,7 +306,15 @@ receita + os de sistema são deduplicados por path (receita ganha).
   1. **Bloqueio duro** — hook `PreToolUse` (matcher `Edit|Write|MultiEdit`) →
      `.claude/hooks/guard-code.sh`. Libera só se o path casa a allowlist de docs
      (`*.md`, `docs/*`, `.claude/*` — no `case` do bash o `*` casa `/`, então é
-     recursivo); senão **nega** a ação com mensagem. Sem
+     recursivo); senão **nega** a ação com mensagem, via
+     `hookSpecificOutput.permissionDecision: "deny"` — a forma que a doc manda
+     usar em PreToolUse. O `{"decision":"block"}` de topo ainda funciona
+     (verificado em 2.1.220), mas é desaconselhado, e este é o único bloqueio
+     do modo learn: não se apoia em forma tolerada. Piso de suporte: **Claude
+     Code 2.x**. Em PostToolUse o `decision` de topo segue correto — é o que o
+     `guard-vocab` usa, e não muda. A negação é montada com `jq`, não com aspas
+     escapadas: caminho com `"` produziria JSON inválido, e JSON inválido num
+     hook que nega falha **aberto**. `mode_test.go` trava as duas coisas. Sem
      `jq`, nega tudo — hook que bloqueia falha fechado. É um **freio de
      reflexo, não um sandbox**: guarda `Edit`/`Write`/`MultiEdit` e não guarda
      `Bash`, então um `bash -c 'cat > x.go'` passa. O limite é deliberado —
