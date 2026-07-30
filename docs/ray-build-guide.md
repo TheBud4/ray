@@ -256,7 +256,8 @@ Mapa `templateFor` liga cada path → arquivo `.tmpl`. Arquivos `.sh` saem `0755
 
 **Arquivos "de sistema" (sempre escritos pelo ray, fora da receita):**
 `scaffold.SystemFiles(mode)` garante `.claude/hooks/session-start.sh` (e no
-`learn`: `rules/learn.md` + `hooks/guard-code.sh`). Isso garante que todo hook
+`learn`: `rules/learn.md`, `rules/learn-teaching.md`,
+`rules/learning-journal.md` + `hooks/guard-code.sh`). Isso garante que todo hook
 referenciado em `settings.json` exista no disco. No `initai`, os arquivos da
 receita + os de sistema são deduplicados por path (receita ganha).
 
@@ -266,9 +267,19 @@ receita + os de sistema são deduplicados por path (receita ganha).
   Overlay adiciona:
   1. **Bloqueio duro** — hook `PreToolUse` (matcher `Edit|Write|MultiEdit`) →
      `.claude/hooks/guard-code.sh`. Libera só se o path casa a allowlist de docs
-     (`*.md`, `docs/**`, `.claude/**`); senão **nega** a ação com mensagem.
+     (`*.md`, `docs/*`, `.claude/*`); senão **nega** a ação com mensagem. Sem
+     `jq`, nega tudo — hook que bloqueia falha fechado. É um **freio de
+     reflexo, não um sandbox**: guarda `Edit`/`Write`/`MultiEdit` e não guarda
+     `Bash`, então um `bash -c 'cat > x.go'` passa. O limite é deliberado —
+     fechar exigiria guardar `Bash`, superfície grande e cheia de falso
+     positivo.
   2. **Regra** `.claude/rules/learn.md` (+ destaque no `CLAUDE.md`).
-  3. Viés de agentes p/ review/exploração.
+  3. **Prompt de ensino** `.claude/rules/learn-teaching.md`: contrato negociado
+     na primeira sessão, escada de 4 degraus, e a regra de que fatos são
+     respondidos direto.
+  4. **Diário** `.claude/rules/learning-journal.md` — o diário é da IA e vive
+     em `.claude/.local/`; o `ray` só escreve o progresso de marcos.
+  5. Viés de agentes p/ review/exploração.
 
 `scaffold.HookSettings(mode)` devolve o bloco `hooks` p/ mesclar no
 `settings.json`: `SessionStart` (sempre, injeta o handoff) + `PreToolUse` (só no

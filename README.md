@@ -61,6 +61,9 @@ ray init ai --profile go
 | `ray profile list\|show\|add\|edit\|remove\|path` | Gerencia as receitas em `~/.ray/profiles`. |
 | `ray brain set\|status\|open\|path` | Aponta o ray para a sua vault Obsidian e a expõe ao agente por MCP. Valida o caminho; nunca cria nem reorganiza. |
 | `ray doctor [--fix]` | Checa/instala dependências externas. |
+| `ray update [path]` | Re-adquire ferramentas e conteúdo; protege edições suas por hash de conteúdo (exige `--force` para sobrescrever). |
+| `ray stats [path]` | Agrega as métricas-proxy de economia de token registradas em `.claude/.ray-metrics/`. |
+| `ray learn check [path]` | Roda o `verify` do marco corrente e registra a passagem. |
 
 Flags globais: `--verbose`, `--dry-run` (imprime o que seria feito, sem
 executar nada).
@@ -74,6 +77,15 @@ Todo `ray init ai`/`ray new` aceita `--mode` (default `build`):
   `Edit`/`Write`/`MultiEdit` fora de uma allowlist de documentação
   (`*.md`, `docs/**`, `.claude/**`) — a IA explica e revisa, mas não escreve
   código diretamente.
+
+Em modo learn a IA negocia um contrato com você na primeira sessão — o quanto
+você quer que ela entregue de cada vez, o que você quer conseguir fazer
+sozinho, e o que vai contar como pronto. O combinado e o seu progresso vivem
+em `.claude/.local/`, que é gitignorado: compartilhar o repo não expõe o seu
+aprendizado.
+
+Peça "mais" quando uma dica não bastar. A resposta completa está sempre
+disponível, mas ela te pergunta antes o que você já tentou.
 
 ## Completion
 
