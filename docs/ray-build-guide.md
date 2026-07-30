@@ -242,8 +242,45 @@ atropelada pelo volume da spec colada no turno. `<edge_cases>` fecha o documento
 é a cláusula que impede invenção quando a premissa falha.
 
 Não há mais `.claude/rules/*` no modo `build`: o que era regra solta virou seção
-do `CLAUDE.md`, que é o único arquivo que entra no contexto sem o agente ir
-buscar. `rules/` sobrou só para o que é opt-in por modo (`learn`).
+do `CLAUDE.md`. `rules/` sobrou só para o que é opt-in por modo (`learn`) — não
+por custo de carregamento (os dois entram no contexto sozinhos, ver abaixo), mas
+porque regra que só vale num modo não deve poluir o documento base do outro.
+
+#### Quem carrega `.claude/rules/` (dependência externa, não código do ray)
+
+**O `ray` nunca carrega essas regras — quem carrega é o Claude Code.** Nenhum
+arquivo gerado aponta para elas: o `CLAUDE.md.tmpl` não tem seção nem `@import`,
+o `session-start.sh` injeta só handoff/diário/marcos, e o `HookSettings` só
+registra hooks. Isso é correto, e não um esquecimento: o Claude Code descobre
+`.claude/rules/**/*.md` recursivamente e, conforme a documentação oficial,
+*"rules without `paths` frontmatter are loaded at launch with the same priority
+as `.claude/CLAUDE.md`"*. Os três templates de learn não têm frontmatter, logo
+carregam incondicionalmente, toda sessão.
+
+Verificado empiricamente em **Claude Code 2.1.220**, com ferramentas desabilitadas
+para excluir leitura por tool call: um canário em `.claude/rules/` volta na
+resposta; o mesmo canário em `.claude/naoregras/` não volta; três arquivos de
+regra voltam os três; e um scaffold real de `--mode learn` responde que não pode
+editar código *citando* `.claude/rules/learn.md`. Para reverificar depois de
+mexer nos templates, o caminho barato é o hook `InstructionsLoaded`, que loga
+quais arquivos de instrução carregaram e por quê.
+
+Duas consequências que valem estar escritas:
+
+- **Injetar as regras pelo `session-start.sh` seria erro**, não alternativa:
+  carregaria em duplicidade e pagaria contexto toda sessão por algo que já vem
+  de graça — contra o argumento de custo que o próprio template do diário faz.
+- **A regra não substitui o hook.** A doc é explícita: *"Claude treats them as
+  context, not enforced configuration. To block an action regardless of what
+  Claude decides, use a PreToolUse hook instead."* É exatamente por isso que
+  `learn.md` (instrução) e `guard-code.sh` (bloqueio) coexistem — um não torna
+  o outro redundante.
+
+Fragilidades conhecidas, ambas fora do caminho padrão: `claudeMdExcludes` pode
+excluir o diretório por glob, e `--setting-sources` sem `project` pula as regras
+de projeto. Alavanca ainda não usada: o frontmatter `paths` escopa uma regra por
+glob, carregando-a só quando a IA toca arquivos que casam — a saída natural se as
+regras de learn crescerem.
 
 A regra que sustenta o conjunto: **o que está no `CLAUDE.md` nunca se repete numa
 spec.** E todo critério de aceite vira um teste nomeado `CA-NN:`, de modo que
