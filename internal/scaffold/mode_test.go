@@ -286,13 +286,36 @@ func TestSessionStartInjectsJournalHeadWhenPresent(t *testing.T) {
 	if err := os.MkdirAll(journalDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(journalDir, "learning-journal.md"), []byte("Milestones passed: 1/2"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(journalDir, "learning-journal.md"), []byte("## Combinado\n- Degrau inicial: 2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out := runSessionStart(t, scriptPath)
+	if !strings.Contains(out, "## Combinado") {
+		t.Errorf("session-start.sh output = %q, want it to include the journal head", out)
+	}
+}
+
+func TestSessionStartInjectsMilestonesProgressWhenPresent(t *testing.T) {
+	requireBashAndJQ(t)
+
+	target := t.TempDir()
+	if _, err := WriteFiles(SystemFiles(ModeBuild), Options{Target: target}); err != nil {
+		t.Fatal(err)
+	}
+	scriptPath := filepath.Join(target, ".claude/hooks/session-start.sh")
+
+	journalDir := filepath.Join(target, ".claude/.local")
+	if err := os.MkdirAll(journalDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(journalDir, "milestones-progress.md"), []byte("Milestones passed: 1/2"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	out := runSessionStart(t, scriptPath)
 	if !strings.Contains(out, "Milestones passed: 1/2") {
-		t.Errorf("session-start.sh output = %q, want it to include the journal head", out)
+		t.Errorf("session-start.sh output = %q, want it to include the milestones progress", out)
 	}
 }
 

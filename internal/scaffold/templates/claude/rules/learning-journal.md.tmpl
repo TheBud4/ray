@@ -1,19 +1,21 @@
 # Regra: diário de aprendizado
 
-O diário é pessoal e vive em `.claude/.local/` — nunca é commitado, nunca
-é vendorizado. Tem duas partes:
+O diário é pessoal e vive em `.claude/.local/learning-journal.md` — nunca é
+commitado, nunca é vendorizado. **Ele é seu: o `ray` nunca escreve nele.**
 
-- **Head** (`.claude/.local/learning-journal.md`): pequeno, sempre
-  reescrito. É o único trecho injetado no início de cada sessão — mantenha-o
-  enxuto independente da sessão ser a 3ª ou a 30ª.
-- **Log** (`.claude/.local/learning-journal-log.md`): append-only, nunca
-  injetado. Existe só para o aluno reler quando quiser.
+Tem duas seções, ambas pequenas e sempre reescritas, porque é o único trecho
+injetado no início de cada sessão — o custo de contexto precisa ser o mesmo
+na 3ª e na 30ª sessão:
+
+- `## Combinado` — o contrato: degrau inicial da escada, objetivo do aluno, e
+  se a checagem de compreensão nos marcos está ligada.
+- `## Onde você está` — o que foi dominado, o que segue nebuloso, o próximo
+  passo.
 
 O que capturar: conceitos que o aluno sacou (o "aha" em uma linha), o que
-ainda está nebuloso, equívocos corrigidos, e o próximo passo. O que **não**
-capturar: comandos rodados, arquivos tocados, o blow-by-blow da sessão —
-isso é transcript, não aprendizado.
+ainda está nebuloso, equívocos corrigidos. O que **não** capturar: comandos
+rodados, arquivos tocados, o blow-by-blow da sessão — isso é transcript, não
+aprendizado.
 
-A passagem de marcos verificáveis (`ray learn check`) já atualiza o head e o
-log automaticamente. Escreva aqui só os deltas de entendimento que o `ray`
-não consegue medir por comando.
+O progresso de marcos é outra coisa e mora em `milestones-progress.md`, escrito
+pelo `ray` a cada `ray learn check`. Não duplique aqui.

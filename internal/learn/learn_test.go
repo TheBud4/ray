@@ -61,7 +61,7 @@ func TestCheckNothingToCheckWithoutMilestones(t *testing.T) {
 	}
 }
 
-func TestCheckPassRecordsStateLogAndHead(t *testing.T) {
+func TestCheckPassRecordsStateAndProgress(t *testing.T) {
 	target := t.TempDir()
 	fr := &runner.FakeRunner{Results: map[string]runner.Result{
 		"true": {ExitCode: 0},
@@ -86,20 +86,50 @@ func TestCheckPassRecordsStateLogAndHead(t *testing.T) {
 		t.Errorf("passed state = %v, want [Skeleton compiles]", passed)
 	}
 
-	logData, err := os.ReadFile(LogPath(target))
+	progressData, err := os.ReadFile(MilestonesProgressPath(target))
 	if err != nil {
-		t.Fatalf("stat log: %v", err)
+		t.Fatalf("stat progress: %v", err)
 	}
-	if !strings.Contains(string(logData), "Skeleton compiles") {
-		t.Errorf("log = %q, want it to mention the passed milestone", logData)
+	if !strings.Contains(string(progressData), "1/2") || !strings.Contains(string(progressData), "Tests are green") {
+		t.Errorf("progress = %q, want it to show 1/2 passed and the next goal", progressData)
+	}
+}
+
+func TestCheckNeverTouchesTheJournal(t *testing.T) {
+	target := t.TempDir()
+	if err := os.MkdirAll(JournalDir(target), 0o755); err != nil {
+		t.Fatal(err)
 	}
 
-	headData, err := os.ReadFile(HeadPath(target))
-	if err != nil {
-		t.Fatalf("stat head: %v", err)
+	// O diário é da IA: um contrato escrito por ela precisa sobreviver a
+	// quantas passagens de marco vierem.
+	journal := "## Combinado\n- Degrau inicial: 2\n"
+	if err := os.WriteFile(HeadPath(target), []byte(journal), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(string(headData), "1/2") || !strings.Contains(string(headData), "Tests are green") {
-		t.Errorf("head = %q, want it to show 1/2 passed and the next goal", headData)
+
+	_, ok, err := Check(&runner.FakeRunner{}, target, milestones())
+	if err != nil {
+		t.Fatalf("Check() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("Check() ok = false, want true com marcos definidos")
+	}
+
+	got, err := os.ReadFile(HeadPath(target))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != journal {
+		t.Errorf("Check() reescreveu o diário.\n got: %q\nwant: %q", got, journal)
+	}
+
+	progress, err := os.ReadFile(MilestonesProgressPath(target))
+	if err != nil {
+		t.Fatalf("progresso não foi escrito: %v", err)
+	}
+	if !strings.Contains(string(progress), "1/2") {
+		t.Errorf("progresso = %q, want conter \"1/2\"", progress)
 	}
 }
 
@@ -147,12 +177,12 @@ func TestCheckNothingLeftAfterAllPassed(t *testing.T) {
 		t.Fatal("Check() ok = true, want false once all milestones have passed")
 	}
 
-	headData, err := os.ReadFile(HeadPath(target))
+	progressData, err := os.ReadFile(MilestonesProgressPath(target))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(headData), "All milestones complete") {
-		t.Errorf("head = %q, want \"All milestones complete\"", headData)
+	if !strings.Contains(string(progressData), "All milestones complete") {
+		t.Errorf("progress = %q, want \"All milestones complete\"", progressData)
 	}
 }
 
@@ -185,8 +215,8 @@ func TestPathHelpers(t *testing.T) {
 	if got := HeadPath(target); got != filepath.Join(JournalDir(target), "learning-journal.md") {
 		t.Errorf("HeadPath() = %q", got)
 	}
-	if got := LogPath(target); got != filepath.Join(JournalDir(target), "learning-journal-log.md") {
-		t.Errorf("LogPath() = %q", got)
+	if got := MilestonesProgressPath(target); got != filepath.Join(JournalDir(target), "milestones-progress.md") {
+		t.Errorf("MilestonesProgressPath() = %q", got)
 	}
 	if got := PassedPath(target); got != filepath.Join(JournalDir(target), "milestones-passed.yaml") {
 		t.Errorf("PassedPath() = %q", got)
