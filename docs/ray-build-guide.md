@@ -255,9 +255,10 @@ embutidos como overlay editável; `render` prefere o overlay, cai pro embed.
 Mapa `templateFor` liga cada path → arquivo `.tmpl`. Arquivos `.sh` saem `0755`.
 
 **Arquivos "de sistema" (sempre escritos pelo ray, fora da receita):**
-`scaffold.SystemFiles(mode)` garante `.claude/hooks/session-start.sh` (e no
-`learn`: `rules/learn.md`, `rules/learn-teaching.md`,
-`rules/learning-journal.md` + `hooks/guard-code.sh`). Isso garante que todo hook
+`scaffold.SystemFiles(mode)` garante `.claude/hooks/session-start.sh`,
+`guard-add.sh`, `guard-vocab.sh` e `guard-plans.sh` (e no `learn`:
+`rules/learn.md`, `rules/learn-teaching.md`, `rules/learning-journal.md` +
+`hooks/guard-code.sh`). Isso garante que todo hook
 referenciado em `settings.json` exista no disco. No `initai`, os arquivos da
 receita + os de sistema são deduplicados por path (receita ganha).
 
@@ -267,7 +268,8 @@ receita + os de sistema são deduplicados por path (receita ganha).
   Overlay adiciona:
   1. **Bloqueio duro** — hook `PreToolUse` (matcher `Edit|Write|MultiEdit`) →
      `.claude/hooks/guard-code.sh`. Libera só se o path casa a allowlist de docs
-     (`*.md`, `docs/*`, `.claude/*`); senão **nega** a ação com mensagem. Sem
+     (`*.md`, `docs/*`, `.claude/*` — no `case` do bash o `*` casa `/`, então é
+     recursivo); senão **nega** a ação com mensagem. Sem
      `jq`, nega tudo — hook que bloqueia falha fechado. É um **freio de
      reflexo, não um sandbox**: guarda `Edit`/`Write`/`MultiEdit` e não guarda
      `Bash`, então um `bash -c 'cat > x.go'` passa. O limite é deliberado —

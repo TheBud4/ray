@@ -75,8 +75,8 @@ Todo `ray init ai`/`ray new` aceita `--mode` (default `build`):
 - **`build`**: a IA implementa normalmente, sem restrições.
 - **`learn`**: a IA vira mentora/revisora. Um hook `PreToolUse` bloqueia
   `Edit`/`Write`/`MultiEdit` fora de uma allowlist de documentação
-  (`*.md`, `docs/**`, `.claude/**`) — a IA explica e revisa, mas não escreve
-  código diretamente.
+  (`*.md` e tudo sob `docs/` e `.claude/`) — a IA explica e revisa, mas não
+  escreve código diretamente.
 
 Em modo learn a IA negocia um contrato com você na primeira sessão — o quanto
 você quer que ela entregue de cada vez, o que você quer conseguir fazer
