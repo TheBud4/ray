@@ -9,7 +9,7 @@ set -euo pipefail
 # saber — o guard-vocab pode fazer no-op porque só avisa, este não pode.
 # `command` e `echo` são builtins, então esta checagem funciona sem PATH.
 if ! command -v jq >/dev/null 2>&1; then
-  echo '{"decision":"block","reason":"guard-code: modo learn precisa do jq para decidir e ele não está instalado; edição negada. Rode `ray doctor --fix`."}'
+  echo '{"decision":"block","reason":"guard-code: modo learn precisa do jq para decidir e ele não está instalado; edição negada. Instale o jq e tente de novo (dnf install jq / apt install jq / brew install jq)."}'
   exit 0
 fi
 
