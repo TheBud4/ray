@@ -9,6 +9,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/TheBud4/ray/internal/learn"
 	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/runner"
 )
@@ -80,6 +81,34 @@ func TestRunLearnCheckFails(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "nope") {
 		t.Errorf("output = %q, want it to include the verify failure output", out.String())
+	}
+}
+
+func TestRunLearnCheckPrefersLocalMilestones(t *testing.T) {
+	base := t.TempDir()
+	profilesDir := filepath.Join(base, "profiles")
+	prof := &profile.Profile{
+		Name:       "test",
+		Milestones: []profile.Milestone{{Goal: "Skeleton compiles", Verify: "true"}},
+	}
+	writeLearnTestProfile(t, profilesDir, prof)
+	target := t.TempDir()
+
+	if err := os.MkdirAll(learn.JournalDir(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	local := "milestones:\n  - goal: \"API responde GET /tasks\"\n    verify: \"true\"\n"
+	if err := os.WriteFile(learn.LocalMilestonesPath(target), []byte(local), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fr := &runner.FakeRunner{Results: map[string]runner.Result{"true": {ExitCode: 0}}}
+	out := &bytes.Buffer{}
+	if err := runLearnCheck(fr, profilesDir, target, "test", out); err != nil {
+		t.Fatalf("runLearnCheck() error = %v", err)
+	}
+	if !strings.Contains(out.String(), "API responde GET /tasks") {
+		t.Errorf("output = %q, want it to name the local goal, not the recipe's", out.String())
 	}
 }
 

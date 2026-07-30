@@ -46,6 +46,35 @@ func PassedPath(target string) string {
 	return filepath.Join(JournalDir(target), "milestones-passed.yaml")
 }
 
+// LocalMilestonesPath é onde vivem os marcos negociados na sessão. A IA
+// escreve, o ray só lê — o inverso do milestones-passed.yaml.
+func LocalMilestonesPath(target string) string {
+	return filepath.Join(JournalDir(target), "milestones.yaml")
+}
+
+type localMilestones struct {
+	Milestones []profile.Milestone `yaml:"milestones"`
+}
+
+// LoadMilestones resolve de onde vêm os marcos: os negociados na sessão
+// ganham dos da receita, porque descrevem o que este aluno combinou construir
+// neste projeto. Sem arquivo local, a receita vale. Arquivo local ilegível é
+// erro, não fallback silencioso.
+func LoadMilestones(target string, recipe []profile.Milestone) ([]profile.Milestone, error) {
+	data, err := os.ReadFile(LocalMilestonesPath(target))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return recipe, nil
+		}
+		return nil, err
+	}
+	var local localMilestones
+	if err := yaml.Unmarshal(data, &local); err != nil {
+		return nil, fmt.Errorf("parsing %s: %w", LocalMilestonesPath(target), err)
+	}
+	return local.Milestones, nil
+}
+
 type passedState struct {
 	Passed []string `yaml:"passed"`
 }

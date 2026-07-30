@@ -207,6 +207,53 @@ func (errRunner) Run(context.Context, runner.Command) (runner.Result, error) {
 	return runner.Result{}, os.ErrPermission
 }
 
+func TestLoadMilestonesFallsBackToRecipe(t *testing.T) {
+	target := t.TempDir()
+
+	got, err := LoadMilestones(target, milestones())
+	if err != nil {
+		t.Fatalf("LoadMilestones() error = %v", err)
+	}
+	if len(got) != 2 || got[0].Goal != "Skeleton compiles" {
+		t.Errorf("LoadMilestones() = %v, want os marcos da receita", got)
+	}
+}
+
+func TestLoadMilestonesPrefersLocal(t *testing.T) {
+	target := t.TempDir()
+	if err := os.MkdirAll(JournalDir(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	local := "milestones:\n  - goal: \"API responde GET /tasks\"\n    verify: \"true\"\n"
+	if err := os.WriteFile(LocalMilestonesPath(target), []byte(local), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := LoadMilestones(target, milestones())
+	if err != nil {
+		t.Fatalf("LoadMilestones() error = %v", err)
+	}
+	if len(got) != 1 || got[0].Goal != "API responde GET /tasks" {
+		t.Errorf("LoadMilestones() = %v, want o marco negociado local", got)
+	}
+}
+
+func TestLoadMilestonesRejectsBrokenLocalFile(t *testing.T) {
+	target := t.TempDir()
+	if err := os.MkdirAll(JournalDir(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(LocalMilestonesPath(target), []byte("isto: [não é: yaml"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Cair calado na receita esconderia o arquivo quebrado do aluno, que foi
+	// quem pediu para gravá-lo.
+	if _, err := LoadMilestones(target, milestones()); err == nil {
+		t.Fatal("LoadMilestones() error = nil, want erro de parse")
+	}
+}
+
 func TestPathHelpers(t *testing.T) {
 	target := "/proj"
 	if got := JournalDir(target); got != filepath.Join(target, ".claude", ".local") {
@@ -220,5 +267,8 @@ func TestPathHelpers(t *testing.T) {
 	}
 	if got := PassedPath(target); got != filepath.Join(JournalDir(target), "milestones-passed.yaml") {
 		t.Errorf("PassedPath() = %q", got)
+	}
+	if got := LocalMilestonesPath(target); got != filepath.Join(JournalDir(target), "milestones.yaml") {
+		t.Errorf("LocalMilestonesPath() = %q", got)
 	}
 }

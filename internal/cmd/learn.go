@@ -53,7 +53,11 @@ func runLearnCheck(r runner.Runner, profilesDir, target, overrideProfile string,
 		return err
 	}
 
-	res, ok, err := learn.Check(r, target, prof.Milestones)
+	ms, err := learn.LoadMilestones(target, prof.Milestones)
+	if err != nil {
+		return err
+	}
+	res, ok, err := learn.Check(r, target, ms)
 	if err != nil {
 		return err
 	}
