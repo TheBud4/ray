@@ -123,7 +123,9 @@ func runGuardCode(t *testing.T, scriptPath, filePath string) string {
 	}
 	cmd := exec.Command("bash", scriptPath)
 	cmd.Stdin = bytes.NewReader(payload)
-	cmd.Dir = filepath.Dir(scriptPath)
+	// Hook é invocado da raiz do projeto; PWD usado para cálculo de caminho relativo
+	// deve ser a raiz, não o subdiretório .claude/hooks.
+	cmd.Dir = filepath.Join(filepath.Dir(scriptPath), "..", "..")
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out
@@ -173,7 +175,9 @@ func runGuardCodeWithoutJQ(t *testing.T, scriptPath, filePath string) string {
 	}
 	cmd := exec.Command("bash", scriptPath)
 	cmd.Stdin = bytes.NewReader(payload)
-	cmd.Dir = filepath.Dir(scriptPath)
+	// Hook é invocado da raiz do projeto; PWD usado para cálculo de caminho relativo
+	// deve ser a raiz, não o subdiretório .claude/hooks.
+	cmd.Dir = filepath.Join(filepath.Dir(scriptPath), "..", "..")
 	cmd.Env = []string{"PATH="}
 	var out bytes.Buffer
 	cmd.Stdout = &out

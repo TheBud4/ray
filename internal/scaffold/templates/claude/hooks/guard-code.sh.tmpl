@@ -13,11 +13,6 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 0
 fi
 
-# Mude para a raiz do projeto para que cálculos de caminho relativo funcionem
-# independentemente de onde o hook foi invocado.
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$script_dir/../.."
-
 payload="$(cat)"
 file_path="$(jq -r '.tool_input.file_path // empty' <<<"$payload")"
 
