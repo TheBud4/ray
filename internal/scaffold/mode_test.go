@@ -33,6 +33,7 @@ func TestSystemFilesLearnAddsGuardAndRule(t *testing.T) {
 		".claude/rules/learn.md":            false,
 		".claude/hooks/guard-code.sh":       false,
 		".claude/rules/learning-journal.md": false,
+		".claude/rules/learn-teaching.md":   false,
 	}
 	if len(files) != len(want) {
 		t.Fatalf("SystemFiles(learn) = %v, want %d entries", files, len(want))
@@ -46,6 +47,33 @@ func TestSystemFilesLearnAddsGuardAndRule(t *testing.T) {
 	for p, seen := range want {
 		if !seen {
 			t.Fatalf("SystemFiles(learn) missing %q", p)
+		}
+	}
+}
+
+func TestLearnOverlayWritesTeachingPrompt(t *testing.T) {
+	build := t.TempDir()
+	if _, err := WriteFiles(SystemFiles(ModeBuild), Options{Target: build}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(build, ".claude/rules/learn-teaching.md")); !os.IsNotExist(err) {
+		t.Error("modo build escreveu o prompt de ensino; ele é do overlay de learn")
+	}
+
+	learn := t.TempDir()
+	if _, err := WriteFiles(SystemFiles(ModeLearn), Options{Target: learn}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(learn, ".claude/rules/learn-teaching.md"))
+	if err != nil {
+		t.Fatalf("prompt de ensino não foi escrito: %v", err)
+	}
+
+	// Os quatro pilares do redesenho. Se algum sumir do texto, o modo volta a
+	// ser proibição sem pedagogia.
+	for _, want := range []string{"Combinado", "escada", "fatos", "o que você já tentou"} {
+		if !strings.Contains(string(got), want) {
+			t.Errorf("prompt de ensino não menciona %q", want)
 		}
 	}
 }

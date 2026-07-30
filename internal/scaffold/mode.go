@@ -24,6 +24,7 @@ func SystemFiles(mode string) []profile.ScaffoldFile {
 			profile.ScaffoldFile{Path: ".claude/rules/learn.md"},
 			profile.ScaffoldFile{Path: ".claude/hooks/guard-code.sh"},
 			profile.ScaffoldFile{Path: ".claude/rules/learning-journal.md"},
+			profile.ScaffoldFile{Path: ".claude/rules/learn-teaching.md"},
 		)
 	}
 	return files
