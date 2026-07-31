@@ -184,15 +184,16 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		return Summary{}, err
 	}
 
-	// 4. preflight — aborta antes de qualquer efeito.
+	// 4. preflight — aborta antes de qualquer efeito. A mensagem sai do
+	// preflight, que é dono tanto do que checar quanto do que dizer: montar a
+	// string aqui descartava o Hint e o Fix que o Check já carrega.
 	needPython := prof.Integrations.Headroom || prof.Integrations.CodeGraph
 	checks := preflight.Run(l, needPython)
 	if missing := preflight.MissingRequired(checks); len(missing) > 0 {
-		names := make([]string, len(missing))
-		for i, c := range missing {
-			names[i] = c.Name
+		return Summary{}, &preflight.MissingRequiredError{
+			Missing: missing,
+			From:    preflight.FromGate,
 		}
-		return Summary{}, fmt.Errorf("missing required dependencies: %s (run `ray doctor`)", strings.Join(names, ", "))
 	}
 
 	// 5. cérebro do usuário + resolve o plano de instalação. O ray é

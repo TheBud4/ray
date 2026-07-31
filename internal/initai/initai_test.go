@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,6 +13,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/TheBud4/ray/internal/preflight"
 	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/rayconfig"
 	"github.com/TheBud4/ray/internal/runner"
@@ -281,6 +283,29 @@ func TestRunPreflightAbortsBeforeAnyProjectEffect(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(target, "CLAUDE.md")); !os.IsNotExist(err) {
 		t.Error("CLAUDE.md should not exist: preflight must abort before any project effect")
+	}
+}
+
+// O gate tinha o Hint na mão e mandava o usuário descobri-lo noutro comando.
+// Erro tipado, não comparação de string: quem consome quer os Checks.
+func TestRunPreflightErrorCarriesTheHint(t *testing.T) {
+	home := newHome(t)
+	writeProfile(t, home.ProfilesDir, testProfile())
+
+	missingNpx := stubLooker{"node": true, "python3.10+": true, "uv": true}
+	opts := Options{Profile: "test", Target: t.TempDir(), Mode: scaffold.ModeBuild, Out: &bytes.Buffer{}}
+
+	_, err := Run(&runner.FakeRunner{}, missingNpx, opts, home)
+
+	var missing *preflight.MissingRequiredError
+	if !errors.As(err, &missing) {
+		t.Fatalf("Run() error = %v (%T), want a *preflight.MissingRequiredError", err, err)
+	}
+	if missing.From != preflight.FromGate {
+		t.Errorf("From = %d, want FromGate", missing.From)
+	}
+	if !strings.Contains(err.Error(), "install Node.js") {
+		t.Errorf("error = %q, want it to carry the npx hint", err.Error())
 	}
 }
 
