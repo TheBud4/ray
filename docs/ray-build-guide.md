@@ -161,6 +161,15 @@ ray
 ```
 Cobra fornece `version`, `help`, `completion` de graça.
 
+**`ray` sem subcomando** não cai no help do Cobra: imprime a tela de abertura
+(§10.1). Fora de um projeto ela sugere `ray new` / `ray init ai`; dentro de um
+`.claude/`, mostra perfil e inventário e aponta `claude` / `ray status`. Lê só
+arquivo — sem git, sem MCP, sem carregar receita — e sai **0** mesmo com
+dependência required faltando, que vira alerta na própria tela. Não há linha
+"deps: ok": a linha de dependência só existe quando falta algo. `ray --help`
+segue inalterado, e `cobra.NoArgs` faz comando inexistente errar em vez de cair
+na tela.
+
 ### Flags globais (persistentes, root)
 `--verbose`, `--dry-run`.
 
