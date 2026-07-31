@@ -276,6 +276,14 @@ func TestGitUnavailableWhenNotARepository(t *testing.T) {
 	}
 }
 
+// writeRayProfile marca o projeto como montado pelo ray.
+func writeRayProfile(t *testing.T, target string) {
+	t.Helper()
+	if err := os.WriteFile(profile.ProfileRecordPath(target), []byte("test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // writeGitignore grava um .gitignore com o bloco do ray, omitindo as linhas
 // listadas em drop.
 func writeGitignore(t *testing.T, target string, drop ...string) {
@@ -310,6 +318,7 @@ func TestGitignoreIntactBlockIsNoProblem(t *testing.T) {
 
 func TestGitignoreMissingNegationIsAProblemNamingIt(t *testing.T) {
 	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
+	writeRayProfile(t, target)
 	writeGitignore(t, target, "!.claude/skills/")
 
 	rep, err := Run(nil, Options{Target: target}, Home{})
@@ -326,6 +335,7 @@ func TestGitignoreMissingNegationIsAProblemNamingIt(t *testing.T) {
 
 func TestGitignoreMissingBlockIsAProblem(t *testing.T) {
 	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
+	writeRayProfile(t, target)
 	if err := os.WriteFile(filepath.Join(target, ".gitignore"), []byte("node_modules/\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -393,5 +403,24 @@ func TestMCPBrainPathThatDoesNotExistIsAProblem(t *testing.T) {
 	}
 	if len(rep.Problems) != 1 || !strings.Contains(rep.Problems[0], "RAY_BRAIN") {
 		t.Errorf("Problems = %v, want one naming RAY_BRAIN", rep.Problems)
+	}
+}
+
+// Projeto que o ray não montou não tem .ray-profile, e o bloco do .gitignore
+// nunca foi escrito por ele. Reclamar ali é julgar arquivo alheio — e produz
+// falso positivo no próprio repositório do ray, cujo .claude/ é escrito à mão
+// e commitado.
+func TestGitignoreBlockIsNotCheckedWithoutARayProfile(t *testing.T) {
+	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
+	if err := os.WriteFile(filepath.Join(target, ".gitignore"), []byte("node_modules/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := Run(nil, Options{Target: target}, Home{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if len(rep.Problems) != 0 {
+		t.Errorf("Problems = %v, want none: ray did not scaffold this environment", rep.Problems)
 	}
 }

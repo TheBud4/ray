@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/scaffold"
 )
 
@@ -13,9 +14,21 @@ import (
 // falha silenciosa: o conteúdo vendorizado volta a ser ignorado, o `git add`
 // do rodapé passa a não adicionar nada, e nada avisa.
 //
-// Sem .gitignore nenhum não há problema a reportar: o projeto pode não usar
+// Só roda em projeto que o ray montou, sinalizado pelo .claude/.ray-profile.
+// Num ambiente escrito à mão o ray nunca escreveu o bloco, e cobrá-lo é julgar
+// arquivo alheio — o próprio repositório do ray é esse caso: `.claude/` feito
+// à mão e commitado, sem bloco e sem dano.
+//
+// Sem .gitignore nenhum também não há o que reportar: o projeto pode não usar
 // git, e o próprio `ray init ai` cria o arquivo quando roda.
 func checkGitignore(target string) ([]string, error) {
+	if _, err := os.Stat(profile.ProfileRecordPath(target)); err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
 	data, err := os.ReadFile(filepath.Join(target, ".gitignore"))
 	if err != nil {
 		if os.IsNotExist(err) {
