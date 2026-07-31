@@ -598,7 +598,7 @@ func TestRunRecordsMCPJSONInCreated(t *testing.T) {
 }
 
 func TestVersionedPathsCollapsesToTopLevelEntries(t *testing.T) {
-	got := versionedPaths([]string{
+	got := versionedPaths(t.TempDir(), []string{
 		"CLAUDE.md",
 		".claude/hooks/session-start.sh",
 		".claude/rules/learn.md",
@@ -614,11 +614,56 @@ func TestVersionedPathsCollapsesToTopLevelEntries(t *testing.T) {
 }
 
 func TestVersionedPathsIsDeterministic(t *testing.T) {
+	target := t.TempDir()
 	in := []string{"docs/a.md", "CLAUDE.md", ".claude/x", "docs/b.md"}
-	first := versionedPaths(in)
-	second := versionedPaths(in)
+	first := versionedPaths(target, in)
+	second := versionedPaths(target, in)
 	if !slices.Equal(first, second) {
 		t.Errorf("versionedPaths() is not deterministic: %v vs %v", first, second)
+	}
+}
+
+// TestVersionedPathsNormalizesDotSlashPrefix trava a perda silenciosa que a
+// revisão do Codex achou: "./x" tinha a primeira barra no índice 1, virava "."
+// e caía no guarda de descarte. O arquivo sumia do `git add` — exatamente a
+// falha que o rodapé existe para impedir.
+func TestVersionedPathsNormalizesDotSlashPrefix(t *testing.T) {
+	got := versionedPaths(t.TempDir(), []string{"./CLAUDE.md", "./docs/a.md"})
+	want := []string{"CLAUDE.md", "docs"}
+	if !slices.Equal(got, want) {
+		t.Errorf("versionedPaths() = %v, want %v", got, want)
+	}
+}
+
+// TestVersionedPathsRelativizesAbsoluteInsideTarget cobre o outro achado: com a
+// barra no índice 0 nada era truncado e o caminho absoluto ia inteiro para o
+// `git add`. Dentro do target ele tem tradução exata; usá-la é melhor que
+// descartar, que devolveria a perda silenciosa por outra porta.
+func TestVersionedPathsRelativizesAbsoluteInsideTarget(t *testing.T) {
+	target := t.TempDir()
+	got := versionedPaths(target, []string{
+		filepath.Join(target, "docs", "a.md"),
+		filepath.Join(target, ".mcp.json"),
+	})
+	want := []string{".mcp.json", "docs"}
+	if !slices.Equal(got, want) {
+		t.Errorf("versionedPaths() = %v, want %v", got, want)
+	}
+}
+
+// TestVersionedPathsDropsPathsOutsideTarget: o rodapé só pode anunciar o que o
+// `ray` escreveu dentro do target. Caminho de fora não é ambiente vendorizado, e
+// mandar `git add` nele é pior que omitir.
+func TestVersionedPathsDropsPathsOutsideTarget(t *testing.T) {
+	target, outside := t.TempDir(), t.TempDir()
+	got := versionedPaths(target, []string{
+		filepath.Join(outside, "segredo.txt"),
+		"../fora.md",
+		"CLAUDE.md",
+	})
+	want := []string{"CLAUDE.md"}
+	if !slices.Equal(got, want) {
+		t.Errorf("versionedPaths() = %v, want %v", got, want)
 	}
 }
 

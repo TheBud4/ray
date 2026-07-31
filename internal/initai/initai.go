@@ -71,15 +71,32 @@ type Summary struct {
 // Colapsar para o topo é o que torna o comando copiável sem edição, e é
 // deliberado que não haja `-A` nem `.`: o guard-add.sh, que o próprio ray
 // instala, avisa contra `git add` cego.
-func versionedPaths(created []string) []string {
+//
+// Normaliza antes de colapsar porque `Created` não é uma lista sanitizada: o
+// `profile.Validate` só recusa path vazio, então uma receita customizada pode
+// trazer `./x` ou caminho absoluto. Sem normalizar, `./x` virava `.` e era
+// descartado — o arquivo sumia do `git add`, que é a falha exata que este
+// rodapé existe para impedir.
+//
+// Caminho fora do target é omitido: o rodapé só pode anunciar o que o `ray`
+// escreveu dentro do projeto, e mandar `git add` no que está fora é pior que
+// não mencionar.
+func versionedPaths(target string, created []string) []string {
 	seen := map[string]bool{}
 	for _, p := range created {
-		p = filepath.ToSlash(p)
+		if filepath.IsAbs(p) {
+			rel, err := filepath.Rel(target, p)
+			if err != nil {
+				continue
+			}
+			p = rel
+		}
+		p = filepath.ToSlash(filepath.Clean(p))
+		if p == "." || p == ".." || strings.HasPrefix(p, "../") {
+			continue
+		}
 		if i := strings.IndexByte(p, '/'); i > 0 {
 			p = p[:i]
-		}
-		if p == "" || p == "." {
-			continue
 		}
 		seen[p] = true
 	}
@@ -381,7 +398,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	sum.Created = append(sum.Created, ".claude/.ray-profile")
 
 	sum.HadFailure = len(sum.Failed) > 0
-	sum.VersionedPaths = versionedPaths(sum.Created)
+	sum.VersionedPaths = versionedPaths(target, sum.Created)
 	sum.InGitRepo = inGitRepo(target)
 	return sum, nil
 }
