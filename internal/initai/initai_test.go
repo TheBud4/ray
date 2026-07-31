@@ -596,3 +596,45 @@ func TestRunRecordsMCPJSONInCreated(t *testing.T) {
 		t.Errorf("Created = %v, want it to contain .mcp.json", sum.Created)
 	}
 }
+
+func TestVersionedPathsCollapsesToTopLevelEntries(t *testing.T) {
+	got := versionedPaths([]string{
+		"CLAUDE.md",
+		".claude/hooks/session-start.sh",
+		".claude/rules/learn.md",
+		"docs/README.md",
+		"docs/architecture.md",
+		".gitignore",
+		".mcp.json",
+	})
+	want := []string{".claude", ".gitignore", ".mcp.json", "CLAUDE.md", "docs"}
+	if !slices.Equal(got, want) {
+		t.Errorf("versionedPaths() = %v, want %v", got, want)
+	}
+}
+
+func TestVersionedPathsIsDeterministic(t *testing.T) {
+	in := []string{"docs/a.md", "CLAUDE.md", ".claude/x", "docs/b.md"}
+	first := versionedPaths(in)
+	second := versionedPaths(in)
+	if !slices.Equal(first, second) {
+		t.Errorf("versionedPaths() is not deterministic: %v vs %v", first, second)
+	}
+}
+
+func TestInGitRepoDetectsAncestorDotGit(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	nested := filepath.Join(root, "a", "b")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !inGitRepo(nested) {
+		t.Error("inGitRepo() = false for a directory under a repo root")
+	}
+	if inGitRepo(t.TempDir()) {
+		t.Error("inGitRepo() = true outside any repo")
+	}
+}

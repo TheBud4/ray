@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/TheBud4/ray/internal/acquire"
@@ -55,6 +56,55 @@ type Summary struct {
 	Skipped    []string
 	Warnings   []string
 	HadFailure bool
+
+	// VersionedPaths são os caminhos de topo a passar para `git add`;
+	// InGitRepo diz se faz sentido sugerir git. Ver o rodapé em
+	// internal/cmd/init_ai.go.
+	VersionedPaths []string
+	InGitRepo      bool
+}
+
+// versionedPaths reduz a lista de arquivos criados aos caminhos de topo que o
+// usuário precisa passar para `git add`. Ordenado para a saída ser estável
+// entre execuções — mensagem de comando que muda de ordem parece instável.
+//
+// Colapsar para o topo é o que torna o comando copiável sem edição, e é
+// deliberado que não haja `-A` nem `.`: o guard-add.sh, que o próprio ray
+// instala, avisa contra `git add` cego.
+func versionedPaths(created []string) []string {
+	seen := map[string]bool{}
+	for _, p := range created {
+		p = filepath.ToSlash(p)
+		if i := strings.IndexByte(p, '/'); i > 0 {
+			p = p[:i]
+		}
+		if p == "" || p == "." {
+			continue
+		}
+		seen[p] = true
+	}
+	out := make([]string, 0, len(seen))
+	for p := range seen {
+		out = append(out, p)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// inGitRepo sobe a árvore procurando .git. Não chama o binário git: é uma
+// decisão de exibição, não de correção, e não vale acoplar o resumo a um
+// processo externo que pode faltar.
+func inGitRepo(dir string) bool {
+	for {
+		if _, err := os.Stat(filepath.Join(dir, ".git")); err == nil {
+			return true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return false
+		}
+		dir = parent
+	}
 }
 
 // Run executa os 10 passos de `ray init ai`. r executa comandos de
@@ -331,5 +381,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	sum.Created = append(sum.Created, ".claude/.ray-profile")
 
 	sum.HadFailure = len(sum.Failed) > 0
+	sum.VersionedPaths = versionedPaths(sum.Created)
+	sum.InGitRepo = inGitRepo(target)
 	return sum, nil
 }
