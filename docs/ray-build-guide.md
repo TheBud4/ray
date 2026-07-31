@@ -78,7 +78,7 @@ ray/
     ├── mcp/          # Server + merge idempotente de .mcp.json
     ├── claudecfg/    # merge de .claude/settings.json
     ├── scaffold/     # renderiza orientation files (go:embed templates) + modos
-    ├── vault/        # valida a vault Obsidian do usuário (Verify/Status); não cria
+    ├── vault/        # valida a vault Obsidian do usuário (Verify/Stat); não cria
     ├── economy/      # mecanismos de Token Economy como implementações plugáveis
     ├── metrics/      # agrega os proxies de atividade que os mecanismos deixam
     ├── learn/        # máquina verificável do modo learn (marcos + diário)
@@ -389,7 +389,7 @@ de encerrar/limpar, sobrescrever o handoff) + `session-start.sh` (no
 
 1. Validar `--mode`; resolver `target = Abs(path)`; `ensureWritableDir` (MkdirAll
    + escreve/remove um probe `.ray-write-test`).
-2. Resolver `~/.ray` (profiles, templates, vault); `profile.EnsureDir` +
+2. Resolver `~/.ray` (profiles, templates, store); `profile.EnsureDir` +
    `scaffold.EnsureTemplates`.
 3. `profile.Load(profiles/<profile>.yaml)`.
 4. **Preflight** (aborta se faltar required): `needPython = Headroom || CodeGraph`.
@@ -420,10 +420,16 @@ classifica: `err` → Failed; `ExitCode≠0` → Failed; senão Installed.
 ~/.ray/
 ├── profiles/*.yaml      # receitas editáveis (defaults na 1ª run)
 ├── templates/*.tmpl     # overlay editável dos templates de scaffold
+├── store/               # cache content-addressed do conteúdo adquirido (I2)
 ├── config.yaml          # Config: brain
 ├── state.yaml           # State: installed_globals[]
 └── commands.yaml        # aliases globais do `ray run`
 ```
+
+O `store/` é a linha-base pristina: é contra ela que o `ray update` decide entre
+atualizar e preservar, e que o `ray status` diz se um componente foi editado
+localmente. Apagá-lo não quebra nada, mas os dois perdem a resposta — passam a
+dizer *procedência desconhecida*, que é o que existe para esse caso.
 
 O ray não guarda mais um vault próprio em `~/.ray/vault`. O cérebro é a vault
 Obsidian que o usuário já mantém; `ray brain set <path>` só a valida e registra.
@@ -532,7 +538,8 @@ A fronteira `runner` torna tudo testável sem rede. Por pacote:
 - **scaffold:** cria o conjunto build; não-sobrescrita; `--force` regenera mas
   nunca o handoff; overlay learn adiciona regra+guard; teste do `guard-code.sh`
   (libera `docs/x.md`, bloqueia `lib/main.dart`).
-- **vault:** `Ensure` cria e é idempotente; `Status` conta `.md`.
+- **vault:** `Verify` aceita vault existente e recusa caminho que não é uma;
+  `Stat` conta `.md`. Não há teste de criação porque não há criação.
 - **preflight/doctor:** com `Looker` mockado, aborta sem `npx`; sem `python` só
   se needPython; tabela formatada.
 - **initai (fumaça):** ponta-a-ponta com `FakeRunner` em `t.TempDir()`, build e
@@ -556,14 +563,14 @@ Fase 2  profile: structs + Load/Validate + Defaults + EnsureDir + List/Starter/
 Fase 3  installer: Resolve → Plan{Commands,Globals,Servers}; componentCommand +
         integrations.go (tabela §6).
 Fase 4  mcp + claudecfg: merge idempotente de .mcp.json e settings.json.
-Fase 5  vault: Ensure + Status.
+Fase 5  vault: Verify + Stat (validação da vault do usuário; o ray não cria).
 Fase 6  scaffold: templates go:embed + EnsureTemplates + WriteFiles (não-sobrescr.)
         + modos (SystemFiles/HookSettings) + guard-code.sh/session-start.sh.
 Fase 7  preflight + doctor (com Fix/--fix).
 Fase 8  rayconfig (Config+State) + raypaths + initai.Run (os 10 passos) +
         cmd/init_ai.go.
-Fase 9  cmd de gestão: profile (list/show/add/edit/remove/path), vault
-        (init/status/open/path), docs (init/set/open/path), openutil.
+Fase 9  cmd de gestão: profile (list/show/add/edit/remove/path), brain
+        (set/status/open/path), openutil.
 Fase 10 runfile + cmd/run.go (aliases) + cmd/new.go (create+git init+init ai).
 Fase 11 Makefile + CI (make ci) + README.
 Fase 12 Validação manual num dir descartável (RAY_HOME apontado a temp):
@@ -573,37 +580,38 @@ Fase 12 Validação manual num dir descartável (RAY_HOME apontado a temp):
 
 Dependências: 0 → 1 → 2 → 3 → {4,5,6,7} → 8 → {9,10} → 11 → 12.
 
+Isto é a ordem do **bootstrap**, não o inventário do que existe. O que veio
+depois entrou pelos incrementos I1–I9 e não cabe numa fase: `acquire` + `store`
+(I1–I2), `update` (I3), `economy` + `metrics` (I5), `learn` (I6a) e `status`
+(I8). Para o que existe hoje, o §3 é a fonte.
+
 ---
 
-## 15. Melhorias a INCORPORAR nesta reconstrução (gaps do código antigo)
+## 15. Gaps do código antigo — todos fechados
 
-Estes são pontos que ficaram pendentes/imperfeitos e que devem ser resolvidos já
-na segunda volta — documentados aqui pra não se perderem:
+Cinco pontos ficaram imperfeitos na primeira volta e foram anotados aqui para não
+se perderem. Os cinco entraram; a seção fica como registro de **onde cada um
+mora agora**, porque é isso que serve a quem lê o guia hoje.
 
-1. **`.gitignore` no `ray new` (bug real).** Hoje `ray new` faz `git init` mas
-   **não** gera `.gitignore`. Como `graphify update .` cria `graphify-out/` em
-   todo projeto, além de `.env`/artefatos de stack, eles seriam commitados por
-   engano. **Fazer:** gerar um `.gitignore` no scaffold com, no mínimo:
-   `graphify-out/`, segredos (`.env`, `*.local`), e artefatos por stack
-   (`/<bin>`, `build/`, `.dart_tool/`, `node_modules/`, `.next/`). Ideal: um
-   template base + trecho específico por perfil (campo opcional na receita).
+1. **`.gitignore` no `ray new`.** `ray new` fazia `git init` sem gerar
+   `.gitignore`, e `graphify update .` cria `graphify-out/` em todo projeto —
+   commitado por engano junto com `.env` e artefatos de stack.
+   → `scaffold.MergeGitignore`: bloco entre marcadores idempotentes, whitelist do
+   conteúdo vendorizado + blacklist de runtime/segredos + `stackLines` por
+   perfil. A whitelist virou a "regra-mãe" do I1, e o `ray status` a verifica.
 
-2. **`ray run` com passagem de argumentos.** Hoje os passos rodam sem shell e sem
-   args extras. **Fazer:** suportar `ray run test -- -run TestX` (repassa tudo
-   após `--` ao último/único passo) e/ou aceitar um passo em forma de string de
-   shell (pipes/`&&`) além da lista de passos.
+2. **`ray run` com passagem de argumentos.** → `cmd.ArgsLenAtDash` em
+   `splitAliasArgs`: `ray run test -- -run TestX` repassa tudo após o `--`.
 
-3. **`ray update`.** Nada se auto-atualiza. **Fazer:** comando que roda
-   `npx skills update` e `uv tool upgrade` (headroom/graphify), reaproveitando o
-   `runner` e reportando como o `doctor`.
+3. **`ray update`.** → `internal/update` + `cmd/update.go`, que foi além do
+   previsto: re-adquire conteúdo pelo Acquirer de cada componente e protege
+   edição local **por hash pristino** do `internal/store`, não por git-status.
 
-4. **Testes do pacote `cmd`.** A camada `internal/cmd` ficou sem testes. **Fazer:**
-   testes de fumaça por comando (com `RAY_HOME` em `t.TempDir()` e `FakeRunner`
-   injetado), verificando flags, exit codes e saída.
+4. **Testes do pacote `cmd`.** → 11 arquivos de teste, um por comando.
 
-5. **`ray completion` documentado.** Existe (via Cobra) mas não está documentado
-   nem facilitado. **Fazer:** seção no README (bash/zsh/fish) e, se valer, um
-   `ray completion install` de conveniência.
+5. **`ray completion` documentado.** → seção no README com bash, zsh e fish. O
+   `ray completion install` de conveniência foi descartado: o Cobra já entrega o
+   script, e o caminho de instalação é do shell, não do ray.
 
 ---
 
