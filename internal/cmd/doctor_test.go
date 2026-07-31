@@ -38,6 +38,69 @@ func TestRunDoctorMissingRequiredWithoutFix(t *testing.T) {
 	}
 }
 
+// A tabela tinha NAME/FOUND/REQUIRED e escondia o Hint, que é a única coluna
+// que diz o que fazer. Só para o que falta: aconselhar sobre algo presente é
+// ruído.
+func TestRunDoctorTableShowsAdviceOnlyForWhatIsMissing(t *testing.T) {
+	l := stubLooker{"node": true, "python3.10+": true, "uv": true, "headroom": true, "graphify": true}
+	var out bytes.Buffer
+
+	_ = runDoctor(l, &runner.FakeRunner{}, false, &out)
+
+	got := out.String()
+	if !strings.Contains(got, "HINT") {
+		t.Errorf("table = %q, want a HINT column", got)
+	}
+	if !strings.Contains(got, "install Node.js") {
+		t.Errorf("table = %q, want the advice for the missing npx", got)
+	}
+	for _, line := range strings.Split(got, "\n") {
+		if strings.HasPrefix(line, "node ") && strings.Contains(line, "install") {
+			t.Errorf("line = %q, want no advice for a dependency that was found", line)
+		}
+	}
+}
+
+// Sem nada a aconselhar, a coluna não existe — e não sobra espaço em branco no
+// fim de cada linha. Mesmo princípio que tirou a linha "deps: ok" da tela de
+// abertura: coluna de nada quando está tudo bem é ruído.
+func TestRunDoctorTableOmitsTheHintColumnWhenThereIsNothingToSay(t *testing.T) {
+	l := stubLooker{"npx": true, "node": true, "jq": true, "python3.10+": true,
+		"uv": true, "headroom": true, "graphify": true}
+	var out bytes.Buffer
+
+	if err := runDoctor(l, &runner.FakeRunner{}, false, &out); err != nil {
+		t.Fatalf("runDoctor() error = %v", err)
+	}
+	got := out.String()
+	if strings.Contains(got, "HINT") {
+		t.Errorf("table = %q, want no HINT column when nothing is missing", got)
+	}
+	for _, line := range strings.Split(strings.TrimRight(got, "\n"), "\n") {
+		if strings.HasSuffix(line, " ") {
+			t.Errorf("line = %q, want no trailing whitespace", line)
+		}
+	}
+}
+
+// Depois de o --fix rodar e não resolver, mandar rodar `ray doctor --fix` de
+// novo é mandar repetir o comando que acabou de falhar.
+func TestRunDoctorAfterFixDoesNotPointBackAtFix(t *testing.T) {
+	l := stubLooker{"npx": true, "node": true, "python3.10+": true} // uv segue ausente
+	var out bytes.Buffer
+
+	err := runDoctor(l, &runner.FakeRunner{}, true, &out)
+	if err == nil {
+		t.Fatal("runDoctor() = nil error, want error while uv is still missing")
+	}
+	if strings.Contains(err.Error(), "ray doctor --fix") {
+		t.Errorf("error = %q, must not send the user back to the fix that just ran", err.Error())
+	}
+	if !strings.Contains(err.Error(), "install it manually") {
+		t.Errorf("error = %q, want the manual-install advice", err.Error())
+	}
+}
+
 // flippingLooker simulates a dependency becoming available after Fix runs:
 // it answers from `before` until the fixRunner has recorded any call, then
 // from `after` — proving runDoctor re-checks after fixing.

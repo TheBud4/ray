@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -64,22 +63,40 @@ func runDoctor(l preflight.Looker, fixRunner runner.Runner, fix bool, out io.Wri
 	if len(missing) == 0 {
 		return nil
 	}
-	names := make([]string, len(missing))
-	for i, c := range missing {
-		names[i] = c.Name
-	}
-	hint := "run `ray doctor --fix`"
+	from := preflight.FromDoctor
 	if fix {
-		hint = "these have no automatic fix; install them manually"
+		from = preflight.FromDoctorFix
 	}
-	return fmt.Errorf("missing required dependencies: %s (%s)", strings.Join(names, ", "), hint)
+	return &preflight.MissingRequiredError{Missing: missing, From: from}
 }
 
 func printDoctorTable(out io.Writer, checks []preflight.Check) {
+	// Conselho só para o que falta: dizer o que fazer com algo presente é
+	// ruído na coluna que existe para ser lida quando algo dá errado. E sem
+	// nada a aconselhar a coluna nem aparece — mesma regra que tirou a linha
+	// "deps: ok" da tela de abertura.
+	advice := make([]string, len(checks))
+	anyAdvice := false
+	for i, c := range checks {
+		if c.Found {
+			continue
+		}
+		advice[i] = preflight.Advice(c, preflight.FromDoctor)
+		anyAdvice = anyAdvice || advice[i] != ""
+	}
+
 	w := tabwriter.NewWriter(out, 0, 2, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tFOUND\tREQUIRED")
-	for _, c := range checks {
-		fmt.Fprintf(w, "%s\t%s\t%s\n", c.Name, yesNo(c.Found), yesNo(c.Required))
+	header := "NAME\tFOUND\tREQUIRED"
+	if anyAdvice {
+		header += "\tHINT"
+	}
+	fmt.Fprintln(w, header)
+	for i, c := range checks {
+		fmt.Fprintf(w, "%s\t%s\t%s", c.Name, yesNo(c.Found), yesNo(c.Required))
+		if anyAdvice {
+			fmt.Fprintf(w, "\t%s", advice[i])
+		}
+		fmt.Fprintln(w)
 	}
 	w.Flush()
 }

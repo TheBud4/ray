@@ -26,7 +26,7 @@ func Run(l Looker, needPython bool) []Check {
 	checks := []Check{
 		{Name: "npx", Required: true, Hint: "install Node.js"},
 		{Name: "node", Required: false},
-		{Name: "jq", Required: false, Hint: "install jq — os hooks de aviso fazem no-op sem ele"},
+		{Name: "jq", Required: false, Hint: "install jq — the warning hooks no-op without it"},
 		{Name: "python3.10+", Required: needPython, Hint: "install Python 3.10+"},
 		{
 			Name: "uv", Required: needPython,
