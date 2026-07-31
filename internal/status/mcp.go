@@ -16,6 +16,10 @@ import (
 // guarda servidores que o usuário acrescentou à mão. Sobram duas perguntas
 // verificáveis sem heurística: o RAY_BRAIN, que é do ray, e o Command, que ou
 // está no PATH ou não está.
+//
+// l é um preflight.PathLooker: a pergunta se responde com lookup, e rodar
+// `<command> --version` de cada entrada faria um comando de diagnóstico
+// executar binário de terceiro só para saber que ele existe.
 func checkMCP(l preflight.Looker, target string) (int, []string, error) {
 	servers, err := mcp.ReadServers(target)
 	if err != nil {

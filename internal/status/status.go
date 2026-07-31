@@ -1,5 +1,9 @@
 // Package status implementa `ray status` (I8): diagnostica o ambiente de IA
-// vendorizado num projeto. Só lê — nunca grava, e nunca vai à rede.
+// vendorizado num projeto. Só lê — nunca grava, nunca vai à rede e não executa
+// binário de terceiro: a presença dos comandos do .mcp.json vem de
+// preflight.PathLooker, um lookup no PATH, e não de rodar `--version` em cada
+// um deles. As consultas ao git, que passam pelo runner, são a única execução,
+// e são de leitura.
 package status
 
 import (
@@ -90,7 +94,7 @@ func claudeDir(target string) string { return filepath.Join(target, ".claude") }
 // conteúdo do Report, não erro: um comando de diagnóstico que sai ≠ 0 por ter
 // achado o que foi procurar é inútil em qualquer script que o encadeie.
 func Run(check runner.Runner, opts Options, home Home) (Report, error) {
-	return run(check, preflight.RunnerLooker{Runner: runner.ExecRunner{}}, opts, home)
+	return run(check, preflight.PathLooker{}, opts, home)
 }
 
 // run é a forma injetável de Run: l resolve presença no PATH. Existe separada
