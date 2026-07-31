@@ -277,6 +277,11 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	if err := mcp.WriteServers(target, plan.Servers, opts.DryRun, out); err != nil {
 		return Summary{}, err
 	}
+	// .mcp.json é vendorizado (está na whitelist do .gitignore) e precisa entrar
+	// no Created: é dele que sai o `git add` do rodapé de próximos passos.
+	if len(plan.Servers) > 0 {
+		sum.Created = append(sum.Created, ".mcp.json")
+	}
 
 	// 9. settings.json.
 	settings := mergeMaps(prof.Scaffold.Settings, scaffold.HookSettings(opts.Mode))
@@ -297,7 +302,9 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	if err != nil {
 		return Summary{}, err
 	}
-	sum.Created = res.Created
+	// Acumula em vez de atribuir: o passo 8 já pode ter posto `.mcp.json` aqui,
+	// e atribuir o descartaria em silêncio. Os passos 11 e 12 já acumulavam.
+	sum.Created = append(sum.Created, res.Created...)
 	sum.Skipped = res.Skipped
 
 	// 11. .gitignore (I1) — regra-mãe: conteúdo de IA vendorizado é

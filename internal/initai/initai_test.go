@@ -575,3 +575,24 @@ func TestRunRegistersBrainServerWhenPathValid(t *testing.T) {
 		t.Errorf("MCP servers = %v, want a brain entry", mcpServerNames(t, target))
 	}
 }
+
+func TestRunRecordsMCPJSONInCreated(t *testing.T) {
+	home, target := newHome(t), t.TempDir()
+	// testProfile() já liga Headroom/Brain/CodeGraph, então installer.Resolve
+	// devolve servidores e mcp.WriteServers escreve o .mcp.json.
+	writeProfile(t, home.ProfilesDir, testProfile())
+
+	sum, err := Run(&seedingRunner{}, allFound,
+		Options{Profile: "test", Target: target, Mode: scaffold.ModeBuild}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Sem esta checagem o teste passaria por vacuidade se o perfil deixasse de
+	// gerar servidor: nada seria exercitado.
+	if len(mcpServerNames(t, target)) == 0 {
+		t.Fatal("setup is wrong: no MCP server was written, the assertion below would be vacuous")
+	}
+	if !slices.Contains(sum.Created, ".mcp.json") {
+		t.Errorf("Created = %v, want it to contain .mcp.json", sum.Created)
+	}
+}
