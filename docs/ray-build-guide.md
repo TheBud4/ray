@@ -567,6 +567,29 @@ na segunda volta — documentados aqui pra não se perderem:
 - **`run [alias]`**: sem alias ou `--list` lista (com origem project/global);
   alias inexistente → erro apontando `--list`. Passos rodam em sequência, sem
   shell, abortando no 1º exit≠0; respeita `--dry-run`/`--verbose`.
+- **`status [path]`**: diagnostica o ambiente vendorizado **deste projeto**.
+  A fronteira com o `doctor` decide o conteúdo de cada um: o `doctor` pergunta
+  se a **máquina** está pronta (dependências externas, global), o `status`
+  pergunta se **este projeto** está são. Por isso o `status` não repete a
+  tabela de dependências. Quatro checagens, todas offline:
+  1. **Fork** — hash da árvore vendorizada contra a linha-base pristina do
+     `internal/store`, dizendo o que o `ray update` faria: atualizar
+     (intocado) ou preservar (editado). Sem linha-base o veredito é
+     *procedência desconhecida*, **não** "intocado" — ver o Apêndice.
+  2. **Git** — `ls-files` primeiro, `status --porcelain` depois. A primeira
+     consulta separa "nunca versionei" de "versionei e depois divergiu",
+     porque logo após o `init ai` tudo está untracked e isso é o estado
+     normal. Escopo: `.claude/` e `.mcp.json`; `docs/` e `CLAUDE.md` ficam de
+     fora por serem do usuário.
+  3. **`.gitignore`** — o bloco entre os marcadores está inteiro? Negação
+     removida é falha silenciosa: o vendorizado volta a ser ignorado e nada
+     avisa.
+  4. **MCP** — `RAY_BRAIN` aponta para caminho existente, e o `Command` de
+     cada servidor está no PATH. Não há checagem genérica de "caminho morto":
+     `mcp.Server` não tipa nada como caminho.
+
+  Degrada em vez de falhar: fora de repo git, ou sem o binário, a seção de git
+  some inteira sem afetar as outras; sem `.claude/`, diz uma frase e para.
 
 ---
 
@@ -576,6 +599,11 @@ na segunda volta — documentados aqui pra não se perderem:
   ausente; (se headroom/code_graph) `python3.10+`+`uv` ausentes.
 - **Não derrubam o resto:** falha de um componente → `✗` e segue.
 - **Exit ≠ 0** se houve qualquer falha.
+- **Exceção deliberada: o `ray status` sai 0 mesmo achando problema.** O
+  `doctor` erra quando falta dependência *required* porque ali o próximo
+  comando quebra de verdade; no `status`, "3 arquivos não commitados" é
+  informação, e exit ≠ 0 tornaria o comando inútil em qualquer script que o
+  encadeie. Só falha de leitura erra.
 - **`--dry-run`** imprime tudo, não executa nada.
 - **Não-sobrescrita** de scaffold (exceto regenerar com `--force`; handoff nunca).
 
@@ -600,4 +628,10 @@ na segunda volta — documentados aqui pra não se perderem:
   `SystemFiles` os escreve sempre, fora da receita.
 - Globais só entram no `state.yaml` se **todos** os comandos do step deram 0.
 - Servers MCP são por-projeto e sempre re-registrados, mesmo com global já feito.
+- **Sem hash pristino, não se afirma "intocado".** O `store.DecideOverwrite`
+  precisa do hash *upstream* para decidir sem linha-base, e obtê-lo exige
+  rede. Um diagnóstico offline que chamasse a função com o upstream vazio
+  receberia "não é fork" — errado, e errado na direção que faz o usuário
+  confiar que a edição dele sobrevive. Por isso o `ray status` reporta
+  *procedência desconhecida* nesse caso, em vez de palpitar.
 ```

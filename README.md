@@ -89,6 +89,7 @@ execução criou.
 | `ray doctor [--fix]` | Checa/instala dependências externas. |
 | `ray update [path]` | Re-adquire ferramentas e conteúdo; protege edições suas por hash de conteúdo (exige `--force` para sobrescrever). |
 | `ray stats [path]` | Agrega as métricas-proxy de economia de token registradas em `.claude/.ray-metrics/`. |
+| `ray status [path]` | Diagnostica o ambiente vendorizado: o que o `ray update` faria com cada componente, se o `.claude/` está versionado, se o bloco do `.gitignore` segue intacto e se os servidores MCP resolvem. Ambiente são imprime duas linhas. |
 | `ray learn check [path]` | Roda o `verify` do marco corrente e registra a passagem. |
 
 Flags globais: `--verbose`, `--dry-run` (imprime o que seria feito, sem
