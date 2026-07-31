@@ -366,7 +366,9 @@ de encerrar/limpar, sobrescrever o handoff) + `session-start.sh` (no
    `scaffold.EnsureTemplates`.
 3. `profile.Load(profiles/<profile>.yaml)`.
 4. **Preflight** (aborta se faltar required): `needPython = Headroom || CodeGraph`.
-   `preflight.MissingRequired` → erro `missing required dependencies ... (run \`ray doctor\`)`.
+   `preflight.MissingRequired` → `preflight.MissingRequiredError{From: FromGate}`,
+   que renderiza cada dependência faltando com o conselho do `preflight.Advice`
+   e fecha com um rodapé apontando `ray doctor`.
 5. Resolver o cérebro (warning se `brain` ligado mas não configurado ou com
    caminho inválido — nesse caso o server **não** é registrado) e
    `installer.Resolve(prof, Options{Global, BrainPath})`.
@@ -426,8 +428,25 @@ init ai). Cada `Check{Name, Found, Required, Hint, Fix []runner.Command}`:
 
 `--fix` roda os `Fix` dos checks faltantes, re-checa e avisa: se `uv` acabou de
 ser instalado, reabrir o shell pro PATH pegar. Deps de sistema (node/python) não
-têm auto-fix — só a dica. Sem `--fix`, ao faltar required, imprime a dica de
-rodar `ray doctor --fix` e sai ≠ 0.
+têm auto-fix — só a dica.
+
+**O que o ray diz quando falta.** O `Hint` e o `Fix` de cada `Check` não são
+decoração: o `preflight.Advice` os traduz numa linha acionável — `ray doctor
+--fix` quando o ray sabe instalar sozinho, o `Hint` quando não sabe — e o
+`preflight.MissingRequiredError` é a **única** renderização, herdada tanto pelo
+gate do `init ai` quanto pelo rodapé do `doctor`. A tabela do `doctor` traz a
+mesma coluna `HINT`, preenchida só para o que falta: aconselhar sobre algo
+presente é ruído. Sem nada a aconselhar a coluna nem aparece. Faltando required,
+sai ≠ 0.
+
+Depois de `ray doctor --fix` rodar, o conselho para uma dependência com `Fix`
+deixa de apontar o `--fix`: repetir o comando que acabou de não funcionar é
+pior que não dizer nada. É o que o `preflight.Origin` modela, e é por isso que
+ele é um tipo de três valores e não um booleano.
+
+A mensagem **não** imprime o comando cru do `Fix` — não vale normalizar
+`curl | sh` na saída da ferramenta. Quem quer auditar usa
+`ray doctor --fix --dry-run`, que imprime `+ <comando>` sem executar.
 
 ---
 
