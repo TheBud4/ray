@@ -51,6 +51,32 @@ cd algum-projeto-existente
 ray init ai --profile go
 ```
 
+## O ambiente de IA é versionado
+
+O `ray init ai` escreve o ambiente **dentro do seu repositório**, e ele é para
+ser commitado. Quem clonar recebe os mesmos agentes, skills, regras e servidores
+MCP sem instalar nada — o ambiente viaja com o código em vez de morar na máquina
+de quem o montou.
+
+Por isso o `ray` escreve um bloco no seu `.gitignore` com negações explícitas: o
+conteúdo de IA vendorizado é commitado mesmo que alguma regra anterior o
+ignorasse.
+
+**Commitado:**
+
+`.claude/skills/` · `.claude/agents/` · `.claude/commands/` ·
+`.claude/settings.json` · `.claude/.ray-profile` · `.mcp.json` · `docs/` ·
+`**/.ray-origin` · `**/LICENSE`
+
+**Nunca commitado** — runtime, segredo e material pessoal:
+
+`.claude/.local/` (diário de aprendizado e marcos do modo learn) ·
+`.claude/.ray-metrics/` · `.claude/handoff.md` · `graphify-out/` · `.env` ·
+`*.local`
+
+Ao terminar, o `ray init ai` imprime o `git add` com os caminhos que aquela
+execução criou.
+
 ## Comandos
 
 | Comando | O que faz |

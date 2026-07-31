@@ -973,3 +973,24 @@ func TestFileEditingHooksCoverMultiEdit(t *testing.T) {
 		}
 	}
 }
+
+// TestREADMEExplainsVendoring guarda a resposta à pergunta que o rodapé de
+// próximos passos provoca: por que commitar o que o `ray init ai` acabou de
+// escrever. Sem ela, o I1 termina com uma instrução sem justificativa.
+func TestREADMEExplainsVendoring(t *testing.T) {
+	root := repoRoot(t)
+	data, err := os.ReadFile(filepath.Join(root, "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	txt := string(data)
+	for _, want := range []string{
+		"O ambiente de IA é versionado",
+		".claude/.local/",
+		".mcp.json",
+	} {
+		if !strings.Contains(txt, want) {
+			t.Errorf("README.md does not mention %q", want)
+		}
+	}
+}
