@@ -4,11 +4,19 @@ import (
 	"context"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/TheBud4/ray/internal/runner"
 )
 
 const pythonWantMajor, pythonWantMinor = 3, 10
+
+// lookTimeout limita cada `<nome> --version`. Sem ele um `npx` que não
+// responde trava o processo inteiro — inclusive o `ray` sem subcomando, que é
+// a tela mais vista do CLI e a que menos pode ficar pendurada. Estourar o
+// prazo conta como ausente: uma dependência que não responde em 3s não serve
+// para rodar nada, e Look só sabe dizer sim ou não.
+const lookTimeout = 3 * time.Second
 
 // RunnerLooker é a implementação real de Looker: verifica cada dependência
 // rodando "<nome> --version" através de runner.Runner — a única fronteira de
@@ -29,7 +37,10 @@ func (l RunnerLooker) Look(name string) bool {
 		bin = name
 	}
 
-	res, err := l.Runner.Run(context.Background(), runner.Command{Name: bin, Args: args})
+	ctx, cancel := context.WithTimeout(context.Background(), lookTimeout)
+	defer cancel()
+
+	res, err := l.Runner.Run(ctx, runner.Command{Name: bin, Args: args})
 	if err != nil {
 		return false
 	}
