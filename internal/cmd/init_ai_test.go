@@ -113,3 +113,58 @@ func TestRunInitAIPrintsSummaryAndErrorsOnFailure(t *testing.T) {
 		t.Errorf("output = %q, want it to contain the Failed summary section", out.String())
 	}
 }
+
+func TestPrintInitAISummaryFooterInsideGitRepo(t *testing.T) {
+	var out bytes.Buffer
+	printInitAISummary(&out, initai.Summary{
+		Created:        []string{"CLAUDE.md", ".claude/x", ".mcp.json"},
+		VersionedPaths: []string{".claude", ".mcp.json", "CLAUDE.md"},
+		InGitRepo:      true,
+	})
+	got := out.String()
+	for _, want := range []string{
+		"Next steps",
+		"git add .claude .mcp.json CLAUDE.md",
+		"git commit -m",
+		"claude",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("summary = %q, want it to contain %q", got, want)
+		}
+	}
+	// O proibido leva o fim de linha junto: "git add .claude" contém
+	// "git add ." como substring, e sem a âncora a checagem daria falso positivo.
+	for _, forbidden := range []string{"git add -A", "git add --all", "git add .\n"} {
+		if strings.Contains(got, forbidden) {
+			t.Errorf("summary suggests blind %q, which guard-add.sh warns against", forbidden)
+		}
+	}
+}
+
+func TestPrintInitAISummaryFooterOutsideGitRepo(t *testing.T) {
+	var out bytes.Buffer
+	printInitAISummary(&out, initai.Summary{
+		VersionedPaths: []string{".claude", "CLAUDE.md"},
+		InGitRepo:      false,
+	})
+	got := out.String()
+	if strings.Contains(got, "git ") {
+		t.Errorf("summary = %q, want no git advice outside a repo", got)
+	}
+	if !strings.Contains(got, "claude") {
+		t.Errorf("summary = %q, want it to still suggest running claude", got)
+	}
+}
+
+func TestPrintInitAISummaryNoFooterOnFailure(t *testing.T) {
+	var out bytes.Buffer
+	printInitAISummary(&out, initai.Summary{
+		Failed:         []string{"some/component"},
+		VersionedPaths: []string{".claude"},
+		InGitRepo:      true,
+		HadFailure:     true,
+	})
+	if strings.Contains(out.String(), "Next steps") {
+		t.Error("summary shows next steps after a failure; the environment is half-written")
+	}
+}

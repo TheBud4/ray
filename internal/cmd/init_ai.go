@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -131,4 +132,25 @@ func printInitAISummary(out io.Writer, sum initai.Summary) {
 	printList("Created", sum.Created)
 	printList("Skipped", sum.Skipped)
 	printList("Warnings", sum.Warnings)
+	printNextSteps(out, sum)
+}
+
+// printNextSteps fecha o loop do vendoring (I1): o `ray` escreve o ambiente no
+// repositório do usuário, e sem esta instrução ninguém o commita — um .claude/
+// no disco de uma pessoa só não é ambiente reproduzível.
+//
+// Não aparece quando algum passo falhou: mandar commitar um ambiente escrito
+// pela metade grava o estado quebrado.
+func printNextSteps(out io.Writer, sum initai.Summary) {
+	if sum.HadFailure {
+		return
+	}
+	fmt.Fprintln(out, "\nNext steps:")
+	if sum.InGitRepo && len(sum.VersionedPaths) > 0 {
+		// Caminhos por nome, nunca `git add -A`/`.`: o guard-add.sh que este
+		// mesmo comando acabou de instalar avisa contra add cego.
+		fmt.Fprintf(out, "  git add %s\n", strings.Join(sum.VersionedPaths, " "))
+		fmt.Fprintln(out, `  git commit -m "chore: vendor ai environment"`)
+	}
+	fmt.Fprintln(out, "  claude")
 }
