@@ -119,6 +119,12 @@ func Run(check runner.Runner, opts Options, home Home) (Report, error) {
 
 	rep.Git, rep.DirtyN, rep.AddPaths = checkGit(check, target)
 
+	gitignoreProblems, err := checkGitignore(target)
+	if err != nil {
+		return Report{}, err
+	}
+	rep.Problems = append(rep.Problems, gitignoreProblems...)
+
 	return rep, nil
 }
 

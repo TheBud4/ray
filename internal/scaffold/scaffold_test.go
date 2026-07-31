@@ -994,3 +994,20 @@ func TestREADMEExplainsVendoring(t *testing.T) {
 		}
 	}
 }
+
+// TestGitignoreAccessorsMirrorTheBlock impede que os acessores públicos virem
+// uma segunda fonte de verdade: eles devolvem o mesmo que o bloco escreve.
+func TestGitignoreAccessorsMirrorTheBlock(t *testing.T) {
+	begin, end := GitignoreMarkers()
+	if begin != gitignoreMarkerBegin || end != gitignoreMarkerEnd {
+		t.Errorf("GitignoreMarkers() = %q/%q, want %q/%q", begin, end, gitignoreMarkerBegin, gitignoreMarkerEnd)
+	}
+	if got := GitignoreBaseLines(); !slices.Equal(got, gitignoreBaseLines) {
+		t.Errorf("GitignoreBaseLines() = %v, want %v", got, gitignoreBaseLines)
+	}
+	// Cópia, não alias: mutar o retorno não pode corromper o pacote.
+	GitignoreBaseLines()[0] = "mutated"
+	if gitignoreBaseLines[0] == "mutated" {
+		t.Error("GitignoreBaseLines() returned an alias; a caller can corrupt the block")
+	}
+}

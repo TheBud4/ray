@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 
 	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/runner"
+	"github.com/TheBud4/ray/internal/scaffold"
 	"github.com/TheBud4/ray/internal/store"
 )
 
@@ -270,5 +272,68 @@ func TestGitUnavailableWhenNotARepository(t *testing.T) {
 	}
 	if len(rep.Problems) != 0 {
 		t.Errorf("Problems = %v, want none outside a git repository", rep.Problems)
+	}
+}
+
+// writeGitignore grava um .gitignore com o bloco do ray, omitindo as linhas
+// listadas em drop.
+func writeGitignore(t *testing.T, target string, drop ...string) {
+	t.Helper()
+	begin, end := scaffold.GitignoreMarkers()
+	lines := []string{begin}
+	for _, l := range scaffold.GitignoreBaseLines() {
+		if slices.Contains(drop, l) {
+			continue
+		}
+		lines = append(lines, l)
+	}
+	lines = append(lines, end)
+	body := strings.Join(lines, "\n") + "\n"
+	if err := os.WriteFile(filepath.Join(target, ".gitignore"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGitignoreIntactBlockIsNoProblem(t *testing.T) {
+	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
+	writeGitignore(t, target)
+
+	rep, err := Run(nil, Options{Target: target}, Home{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if len(rep.Problems) != 0 {
+		t.Errorf("Problems = %v, want none for an intact block", rep.Problems)
+	}
+}
+
+func TestGitignoreMissingNegationIsAProblemNamingIt(t *testing.T) {
+	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
+	writeGitignore(t, target, "!.claude/skills/")
+
+	rep, err := Run(nil, Options{Target: target}, Home{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if len(rep.Problems) != 1 {
+		t.Fatalf("Problems = %v, want exactly one", rep.Problems)
+	}
+	if !strings.Contains(rep.Problems[0], "!.claude/skills/") {
+		t.Errorf("Problems[0] = %q, want it to name the missing negation", rep.Problems[0])
+	}
+}
+
+func TestGitignoreMissingBlockIsAProblem(t *testing.T) {
+	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
+	if err := os.WriteFile(filepath.Join(target, ".gitignore"), []byte("node_modules/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := Run(nil, Options{Target: target}, Home{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if len(rep.Problems) != 1 || !strings.Contains(rep.Problems[0], "ray block") {
+		t.Errorf("Problems = %v, want one naming the missing ray block", rep.Problems)
 	}
 }

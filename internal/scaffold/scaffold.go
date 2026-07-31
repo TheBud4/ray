@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"text/template"
 
@@ -189,6 +190,19 @@ var gitignoreBaseLines = []string{
 	".claude/handoff.md",
 	".env",
 	"*.local",
+}
+
+// GitignoreBaseLines devolve uma cópia das linhas do bloco que o ray escreve
+// no .gitignore. Existe para o `ray status` poder verificar se o bloco segue
+// intacto sem duplicar a lista — duas cópias divergiriam, e a whitelist é o
+// que faz o vendoring funcionar.
+func GitignoreBaseLines() []string {
+	return slices.Clone(gitignoreBaseLines)
+}
+
+// GitignoreMarkers devolve os marcadores que delimitam o bloco do ray.
+func GitignoreMarkers() (begin, end string) {
+	return gitignoreMarkerBegin, gitignoreMarkerEnd
 }
 
 // MergeGitignore garante que <target>/.gitignore contenha o bloco do ray

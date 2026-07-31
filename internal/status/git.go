@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/TheBud4/ray/internal/runner"
+	"github.com/TheBud4/ray/internal/scaffold"
 )
 
 // gitScope são os caminhos do ambiente que o status observa. docs/ e CLAUDE.md
@@ -90,14 +91,28 @@ func addPaths(target string) []string {
 }
 
 // environmentTopLevel devolve os caminhos de topo do ambiente presentes em
-// disco. A Task 4 o reescreve para derivar a lista da whitelist do bloco do
-// .gitignore, em vez desta lista fixa.
+// disco, derivados das negações do bloco do .gitignore — a mesma whitelist que
+// define o que é ambiente vendorizado. Padrões com glob (`**/…`) ficam de
+// fora: não são caminho de topo e não servem para `git add`.
 func environmentTopLevel(target string) []string {
 	var out []string
-	for _, p := range gitScope {
-		if _, err := os.Stat(filepath.Join(target, p)); err == nil {
-			out = append(out, p)
+	seen := map[string]bool{}
+	for _, l := range scaffold.GitignoreBaseLines() {
+		if !strings.HasPrefix(l, "!") || strings.Contains(l, "*") {
+			continue
 		}
+		p := strings.TrimSuffix(strings.TrimPrefix(l, "!"), "/")
+		if i := strings.IndexByte(p, '/'); i > 0 {
+			p = p[:i]
+		}
+		if p == "" || seen[p] {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(target, p)); err != nil {
+			continue
+		}
+		seen[p] = true
+		out = append(out, p)
 	}
 	return out
 }
