@@ -12,10 +12,28 @@ import (
 	"github.com/TheBud4/ray/internal/scaffold"
 )
 
-// gitScope são os caminhos do ambiente que o status observa. docs/ e CLAUDE.md
-// ficam de fora de propósito: são do usuário, e flagrar edição deles como
-// drift do ambiente seria falso positivo.
-var gitScope = []string{".claude", ".mcp.json"}
+// gitScopeDenylist são os caminhos da whitelist que o status manda commitar
+// mas não vigia. docs/ é do usuário: flagrar edição dele como drift do
+// ambiente seria falso positivo. CLAUDE.md nem está na whitelist.
+var gitScopeDenylist = map[string]bool{"docs": true}
+
+// gitScope são os caminhos do ambiente que o status observa, derivados da
+// mesma whitelist do .gitignore que define o que é ambiente vendorizado.
+//
+// Derivado, e não fixo, porque a lista fixa dessincronizava em silêncio: a
+// whitelist ganha uma entrada e o status simplesmente para de vigiar parte do
+// ambiente que ele mesmo manda commitar, sem nada falhar. O que sai fica no
+// denylist acima, onde a exclusão é visível.
+func gitScope() []string {
+	var out []string
+	for _, p := range whitelistTopLevel() {
+		if gitScopeDenylist[p] {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
+}
 
 // errNotARepo marca exit ≠ 0 do git. Não vaza para o chamador de Run — vira
 // GitUnavailable.
@@ -35,7 +53,7 @@ func checkGit(check runner.Runner, target string) (GitState, int, []string) {
 		return GitUnavailable, 0, nil
 	}
 
-	tracked, err := gitOut(check, target, append([]string{"ls-files", "--"}, gitScope...))
+	tracked, err := gitOut(check, target, append([]string{"ls-files", "--"}, gitScope()...))
 	if err != nil {
 		return GitUnavailable, 0, nil
 	}
@@ -43,7 +61,7 @@ func checkGit(check runner.Runner, target string) (GitState, int, []string) {
 		return GitNeverTracked, 0, addPaths(target)
 	}
 
-	porcelain, err := gitOut(check, target, append([]string{"status", "--porcelain", "--"}, gitScope...))
+	porcelain, err := gitOut(check, target, append([]string{"status", "--porcelain", "--"}, gitScope()...))
 	if err != nil {
 		return GitUnavailable, 0, nil
 	}
@@ -78,23 +96,32 @@ func countLines(s string) int {
 // `git add` da nota. Deliberadamente por nome, nunca `-A` nem `.`: o
 // guard-add.sh que o próprio ray instala avisa contra add cego.
 func addPaths(target string) []string {
-	seen := map[string]bool{}
-	for _, p := range environmentTopLevel(target) {
-		seen[p] = true
-	}
-	out := make([]string, 0, len(seen))
-	for p := range seen {
-		out = append(out, p)
-	}
+	out := environmentTopLevel(target)
 	sort.Strings(out)
 	return out
 }
 
 // environmentTopLevel devolve os caminhos de topo do ambiente presentes em
-// disco, derivados das negações do bloco do .gitignore — a mesma whitelist que
-// define o que é ambiente vendorizado. Padrões com glob (`**/…`) ficam de
-// fora: não são caminho de topo e não servem para `git add`.
+// disco. É a whitelist inteira, sem o denylist do gitScope: o `git add` da
+// nota tem que oferecer docs/ também, que é conteúdo vendorizado a commitar
+// ainda que o status não o vigie depois.
 func environmentTopLevel(target string) []string {
+	var out []string
+	for _, p := range whitelistTopLevel() {
+		if _, err := os.Stat(filepath.Join(target, p)); err != nil {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+// whitelistTopLevel devolve os caminhos de topo das negações do bloco do
+// .gitignore — a whitelist que define o que é ambiente vendorizado, e a única
+// fonte de verdade sobre isso. Padrões com glob (`**/…`) ficam de fora: não
+// são caminho de topo, e não servem nem como pathspec de git nem para
+// `git add`.
+func whitelistTopLevel() []string {
 	var out []string
 	seen := map[string]bool{}
 	for _, l := range scaffold.GitignoreBaseLines() {
@@ -106,9 +133,6 @@ func environmentTopLevel(target string) []string {
 			p = p[:i]
 		}
 		if p == "" || seen[p] {
-			continue
-		}
-		if _, err := os.Stat(filepath.Join(target, p)); err != nil {
 			continue
 		}
 		seen[p] = true

@@ -267,6 +267,29 @@ func gitFake(lsFiles, porcelain string) *runner.FakeRunner {
 	}}
 }
 
+// O escopo do git tem que seguir a whitelist do .gitignore, não uma lista
+// fixa: as duas dessincronizam em silêncio assim que a whitelist ganha uma
+// entrada, e o status passa a não vigiar parte do ambiente que ele mesmo manda
+// commitar. O denylist é a única exceção, e é explícita.
+func TestGitScopeCoversEveryWhitelistedPath(t *testing.T) {
+	scope := gitScope()
+	for _, l := range scaffold.GitignoreBaseLines() {
+		if !strings.HasPrefix(l, "!") || strings.Contains(l, "*") {
+			continue
+		}
+		p := strings.TrimSuffix(strings.TrimPrefix(l, "!"), "/")
+		if i := strings.IndexByte(p, '/'); i > 0 {
+			p = p[:i]
+		}
+		if p == "" || gitScopeDenylist[p] {
+			continue
+		}
+		if !slices.Contains(scope, p) {
+			t.Errorf("gitScope() = %v, missing %q from the .gitignore whitelist", scope, p)
+		}
+	}
+}
+
 func TestGitNeverTrackedWhenLsFilesIsEmpty(t *testing.T) {
 	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
 
