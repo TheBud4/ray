@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/TheBud4/ray/internal/preflight"
+	"github.com/TheBud4/ray/internal/status"
 )
 
 // runFirstRun imprime a tela de `ray` sem subcomando. Ela orienta, não
@@ -15,12 +16,26 @@ import (
 // Devolve erro só em falha de leitura. Dependência required faltando é alerta
 // na tela, não exit ≠ 0 — quem erra por dependência é o doctor.
 func runFirstRun(l preflight.Looker, target string, out io.Writer) error {
+	facts, err := status.ReadFacts(target)
+	if err != nil {
+		return err
+	}
+
 	fmt.Fprintln(out, "ray — versioned AI environments")
 	printMissingRequired(out, l)
 
-	fmt.Fprintln(out, "\nNext steps:")
-	fmt.Fprintln(out, "  ray new go my-app     new project, environment included")
-	fmt.Fprintln(out, "  ray init ai           environment only, in this directory")
+	if facts.HasEnvironment {
+		fmt.Fprintln(out)
+		printFacts(out, facts.Profile, facts.Inventory)
+		fmt.Fprintln(out, "\nNext steps:")
+		fmt.Fprintln(out, "  claude                start the session")
+		fmt.Fprintln(out, "  ray status            diagnose the environment")
+	} else {
+		fmt.Fprintln(out, "\nNext steps:")
+		fmt.Fprintln(out, "  ray new go my-app     new project, environment included")
+		fmt.Fprintln(out, "  ray init ai           environment only, in this directory")
+	}
+
 	fmt.Fprintln(out, "\n`ray --help` lists every command")
 	return nil
 }

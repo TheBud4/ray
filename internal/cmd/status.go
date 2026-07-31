@@ -75,18 +75,25 @@ func printStatus(out io.Writer, rep status.Report) {
 }
 
 func printStatusFacts(out io.Writer, rep status.Report) {
+	printFacts(out, rep.Profile, rep.Inventory)
+}
+
+// printFacts imprime a linha de fatos do ambiente: perfil e inventário,
+// juntados com · e omitindo o que for zero. Compartilhada com a tela de `ray`
+// sem subcomando para que as duas nomeiem as mesmas coisas do mesmo jeito.
+func printFacts(out io.Writer, profile string, inv status.Inventory) {
 	parts := []string{}
-	if rep.Profile != "" {
-		parts = append(parts, "profile: "+rep.Profile)
+	if profile != "" {
+		parts = append(parts, "profile: "+profile)
 	}
 	for _, p := range []struct {
 		n     int
 		label string
 	}{
-		{rep.Inventory.Skills, "skills"},
-		{rep.Inventory.Agents, "agents"},
-		{rep.Inventory.Commands, "commands"},
-		{rep.Inventory.MCPServers, "MCP servers"},
+		{inv.Skills, "skills"},
+		{inv.Agents, "agents"},
+		{inv.Commands, "commands"},
+		{inv.MCPServers, "MCP servers"},
 	} {
 		if p.n > 0 {
 			parts = append(parts, fmt.Sprintf("%d %s", p.n, p.label))

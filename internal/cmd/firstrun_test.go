@@ -2,9 +2,67 @@ package cmd
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// newEnv monta um .claude/ mínimo em t.TempDir() e devolve o caminho.
+func newEnv(t *testing.T, profileName string) string {
+	t.Helper()
+	target := t.TempDir()
+	skill := filepath.Join(target, ".claude", "skills", "tdd", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(skill), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(skill, []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if profileName != "" {
+		rec := filepath.Join(target, ".claude", ".ray-profile")
+		if err := os.WriteFile(rec, []byte(profileName+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return target
+}
+
+// Dentro de um projeto a tela reconhece o ambiente e faz ponte para o status,
+// em vez de mandar criar um projeto que já existe.
+func TestFirstRunInsideAProjectPointsAtTheSession(t *testing.T) {
+	var out bytes.Buffer
+
+	if err := runFirstRun(stubLooker{"npx": true}, newEnv(t, "go-backend"), &out); err != nil {
+		t.Fatalf("runFirstRun() error = %v", err)
+	}
+	got := out.String()
+	for _, want := range []string{"profile: go-backend", "1 skills", "claude", "ray status"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("output = %q, want it to contain %q", got, want)
+		}
+	}
+	if strings.Contains(got, "ray new go my-app") {
+		t.Errorf("output = %q, want no suggestion to create a project inside one", got)
+	}
+}
+
+// Ambiente copiado à mão: mostra o inventário e omite o perfil, em vez de
+// inventar um.
+func TestFirstRunInsideAProjectWithoutARecordedProfile(t *testing.T) {
+	var out bytes.Buffer
+
+	if err := runFirstRun(stubLooker{"npx": true}, newEnv(t, ""), &out); err != nil {
+		t.Fatalf("runFirstRun() error = %v", err)
+	}
+	got := out.String()
+	if strings.Contains(got, "profile:") {
+		t.Errorf("output = %q, want no profile line without a .ray-profile", got)
+	}
+	if !strings.Contains(got, "1 skills") {
+		t.Errorf("output = %q, want the inventory anyway", got)
+	}
+}
 
 func TestFirstRunOutsideAProjectSuggestsCreatingOne(t *testing.T) {
 	var out bytes.Buffer
