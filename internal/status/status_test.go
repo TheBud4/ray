@@ -2,6 +2,7 @@ package status
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -335,5 +336,62 @@ func TestGitignoreMissingBlockIsAProblem(t *testing.T) {
 	}
 	if len(rep.Problems) != 1 || !strings.Contains(rep.Problems[0], "ray block") {
 		t.Errorf("Problems = %v, want one naming the missing ray block", rep.Problems)
+	}
+}
+
+// writeMCP grava um .mcp.json com um servidor de nome e comando dados.
+func writeMCP(t *testing.T, target, name, command string) {
+	t.Helper()
+	body := fmt.Sprintf(`{"mcpServers":{%q:{"command":%q}}}`, name, command)
+	if err := os.WriteFile(filepath.Join(target, ".mcp.json"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+type stubLooker map[string]bool
+
+func (s stubLooker) Look(name string) bool { return s[name] }
+
+func TestMCPServerWithCommandOnPathIsNoProblem(t *testing.T) {
+	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
+	writeMCP(t, target, "brain", "npx")
+	t.Setenv("RAY_BRAIN", "")
+
+	rep, err := run(nil, stubLooker{"npx": true}, Options{Target: target}, Home{})
+	if err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+	if len(rep.Problems) != 0 {
+		t.Errorf("Problems = %v, want none", rep.Problems)
+	}
+	if rep.Inventory.MCPServers != 1 {
+		t.Errorf("Inventory.MCPServers = %d, want 1", rep.Inventory.MCPServers)
+	}
+}
+
+func TestMCPServerWithCommandOffPathIsAProblem(t *testing.T) {
+	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
+	writeMCP(t, target, "brain", "nao-existe")
+	t.Setenv("RAY_BRAIN", "")
+
+	rep, err := run(nil, stubLooker{}, Options{Target: target}, Home{})
+	if err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+	if len(rep.Problems) != 1 || !strings.Contains(rep.Problems[0], "nao-existe") {
+		t.Errorf("Problems = %v, want one naming the missing command", rep.Problems)
+	}
+}
+
+func TestMCPBrainPathThatDoesNotExistIsAProblem(t *testing.T) {
+	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
+	t.Setenv("RAY_BRAIN", filepath.Join(t.TempDir(), "nao-existe"))
+
+	rep, err := run(nil, stubLooker{}, Options{Target: target}, Home{})
+	if err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+	if len(rep.Problems) != 1 || !strings.Contains(rep.Problems[0], "RAY_BRAIN") {
+		t.Errorf("Problems = %v, want one naming RAY_BRAIN", rep.Problems)
 	}
 }

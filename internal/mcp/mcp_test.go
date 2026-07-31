@@ -3,6 +3,7 @@ package mcp
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -147,5 +148,30 @@ func TestWriteServersDryRunDoesNotWrite(t *testing.T) {
 	}
 	if out.Len() == 0 {
 		t.Fatal("dry-run should print the resulting JSON to out")
+	}
+}
+
+func TestReadServersRoundTripsWhatWriteServersWrote(t *testing.T) {
+	target := t.TempDir()
+	want := []Server{{Name: "brain", Command: "npx", Args: []string{"-y", "x"}}}
+	if err := WriteServers(target, want, false, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ReadServers(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Name != "brain" || got[0].Command != "npx" {
+		t.Errorf("ReadServers() = %+v, want the brain server back", got)
+	}
+}
+
+func TestReadServersIsEmptyWithoutFile(t *testing.T) {
+	got, err := ReadServers(t.TempDir())
+	if err != nil {
+		t.Fatalf("ReadServers() error = %v; a missing .mcp.json is not an error", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("ReadServers() = %+v, want empty", got)
 	}
 }

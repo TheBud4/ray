@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 )
 
 // Server é uma entrada de mcpServers no .mcp.json.
@@ -24,11 +25,40 @@ type serverJSON struct {
 	Env     map[string]string `json:"env,omitempty"`
 }
 
+// fileName é o arquivo de configuração de MCP na raiz do projeto. Constante
+// porque ReadServers e WriteServers têm de concordar sobre ele.
+const fileName = ".mcp.json"
+
+// ReadServers lê os servidores de <target>/.mcp.json, ordenados por nome para
+// a saída ser estável. Arquivo ausente devolve lista vazia sem erro — projeto
+// sem MCP é caso normal, não falha.
+func ReadServers(target string) ([]Server, error) {
+	data, err := os.ReadFile(filepath.Join(target, fileName))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var doc struct {
+		Servers map[string]serverJSON `json:"mcpServers"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return nil, fmt.Errorf("parsing %s: %w", fileName, err)
+	}
+	out := make([]Server, 0, len(doc.Servers))
+	for name, s := range doc.Servers {
+		out = append(out, Server{Name: name, Command: s.Command, Args: s.Args, Env: s.Env})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
+}
+
 // WriteServers mescla servers em <target>/.mcp.json: cada Server é definido por
 // nome (substitui o de mesmo nome, preserva o resto do arquivo). dryRun imprime
 // o resultado em out em vez de gravar.
 func WriteServers(target string, servers []Server, dryRun bool, out io.Writer) error {
-	path := filepath.Join(target, ".mcp.json")
+	path := filepath.Join(target, fileName)
 
 	doc := map[string]any{}
 	if data, err := os.ReadFile(path); err == nil {

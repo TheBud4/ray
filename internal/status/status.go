@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/TheBud4/ray/internal/preflight"
 	"github.com/TheBud4/ray/internal/runner"
 )
 
@@ -87,6 +88,12 @@ func claudeDir(target string) string { return filepath.Join(target, ".claude") }
 // conteúdo do Report, não erro: um comando de diagnóstico que sai ≠ 0 por ter
 // achado o que foi procurar é inútil em qualquer script que o encadeie.
 func Run(check runner.Runner, opts Options, home Home) (Report, error) {
+	return run(check, preflight.RunnerLooker{Runner: runner.ExecRunner{}}, opts, home)
+}
+
+// run é a forma injetável de Run: l resolve presença no PATH. Existe separada
+// porque um teste que consulta o PATH real da máquina não é determinístico.
+func run(check runner.Runner, l preflight.Looker, opts Options, home Home) (Report, error) {
 	var rep Report
 
 	target, err := filepath.Abs(opts.Target)
@@ -124,6 +131,13 @@ func Run(check runner.Runner, opts Options, home Home) (Report, error) {
 		return Report{}, err
 	}
 	rep.Problems = append(rep.Problems, gitignoreProblems...)
+
+	n, mcpProblems, err := checkMCP(l, target)
+	if err != nil {
+		return Report{}, err
+	}
+	rep.Inventory.MCPServers = n
+	rep.Problems = append(rep.Problems, mcpProblems...)
 
 	return rep, nil
 }
