@@ -5,6 +5,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
+
+	"github.com/TheBud4/ray/internal/profile"
+	"github.com/TheBud4/ray/internal/store"
 )
 
 // newTarget monta um projeto com ambiente ray mínimo e devolve o caminho.
@@ -58,5 +63,112 @@ func TestRunCountsInventory(t *testing.T) {
 	}
 	if len(rep.Problems) != 0 {
 		t.Errorf("Problems = %v, want none for a healthy environment", rep.Problems)
+	}
+}
+
+// writeEnv monta receita + registro de perfil e devolve a Home.
+func writeEnv(t *testing.T, target string, comps []profile.Component) Home {
+	t.Helper()
+	base := t.TempDir()
+	home := Home{
+		ProfilesDir: filepath.Join(base, "profiles"),
+		StoreDir:    filepath.Join(base, "store"),
+	}
+	prof := &profile.Profile{Name: "test", Components: comps}
+	if err := os.MkdirAll(home.ProfilesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data, err := yaml.Marshal(prof)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home.ProfilesDir, "test.yaml"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(profile.ProfileRecordPath(target)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(profile.ProfileRecordPath(target), []byte("test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return home
+}
+
+// skillComponent é o componente que os testes de fork usam: via skills, que
+// vendoriza em .claude/skills/<skill>.
+func skillComponent() profile.Component {
+	return profile.Component{Via: profile.ViaSkills, Skill: "tdd", Source: "o/r"}
+}
+
+// seedVendored escreve o conteúdo vendorizado do componente e devolve o hash
+// da árvore como está no disco.
+func seedVendored(t *testing.T, target, body string) string {
+	t.Helper()
+	dir := filepath.Join(target, ".claude", "skills", "tdd")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h, err := store.HashTree(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return h
+}
+
+func TestForksReportPristineWhenDiskMatchesBaseline(t *testing.T) {
+	target := t.TempDir()
+	home := writeEnv(t, target, []profile.Component{skillComponent()})
+	h := seedVendored(t, target, "original\n")
+
+	st := store.New(home.StoreDir)
+	if err := st.SetPristine(target, "skills:o/r#tdd", h); err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := Run(nil, Options{Target: target}, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if len(rep.Forks) != 1 || rep.Forks[0].State != ForkPristine {
+		t.Errorf("Forks = %+v, want one ForkPristine", rep.Forks)
+	}
+}
+
+func TestForksReportEditedWhenDiskDivergedFromBaseline(t *testing.T) {
+	target := t.TempDir()
+	home := writeEnv(t, target, []profile.Component{skillComponent()})
+	seedVendored(t, target, "original\n")
+
+	st := store.New(home.StoreDir)
+	if err := st.SetPristine(target, "skills:o/r#tdd", "0000deadbeef"); err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := Run(nil, Options{Target: target}, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if len(rep.Forks) != 1 || rep.Forks[0].State != ForkEdited {
+		t.Errorf("Forks = %+v, want one ForkEdited", rep.Forks)
+	}
+}
+
+// Sem linha-base o comando não pode afirmar nada offline: store.DecideOverwrite
+// cairia no ramo que compara com o hash upstream, e com ele vazio responderia
+// "não é fork" — errado, e errado na direção perigosa.
+func TestForksReportUnknownWithoutPristineBaseline(t *testing.T) {
+	target := t.TempDir()
+	home := writeEnv(t, target, []profile.Component{skillComponent()})
+	seedVendored(t, target, "original\n")
+
+	rep, err := Run(nil, Options{Target: target}, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if len(rep.Forks) != 1 || rep.Forks[0].State != ForkUnknown {
+		t.Errorf("Forks = %+v, want one ForkUnknown", rep.Forks)
 	}
 }

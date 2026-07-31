@@ -110,6 +110,13 @@ func Run(check runner.Runner, opts Options, home Home) (Report, error) {
 	}
 	rep.Inventory = inv
 
+	name, forks, err := checkForks(check, target, home)
+	if err != nil {
+		return Report{}, err
+	}
+	rep.Profile = name
+	rep.Forks = forks
+
 	return rep, nil
 }
 
