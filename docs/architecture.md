@@ -59,6 +59,7 @@ internal/
 ├── claudecfg/    # merge idempotente de .claude/settings.json
 ├── mcp/          # modelo de servidor MCP + merge idempotente de .mcp.json
 ├── vault/        # valida o cérebro do usuário (valida, nunca cria)
+├── status/       # `ray status`: diagnóstico do ambiente vendorizado; só lê
 │
 ├── economy/      # mecanismos de Token Economy
 ├── metrics/      # proxies de atividade desses mecanismos
@@ -81,7 +82,13 @@ o código sozinho não conta:
   `Runner` por parâmetro. **Uma exceção deliberada:** `spawnEditor`
   (`internal/cmd/profile.go`) usa `exec.Command` direto para abrir o `$EDITOR`,
   porque `runner.Result` bufferiza stdout/stderr e um editor interativo precisa
-  do terminal cru. São as duas únicas importações de `os/exec` no repo.
+  do terminal cru.
+- `os/exec` é importado em **três** lugares, e o terceiro não é exceção à regra:
+  `preflight.PathLooker` chama `exec.LookPath`, que resolve um nome contra o
+  `$PATH` sem criar processo. É o que deixa o `ray status` verificar se o
+  `Command` de um servidor MCP existe sem executar binário de terceiro. Ao
+  encostar aqui, a pergunta é "isto cria processo?", não "isto importa
+  `os/exec`?".
 - Só `preflight` decide se uma dependência externa existe. Não replique a
   checagem no pacote que vai usá-la.
 - `raypaths` é o único que resolve caminho de estado. Nenhum pacote monta

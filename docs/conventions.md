@@ -10,8 +10,8 @@ defasou.
   mensagens de teste e mensagens de commit em **inglês**. Os dois convivem de
   propósito — o comentário explica a decisão para quem mantém, o identificador
   segue o idioma do Go.
-- Todo pacote abre com `// Package <nome> <o que faz>`, uma frase. Vinte pacotes
-  seguem isso; um pacote novo sem doc destoa.
+- Todo pacote abre com `// Package <nome> <o que faz>`, uma frase. Os 21 pacotes
+  de `internal/` seguem isso, sem exceção; um pacote novo sem doc destoa.
 - O comentário explica **decisão, invariante ou risco** — nunca repete o que a
   linha ao lado já diz.
 - Referência a seção de doc de design (`design §8.1`, `build guide §7`) é o
