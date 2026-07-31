@@ -117,6 +117,8 @@ func Run(check runner.Runner, opts Options, home Home) (Report, error) {
 	rep.Profile = name
 	rep.Forks = forks
 
+	rep.Git, rep.DirtyN, rep.AddPaths = checkGit(check, target)
+
 	return rep, nil
 }
 

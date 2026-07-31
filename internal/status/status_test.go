@@ -1,6 +1,7 @@
 package status
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/TheBud4/ray/internal/profile"
+	"github.com/TheBud4/ray/internal/runner"
 	"github.com/TheBud4/ray/internal/store"
 )
 
@@ -170,5 +172,103 @@ func TestForksReportUnknownWithoutPristineBaseline(t *testing.T) {
 	}
 	if len(rep.Forks) != 1 || rep.Forks[0].State != ForkUnknown {
 		t.Errorf("Forks = %+v, want one ForkUnknown", rep.Forks)
+	}
+}
+
+// gitFake devolve um FakeRunner que responde as duas consultas de git com as
+// saídas dadas. A chave é runner.Command.String(), que ignora Dir.
+func gitFake(lsFiles, porcelain string) *runner.FakeRunner {
+	return &runner.FakeRunner{Results: map[string]runner.Result{
+		"git ls-files -- .claude .mcp.json":           {Stdout: lsFiles},
+		"git status --porcelain -- .claude .mcp.json": {Stdout: porcelain},
+	}}
+}
+
+func TestGitNeverTrackedWhenLsFilesIsEmpty(t *testing.T) {
+	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
+
+	rep, err := Run(gitFake("", ""), Options{Target: target}, Home{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if rep.Git != GitNeverTracked {
+		t.Errorf("Git = %v, want GitNeverTracked", rep.Git)
+	}
+	// É o estado normal logo depois do init: nota, nunca problema.
+	if len(rep.Problems) != 0 {
+		t.Errorf("Problems = %v, want none — never-tracked is a note", rep.Problems)
+	}
+	if len(rep.AddPaths) == 0 {
+		t.Error("AddPaths is empty; the note has no git add to offer")
+	}
+}
+
+func TestGitDirtyWhenTrackedAndPorcelainHasOutput(t *testing.T) {
+	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
+
+	rep, err := Run(gitFake(".claude/skills/tdd/SKILL.md\n", " M .claude/skills/tdd/SKILL.md\n?? .claude/agents/new.md\n"),
+		Options{Target: target}, Home{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if rep.Git != GitDirty {
+		t.Errorf("Git = %v, want GitDirty", rep.Git)
+	}
+	if rep.DirtyN != 2 {
+		t.Errorf("DirtyN = %d, want 2", rep.DirtyN)
+	}
+}
+
+func TestGitCleanWhenTrackedAndPorcelainEmpty(t *testing.T) {
+	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
+
+	rep, err := Run(gitFake(".claude/skills/tdd/SKILL.md\n", ""), Options{Target: target}, Home{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if rep.Git != GitClean {
+		t.Errorf("Git = %v, want GitClean", rep.Git)
+	}
+	if len(rep.Problems) != 0 {
+		t.Errorf("Problems = %v, want none for a clean tree", rep.Problems)
+	}
+}
+
+// Binário git ausente: erro do Run. A seção some e nada mais é afetado.
+func TestGitUnavailableWhenCommandFails(t *testing.T) {
+	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
+	failing := &runner.FakeRunner{Err: errors.New(`exec: "git": executable file not found in $PATH`)}
+
+	rep, err := Run(failing, Options{Target: target}, Home{})
+	if err != nil {
+		t.Fatalf("Run() error = %v; a missing git must not fail the command", err)
+	}
+	if rep.Git != GitUnavailable {
+		t.Errorf("Git = %v, want GitUnavailable", rep.Git)
+	}
+	if len(rep.Problems) != 0 {
+		t.Errorf("Problems = %v, want none — an unavailable git is omitted, not a problem", rep.Problems)
+	}
+	if rep.Inventory.Skills != 1 {
+		t.Errorf("Inventory.Skills = %d, want 1; the other checks must be unaffected", rep.Inventory.Skills)
+	}
+}
+
+// Fora de um repositório: exit code ≠ 0, caminho diferente do binário ausente.
+func TestGitUnavailableWhenNotARepository(t *testing.T) {
+	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
+	notARepo := &runner.FakeRunner{Results: map[string]runner.Result{
+		"git ls-files -- .claude .mcp.json": {ExitCode: 128, Stderr: "fatal: not a git repository"},
+	}}
+
+	rep, err := Run(notARepo, Options{Target: target}, Home{})
+	if err != nil {
+		t.Fatalf("Run() error = %v; outside a repo the command must still succeed", err)
+	}
+	if rep.Git != GitUnavailable {
+		t.Errorf("Git = %v, want GitUnavailable", rep.Git)
+	}
+	if len(rep.Problems) != 0 {
+		t.Errorf("Problems = %v, want none outside a git repository", rep.Problems)
 	}
 }
