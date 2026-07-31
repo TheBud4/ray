@@ -25,7 +25,7 @@ func rayOwnHooks(t *testing.T) []profile.ScaffoldFile {
 		}
 	}
 	if len(hooks) == 0 {
-		t.Fatal("SystemFiles(ModeBuild) não trouxe nenhum hook")
+		t.Fatal("SystemFiles(ModeBuild) returned no hooks")
 	}
 	return hooks
 }
@@ -40,7 +40,7 @@ func repoRoot(t *testing.T) string {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil {
-		t.Fatalf("raiz do repositório não encontrada em %s: %v", root, err)
+		t.Fatalf("repository root not found at %s: %v", root, err)
 	}
 	return root
 }
@@ -74,11 +74,11 @@ func TestRayOwnHooksMatchTemplates(t *testing.T) {
 			ownPath := filepath.Join(root, rel)
 			got, err := os.ReadFile(ownPath)
 			if err != nil {
-				t.Fatalf("%s ausente no próprio ray: %v\nRegenere a cópia a partir do template.", h.Path, err)
+				t.Fatalf("%s missing from ray itself: %v\nRegenerate the copy from the template.", h.Path, err)
 			}
 
 			if string(got) != string(want) {
-				t.Errorf("%s divergiu do template %q.\n%s\nRegenere a cópia a partir do template — ela nunca é editada à mão.",
+				t.Errorf("%s diverged from template %q.\n%s\nRegenerate the copy from the template; it is never hand-edited.",
 					h.Path, templateFor[h.Path], firstDiff(string(want), string(got)))
 			}
 
@@ -87,7 +87,7 @@ func TestRayOwnHooksMatchTemplates(t *testing.T) {
 				t.Fatal(err)
 			}
 			if perm := info.Mode().Perm(); perm != 0o755 {
-				t.Errorf("%s tem modo %o, want 755 — o scaffold escreve .sh como executável", h.Path, perm)
+				t.Errorf("%s has mode %o, want 755: scaffold writes .sh as executable", h.Path, perm)
 			}
 		})
 	}
@@ -121,7 +121,7 @@ func TestRayOwnHooksHaveNoStrays(t *testing.T) {
 
 	if len(strays) > 0 {
 		sort.Strings(strays)
-		t.Errorf(".claude/hooks/ tem %v, que o scaffold não escreve em modo build; remova ou acrescente a SystemFiles", strays)
+		t.Errorf(".claude/hooks/ has %v, which scaffold does not write in build mode; remove it or add it to SystemFiles", strays)
 	}
 }
 

@@ -126,10 +126,10 @@ func TestCheckProgressCountsIntersectionAfterRenegotiation(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(progress), "1/2") {
-		t.Errorf("progresso = %q, want \"1/2\" (interseção com a lista corrente, não len(passed)=3 sobre len(milestones)=2)", progress)
+		t.Errorf("progress = %q, want \"1/2\" (intersection with the current list, not len(passed)=3 over len(milestones)=2)", progress)
 	}
 	if strings.Contains(string(progress), "3/2") {
-		t.Errorf("progresso = %q, contém o bug \"3/2\" (histórico usado como numerador)", progress)
+		t.Errorf("progress = %q, contains the \"3/2\" bug (history used as numerator)", progress)
 	}
 }
 
@@ -149,7 +149,7 @@ func TestCheckReRendersProgressAfterRenegotiationWithoutApproval(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(progressBefore), "All milestones complete") {
-		t.Fatalf("progresso antes = %q, want \"All milestones complete\" (setup)", progressBefore)
+		t.Fatalf("progress before = %q, want \"All milestones complete\" (setup)", progressBefore)
 	}
 
 	renegotiated := []profile.Milestone{
@@ -165,10 +165,10 @@ func TestCheckReRendersProgressAfterRenegotiationWithoutApproval(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(progressAfter), "New goal") {
-		t.Errorf("progresso = %q, want mencionar o marco renegociado \"New goal\" mesmo sem aprovação", progressAfter)
+		t.Errorf("progress = %q, want it to mention the renegotiated milestone \"New goal\" even without a pass", progressAfter)
 	}
 	if strings.Contains(string(progressAfter), "All milestones complete") {
-		t.Errorf("progresso = %q, ainda mostra o estado velho (\"All milestones complete\") depois da renegociação", progressAfter)
+		t.Errorf("progress = %q, still shows the stale state (\"All milestones complete\") after renegotiation", progressAfter)
 	}
 }
 
@@ -190,7 +190,7 @@ func TestCheckNeverTouchesTheJournal(t *testing.T) {
 		t.Fatalf("Check() error = %v", err)
 	}
 	if !ok {
-		t.Fatal("Check() ok = false, want true com marcos definidos")
+		t.Fatal("Check() ok = false, want true with milestones defined")
 	}
 
 	got, err := os.ReadFile(headPath(target))
@@ -198,15 +198,15 @@ func TestCheckNeverTouchesTheJournal(t *testing.T) {
 		t.Fatal(err)
 	}
 	if string(got) != journal {
-		t.Errorf("Check() reescreveu o diário.\n got: %q\nwant: %q", got, journal)
+		t.Errorf("Check() rewrote the journal.\n got: %q\nwant: %q", got, journal)
 	}
 
 	progress, err := os.ReadFile(MilestonesProgressPath(target))
 	if err != nil {
-		t.Fatalf("progresso não foi escrito: %v", err)
+		t.Fatalf("progress was not written: %v", err)
 	}
 	if !strings.Contains(string(progress), "1/2") {
-		t.Errorf("progresso = %q, want conter \"1/2\"", progress)
+		t.Errorf("progress = %q, want it to contain \"1/2\"", progress)
 	}
 }
 
@@ -235,17 +235,17 @@ func TestCheckFailTouchesNothing(t *testing.T) {
 	// que ele reflete a lista corrente de milestones a cada chamada, não só
 	// nas aprovações (correção 1b).
 	if _, err := os.Stat(headPath(target)); !os.IsNotExist(err) {
-		t.Error("diário não deveria existir após reprovação — é da IA, ray nunca escreve nele")
+		t.Error("journal must not exist after a failed check: it belongs to the assistant, ray never writes it")
 	}
 	if _, err := os.Stat(PassedPath(target)); !os.IsNotExist(err) {
-		t.Error("milestones-passed.yaml não deveria existir após reprovação — nenhum marco cruzou")
+		t.Error("milestones-passed.yaml must not exist after a failed check: no milestone was crossed")
 	}
 	progress, err := os.ReadFile(MilestonesProgressPath(target))
 	if err != nil {
-		t.Fatalf("progresso deveria ser re-renderizado mesmo em reprovação: %v", err)
+		t.Fatalf("progress must be re-rendered even on a failed check: %v", err)
 	}
 	if !strings.Contains(string(progress), "0/2") {
-		t.Errorf("progresso = %q, want conter \"0/2\"", progress)
+		t.Errorf("progress = %q, want it to contain \"0/2\"", progress)
 	}
 }
 
@@ -325,7 +325,7 @@ func TestLoadMilestonesPrefersLocal(t *testing.T) {
 		t.Fatalf("LoadMilestones() error = %v", err)
 	}
 	if len(got) != 1 || got[0].Goal != "API responde GET /tasks" {
-		t.Errorf("LoadMilestones() = %v, want o marco negociado local", got)
+		t.Errorf("LoadMilestones() = %v, want the locally negotiated milestone", got)
 	}
 }
 
@@ -341,7 +341,7 @@ func TestLoadMilestonesRejectsBrokenLocalFile(t *testing.T) {
 	// Cair calado na receita esconderia o arquivo quebrado do aluno, que foi
 	// quem pediu para gravá-lo.
 	if _, err := LoadMilestones(target, milestones()); err == nil {
-		t.Fatal("LoadMilestones() error = nil, want erro de parse")
+		t.Fatal("LoadMilestones() error = nil, want a parse error")
 	}
 }
 
@@ -356,10 +356,10 @@ func TestLoadMilestonesRejectsEmptyFile(t *testing.T) {
 
 	_, err := LoadMilestones(target, milestones())
 	if err == nil {
-		t.Fatal("LoadMilestones() error = nil, want erro: arquivo vazio não pode virar [] silenciosamente")
+		t.Fatal("LoadMilestones() error = nil, want an error: an empty file must not silently become []")
 	}
 	if !strings.Contains(err.Error(), LocalMilestonesPath(target)) {
-		t.Errorf("erro = %q, want citar %q", err, LocalMilestonesPath(target))
+		t.Errorf("error = %q, want it to cite %q", err, LocalMilestonesPath(target))
 	}
 }
 
@@ -374,10 +374,10 @@ func TestLoadMilestonesRejectsMilestonesKeyWithoutItems(t *testing.T) {
 
 	_, err := LoadMilestones(target, milestones())
 	if err == nil {
-		t.Fatal("LoadMilestones() error = nil, want erro: chave milestones sem itens")
+		t.Fatal("LoadMilestones() error = nil, want an error: milestones key with no items")
 	}
 	if !strings.Contains(err.Error(), LocalMilestonesPath(target)) {
-		t.Errorf("erro = %q, want citar %q", err, LocalMilestonesPath(target))
+		t.Errorf("error = %q, want it to cite %q", err, LocalMilestonesPath(target))
 	}
 }
 
@@ -393,10 +393,10 @@ func TestLoadMilestonesRejectsItemWithoutGoal(t *testing.T) {
 
 	_, err := LoadMilestones(target, milestones())
 	if err == nil {
-		t.Fatal("LoadMilestones() error = nil, want erro: item sem goal viraria \"\" e contaria como cruzado para sempre")
+		t.Fatal("LoadMilestones() error = nil, want an error: an item without goal would become \"\" e contaria como cruzado para sempre")
 	}
 	if !strings.Contains(err.Error(), LocalMilestonesPath(target)) {
-		t.Errorf("erro = %q, want citar %q", err, LocalMilestonesPath(target))
+		t.Errorf("error = %q, want it to cite %q", err, LocalMilestonesPath(target))
 	}
 }
 
@@ -412,10 +412,10 @@ func TestLoadMilestonesRejectsItemWithoutVerify(t *testing.T) {
 
 	_, err := LoadMilestones(target, milestones())
 	if err == nil {
-		t.Fatal("LoadMilestones() error = nil, want erro em vez de estourar só na hora do check")
+		t.Fatal("LoadMilestones() error = nil, want an error instead of blowing up later at check time")
 	}
 	if !strings.Contains(err.Error(), LocalMilestonesPath(target)) {
-		t.Errorf("erro = %q, want citar %q", err, LocalMilestonesPath(target))
+		t.Errorf("error = %q, want it to cite %q", err, LocalMilestonesPath(target))
 	}
 }
 
@@ -455,7 +455,7 @@ func TestCheckRerendersProgressWhenVerifyCannotRun(t *testing.T) {
 	novos := []profile.Milestone{{Goal: "marco novo", Verify: "binario-que-nao-existe"}}
 	falha := &runner.FakeRunner{Err: errors.New("exec: binário não encontrado")}
 	if _, _, err := Check(falha, target, novos); err == nil {
-		t.Fatal("Check() = nil error, want o erro de execução do runner")
+		t.Fatal("Check() = nil error, want the runner execution error")
 	}
 
 	got, err := os.ReadFile(MilestonesProgressPath(target))
@@ -463,9 +463,9 @@ func TestCheckRerendersProgressWhenVerifyCannotRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !strings.Contains(string(got), "marco novo") {
-		t.Errorf("progresso não acompanhou a renegociação: %q", got)
+		t.Errorf("progress did not follow the renegotiation: %q", got)
 	}
 	if strings.Contains(string(got), "marco antigo") {
-		t.Errorf("progresso ainda anuncia o marco da lista anterior: %q", got)
+		t.Errorf("progress still announces the milestone from the previous list: %q", got)
 	}
 }

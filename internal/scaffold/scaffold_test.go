@@ -357,12 +357,12 @@ func TestEnsureTemplatesKeepsLocallyEditedFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	if string(got) != string(custom) {
-		t.Fatalf("EnsureTemplates sobrescreveu arquivo editado: got %q, want %q", got, custom)
+		t.Fatalf("EnsureTemplates overwrote an edited file: got %q, want %q", got, custom)
 	}
 	if act := actionFor(synced, "CLAUDE.md.tmpl"); act.Action != TemplateKept {
 		t.Fatalf("action = %q, want %q", act.Action, TemplateKept)
 	} else if act.Reason == "" {
-		t.Error("Kept sem Reason — o usuário não fica sabendo por que o arquivo não atualizou")
+		t.Error("Kept without a Reason: the user is not told why the file did not update")
 	}
 }
 
@@ -404,14 +404,14 @@ func TestEnsureTemplatesRefreshesUntouchedStaleFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	if string(got) == string(stale) {
-		t.Fatal("overlay intocado e defasado não foi atualizado — o embed segue sombreado")
+		t.Fatal("untouched stale overlay was not refreshed: the embed is still shadowed")
 	}
 	fresh, err := embedded.ReadFile(templatesRoot + "/" + rel)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(got) != string(fresh) {
-		t.Error("overlay atualizado não bate com o embed")
+		t.Error("refreshed overlay does not match the embed")
 	}
 
 	act := actionFor(synced, rel)
@@ -419,7 +419,7 @@ func TestEnsureTemplatesRefreshesUntouchedStaleFile(t *testing.T) {
 		t.Fatalf("action = %q, want %q", act.Action, TemplateRefreshed)
 	}
 	if act.Hash != store.HashBytes(fresh) {
-		t.Error("Hash devolvido não é o do conteúdo gravado — a linha-base nova ficaria errada")
+		t.Error("returned Hash is not that of the written content: the new baseline would be wrong")
 	}
 }
 
@@ -441,7 +441,7 @@ func TestEnsureTemplatesForceOverwritesEditedFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	if string(got) == "editado à mão" {
-		t.Error("--force não sobrescreveu o overlay editado")
+		t.Error("--force did not overwrite the edited overlay")
 	}
 }
 
@@ -496,13 +496,13 @@ func TestClaudeMdKeepsSectionOrder(t *testing.T) {
 		}
 	}
 	if !slices.Equal(got, want) {
-		t.Fatalf("seções = %v, want %v", got, want)
+		t.Fatalf("sections = %v, want %v", got, want)
 	}
 
 	// Toda seção aberta precisa fechar, ou o bloco vira lixo no prompt.
 	for _, s := range want {
 		if !strings.Contains(string(body), "</"+s+">") {
-			t.Errorf("seção <%s> não é fechada", s)
+			t.Errorf("section <%s> is not closed", s)
 		}
 	}
 }
@@ -549,7 +549,7 @@ func TestDestilarCommandCarriesLoadBearingRules(t *testing.T) {
 		"docs/conventions.md",
 	} {
 		if !strings.Contains(txt, s) {
-			t.Errorf("destilar.md perdeu a tabela seção→destino: falta %q", s)
+			t.Errorf("destilar.md lost the section-to-destination table: missing %q", s)
 		}
 	}
 }
@@ -571,12 +571,12 @@ func TestDocsReadmeLoopEndsInDistillation(t *testing.T) {
 	txt := string(body)
 
 	if !strings.Contains(txt, "/destilar") {
-		t.Error("o laço precisa terminar em /destilar")
+		t.Error("the loop must end at /destilar")
 	}
 	// A spec fica no cérebro. Se o README voltar a mandar publicá-la em
 	// docs/specs/, o laço contradiz a regra de roteamento.
 	if strings.Contains(txt, "docs/specs/") {
-		t.Error("docs/README.md não pode mandar publicar spec em docs/specs/")
+		t.Error("docs/README.md must not tell anyone to publish specs under docs/specs/")
 	}
 }
 
@@ -584,7 +584,7 @@ func TestSpecTemplateIsNotScaffolded(t *testing.T) {
 	// A spec vive no cérebro; o template dela também. Scaffoldar um
 	// TEMPLATE.md no repo cria uma segunda fonte que diverge da primeira.
 	if _, ok := templateFor["docs/specs/TEMPLATE.md"]; ok {
-		t.Error("docs/specs/TEMPLATE.md não deve mais ser scaffoldado")
+		t.Error("docs/specs/TEMPLATE.md must no longer be scaffolded")
 	}
 }
 
@@ -609,7 +609,7 @@ func TestWorkflowStep8DelegatesToDestilar(t *testing.T) {
 	}
 	// Orçamento do cabeçalho: o arquivo entra em contexto em todo turno.
 	if n := strings.Count(txt, "\n"); n > 300 {
-		t.Errorf("CLAUDE.md = %d linhas, orçamento é 300", n)
+		t.Errorf("CLAUDE.md = %d lines, budget is 300", n)
 	}
 }
 
@@ -635,7 +635,7 @@ func TestHandoffAndRevisarDoNotReadDocsSpecs(t *testing.T) {
 			t.Fatal(err)
 		}
 		if strings.Contains(string(body), "docs/specs/") {
-			t.Errorf("%s não pode ler a spec em docs/specs/", p)
+			t.Errorf("%s must not read the spec from docs/specs/", p)
 		}
 	}
 }
@@ -691,7 +691,7 @@ func TestGitignoreIgnoresHandoff(t *testing.T) {
 	// Sem uma linha explícita ele fica untracked para sempre e cada projeto
 	// decide por acidente.
 	if !strings.Contains(got, ".claude/handoff.md") {
-		t.Errorf("bloco do .gitignore não menciona .claude/handoff.md:\n%s", got)
+		t.Errorf(".gitignore block does not mention .claude/handoff.md:\n%s", got)
 	}
 	// Precisa estar na blacklist, não negado no whitelist.
 	if strings.Contains(got, "!.claude/handoff.md") {
@@ -724,7 +724,7 @@ func TestRevisarAsksForCrossFamilyReview(t *testing.T) {
 		"ponto cego",
 	} {
 		if !strings.Contains(txt, want) {
-			t.Errorf("revisar.md não pede revisor de outra família: falta %q", want)
+			t.Errorf("revisar.md does not ask for a reviewer from another model family: missing %q", want)
 		}
 	}
 }
@@ -794,7 +794,7 @@ func TestGuardAddWarnsOnBlindAdd(t *testing.T) {
 			res := runHook(t, "guard-add.sh", payload)
 
 			if res.ExitCode != 0 {
-				t.Fatalf("ExitCode = %d, want 0 — hook de aviso nunca falha", res.ExitCode)
+				t.Fatalf("ExitCode = %d, want 0: a warning hook never fails", res.ExitCode)
 			}
 			warned := strings.Contains(res.Stdout, "systemMessage")
 			if warned != tc.warns {
@@ -882,7 +882,7 @@ func TestGuardVocabWarnsOnDeliveredArtifacts(t *testing.T) {
 				t.Errorf("avisou = %v, want %v (exit %d, stderr %q)", warned, tc.warns, res.ExitCode, res.Stderr)
 			}
 			if warned && !strings.Contains(res.Stderr, tc.relPath) {
-				t.Errorf("stderr não nomeia o arquivo: %q", res.Stderr)
+				t.Errorf("stderr does not name the file: %q", res.Stderr)
 			}
 		})
 	}
@@ -911,7 +911,7 @@ func TestGuardPlansWarnsOnRepoPlans(t *testing.T) {
 			res := runHook(t, "guard-plans.sh", payload)
 
 			if res.ExitCode != 0 {
-				t.Fatalf("ExitCode = %d, want 0 — hook de aviso nunca falha", res.ExitCode)
+				t.Fatalf("ExitCode = %d, want 0: a warning hook never fails", res.ExitCode)
 			}
 			warned := strings.Contains(res.Stdout, "systemMessage")
 			if warned != tc.warns {
@@ -940,13 +940,13 @@ func TestClaudeMdNamesPlanDestination(t *testing.T) {
 	// A skill escreve onde a instrução mandar. Sem o destino nomeado aqui, ela
 	// usa o default dela — docs/superpowers/ — e o hook só avisa depois.
 	if !strings.Contains(txt, "plano e design") {
-		t.Error("CLAUDE.md não diz onde plano e design moram")
+		t.Error("CLAUDE.md does not say where plans and designs live")
 	}
 	if !strings.Contains(txt, "superpowers") {
-		t.Error("CLAUDE.md não nomeia o diretório que não deve ser usado")
+		t.Error("CLAUDE.md does not name the directory that must not be used")
 	}
 	if n := strings.Count(txt, "\n"); n > 300 {
-		t.Errorf("CLAUDE.md = %d linhas, orçamento é 300", n)
+		t.Errorf("CLAUDE.md = %d lines, budget is 300", n)
 	}
 }
 

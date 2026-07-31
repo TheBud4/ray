@@ -57,7 +57,7 @@ func TestLearnOverlayWritesTeachingPrompt(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(build, ".claude/rules/learn-teaching.md")); !os.IsNotExist(err) {
-		t.Error("modo build escreveu o prompt de ensino; ele é do overlay de learn")
+		t.Error("build mode wrote the teaching prompt; it belongs to the learn overlay")
 	}
 
 	learn := t.TempDir()
@@ -66,7 +66,7 @@ func TestLearnOverlayWritesTeachingPrompt(t *testing.T) {
 	}
 	got, err := os.ReadFile(filepath.Join(learn, ".claude/rules/learn-teaching.md"))
 	if err != nil {
-		t.Fatalf("prompt de ensino não foi escrito: %v", err)
+		t.Fatalf("teaching prompt was not written: %v", err)
 	}
 
 	// Os pilares do redesenho, mais o exemplo de milestones.yaml. Se um pilar
@@ -87,7 +87,7 @@ func TestLearnOverlayWritesTeachingPrompt(t *testing.T) {
 		"npm test -- tasks.e2e",                // exemplo de milestones.yaml
 	} {
 		if !strings.Contains(string(got), want) {
-			t.Errorf("prompt de ensino não menciona %q", want)
+			t.Errorf("teaching prompt does not mention %q", want)
 		}
 	}
 }
@@ -193,19 +193,19 @@ func requireDeny(t *testing.T, out, ctx string) {
 		} `json:"hookSpecificOutput"`
 	}
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
-		t.Fatalf("%s: saída não é JSON válido (%v): %q", ctx, err, out)
+		t.Fatalf("%s: output is not valid JSON (%v): %q", ctx, err, out)
 	}
 	if got.Decision != "" {
-		t.Errorf("%s: usa o campo legado \"decision\" de topo, desaconselhado em PreToolUse: %q", ctx, out)
+		t.Errorf("%s: uses the legacy top-level \"decision\" field, discouraged for PreToolUse: %q", ctx, out)
 	}
 	if got.HookSpecificOutput.HookEventName != "PreToolUse" {
 		t.Errorf("%s: hookEventName = %q, want \"PreToolUse\"", ctx, got.HookSpecificOutput.HookEventName)
 	}
 	if got.HookSpecificOutput.PermissionDecision != "deny" {
-		t.Fatalf("%s: permissionDecision = %q, want \"deny\" — o piso do modo learn não está negando", ctx, got.HookSpecificOutput.PermissionDecision)
+		t.Fatalf("%s: permissionDecision = %q, want \"deny\": the learn-mode floor is not denying", ctx, got.HookSpecificOutput.PermissionDecision)
 	}
 	if strings.TrimSpace(got.HookSpecificOutput.PermissionDecisionReason) == "" {
-		t.Errorf("%s: negação sem motivo — a IA não tem o que explicar ao aluno", ctx)
+		t.Errorf("%s: denial without a reason: the assistant has nothing to explain to the student", ctx)
 	}
 }
 
@@ -273,7 +273,7 @@ func runGuardCodeWithoutJQ(t *testing.T, scriptPath, filePath string) string {
 	cmd.Stdout = &out
 	cmd.Stderr = &out
 	if err := cmd.Run(); err != nil {
-		t.Fatalf("guard-code.sh sem jq falhou: %v\noutput: %s", err, out.String())
+		t.Fatalf("guard-code.sh without jq failed: %v\noutput: %s", err, out.String())
 	}
 	return out.String()
 }
@@ -290,9 +290,9 @@ func TestGuardCodeBlocksWhenJQMissing(t *testing.T) {
 	// Um .md é permitido quando jq existe; sem jq o hook não tem como saber
 	// disso, e a resposta certa é bloquear, não deixar passar.
 	out := runGuardCodeWithoutJQ(t, scriptPath, filepath.Join(target, "docs/x.md"))
-	requireDeny(t, out, "sem jq")
+	requireDeny(t, out, "without jq")
 	if !strings.Contains(out, "jq") {
-		t.Errorf("a mensagem não diz que falta jq: %q", out)
+		t.Errorf("the message does not say jq is missing: %q", out)
 	}
 }
 
@@ -337,7 +337,7 @@ func TestGuardCodeAllowsClaudeDirReachedThroughSymlink(t *testing.T) {
 	}
 	link := filepath.Join(root, "link")
 	if err := os.Symlink(physical, link); err != nil {
-		t.Skipf("symlink não suportado: %v", err)
+		t.Skipf("symlink not supported: %v", err)
 	}
 	scriptPath := filepath.Join(physical, ".claude/hooks/guard-code.sh")
 
@@ -353,22 +353,22 @@ func TestGuardCodeAllowsClaudeDirReachedThroughSymlink(t *testing.T) {
 		pwd      string
 		filePath string
 	}{
-		{"pwd lógico, file_path físico", link, filepath.Join(realRoot, ".claude/.local/milestones.yaml")},
-		{"pwd lógico, file_path lógico", link, filepath.Join(link, ".claude/.local/milestones.yaml")},
-		{"pwd físico, file_path físico", realRoot, filepath.Join(realRoot, ".claude/.local/milestones.yaml")},
+		{"logical pwd, physical file_path", link, filepath.Join(realRoot, ".claude/.local/milestones.yaml")},
+		{"logical pwd, logical file_path", link, filepath.Join(link, ".claude/.local/milestones.yaml")},
+		{"physical pwd, physical file_path", realRoot, filepath.Join(realRoot, ".claude/.local/milestones.yaml")},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			out := runGuardCodeIn(t, scriptPath, link, tc.pwd, tc.filePath)
 			if strings.TrimSpace(out) != "" {
-				t.Errorf("guard-code bloqueou escrita legítima em .claude/.local/: %q", out)
+				t.Errorf("guard-code denied a legitimate write to .claude/.local/: %q", out)
 			}
 		})
 	}
 
 	// O contrário segue valendo: código continua negado por qualquer das formas.
 	out := runGuardCodeIn(t, scriptPath, link, link, filepath.Join(realRoot, "main.go"))
-	requireDeny(t, out, "main.go via symlink")
+	requireDeny(t, out, "main.go through symlink")
 }
 
 func TestGuardCodeAllowsTheScratchDir(t *testing.T) {

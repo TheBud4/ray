@@ -358,7 +358,7 @@ func TestValidateMilestonesIsIndependentOfProfileRules(t *testing.T) {
 
 	p := Profile{Milestones: ms} // sem Name: viola regra de receita
 	if err := p.Validate(); err == nil {
-		t.Fatal("Profile.Validate() = nil, want erro de name — a regra global precisa continuar valendo para receita")
+		t.Fatal("Profile.Validate() = nil, want a name error: the recipe-level rule must still apply")
 	}
 }
 
@@ -367,13 +367,13 @@ func TestValidateMilestonesRejectsIncompleteItems(t *testing.T) {
 		name string
 		ms   []Milestone
 	}{
-		{"sem goal", []Milestone{{Verify: "go test ./..."}}},
-		{"sem verify", []Milestone{{Goal: "rodar os testes"}}},
+		{"missing goal", []Milestone{{Verify: "go test ./..."}}},
+		{"missing verify", []Milestone{{Goal: "rodar os testes"}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			if err := ValidateMilestones(tc.ms); err == nil {
-				t.Fatal("ValidateMilestones() = nil, want erro")
+				t.Fatal("ValidateMilestones() = nil, want an error")
 			}
 		})
 	}
@@ -384,6 +384,6 @@ func TestValidateMilestonesRejectsIncompleteItems(t *testing.T) {
 func TestProfileValidateStillCatchesBrokenMilestone(t *testing.T) {
 	p := Profile{Name: "go", Milestones: []Milestone{{Goal: "sem verify"}}}
 	if err := p.Validate(); err == nil {
-		t.Fatal("Profile.Validate() = nil, want erro do marco sem verify")
+		t.Fatal("Profile.Validate() = nil, want the error from the milestone missing verify")
 	}
 }

@@ -109,12 +109,12 @@ func TestRunIncludesOptionalJQ(t *testing.T) {
 		}
 	}
 	if jq == nil {
-		t.Fatal("Run() não inclui check para jq; os hooks scaffoldados dependem dele")
+		t.Fatal("Run() has no jq check; the scaffolded hooks depend on it")
 	}
 	if jq.Required {
-		t.Error("jq Required = true, want false — hook sem jq faz no-op, não quebra")
+		t.Error("jq Required = true, want false: a hook without jq no-ops, it does not break")
 	}
 	if jq.Hint == "" {
-		t.Error("jq Hint vazio; sem hint o ray doctor não diz o que fazer")
+		t.Error("jq Hint is empty; without it ray doctor cannot say what to do")
 	}
 }
