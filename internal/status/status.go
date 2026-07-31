@@ -117,12 +117,13 @@ func run(check runner.Runner, l preflight.Looker, opts Options, home Home) (Repo
 	}
 	rep.Inventory = inv
 
-	name, forks, err := checkForks(check, target, home)
+	name, forks, forkProblems, err := checkForks(check, target, home)
 	if err != nil {
 		return Report{}, err
 	}
 	rep.Profile = name
 	rep.Forks = forks
+	rep.Problems = append(rep.Problems, forkProblems...)
 
 	rep.Git, rep.DirtyN, rep.AddPaths = checkGit(check, target)
 

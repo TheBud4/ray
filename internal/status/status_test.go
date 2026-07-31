@@ -178,6 +178,47 @@ func TestForksReportUnknownWithoutPristineBaseline(t *testing.T) {
 	}
 }
 
+// Sem registro de perfil não há o que comparar, e isso é normal: um .claude/
+// pode ter sido copiado à mão. O silêncio aqui é o que dá sentido ao aviso do
+// teste seguinte.
+func TestForksAreSilentWithoutARecordedProfile(t *testing.T) {
+	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
+
+	rep, err := Run(nil, Options{Target: target}, Home{ProfilesDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if len(rep.Problems) != 0 {
+		t.Errorf("Problems = %v, want none — a hand-copied .claude/ is normal", rep.Problems)
+	}
+	if len(rep.Forks) != 0 {
+		t.Errorf("Forks = %+v, want none without a recipe to compare against", rep.Forks)
+	}
+}
+
+// Receita registrada mas ilegível é outra coisa: o .ray-profile está lá, então
+// o ray montou este ambiente, e mesmo assim a receita não carrega. Engolir esse
+// erro junto com o caso normal deixa o usuário sem `profile:` na saída e sem
+// nenhuma pista do porquê.
+func TestForksReportProblemWhenRecordedProfileIsUnreadable(t *testing.T) {
+	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
+	writeRayProfile(t, target)
+
+	rep, err := Run(nil, Options{Target: target}, Home{ProfilesDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("Run() error = %v; an unreadable recipe is a finding, not a read failure", err)
+	}
+	if len(rep.Problems) != 1 {
+		t.Fatalf("Problems = %v, want exactly one", rep.Problems)
+	}
+	if !strings.Contains(rep.Problems[0], "profile") {
+		t.Errorf("Problems[0] = %q, want it to name the profile", rep.Problems[0])
+	}
+	if rep.Profile != "" {
+		t.Errorf("Profile = %q, want empty when the recipe did not load", rep.Profile)
+	}
+}
+
 // gitFake devolve um FakeRunner que responde as duas consultas de git com as
 // saídas dadas. A chave é runner.Command.String(), que ignora Dir.
 func gitFake(lsFiles, porcelain string) *runner.FakeRunner {
@@ -318,10 +359,10 @@ func TestGitignoreIntactBlockIsNoProblem(t *testing.T) {
 
 func TestGitignoreMissingNegationIsAProblemNamingIt(t *testing.T) {
 	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
-	writeRayProfile(t, target)
+	home := writeEnv(t, target, nil)
 	writeGitignore(t, target, "!.claude/skills/")
 
-	rep, err := Run(nil, Options{Target: target}, Home{})
+	rep, err := Run(nil, Options{Target: target}, home)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -335,12 +376,12 @@ func TestGitignoreMissingNegationIsAProblemNamingIt(t *testing.T) {
 
 func TestGitignoreMissingBlockIsAProblem(t *testing.T) {
 	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
-	writeRayProfile(t, target)
+	home := writeEnv(t, target, nil)
 	if err := os.WriteFile(filepath.Join(target, ".gitignore"), []byte("node_modules/\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	rep, err := Run(nil, Options{Target: target}, Home{})
+	rep, err := Run(nil, Options{Target: target}, home)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}

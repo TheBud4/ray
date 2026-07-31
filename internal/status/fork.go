@@ -1,6 +1,7 @@
 package status
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -18,12 +19,25 @@ import (
 // decisão dela é exatamente `disco == pristino`, que é o que fazemos aqui;
 // sem pristino ela precisaria do upstream, e é por isso que esse caso vira
 // ForkUnknown em vez de um palpite.
-func checkForks(check runner.Runner, target string, home Home) (string, []ComponentState, error) {
+//
+// O terceiro retorno são problemas para o Report, não erros: falhar o comando
+// por causa de uma receita ilegível contradiria o exit code 0 do status.
+func checkForks(check runner.Runner, target string, home Home) (string, []ComponentState, []string, error) {
+	// Sem registro de perfil não há o que comparar, e isso é normal: um
+	// .claude/ pode ter sido copiado à mão. Com o registro presente, porém, o
+	// ray montou este ambiente — aí uma receita que não carrega é achado, não
+	// silêncio. Distinguir os dois exige olhar o registro antes: LoadForTarget
+	// devolve um erro só para os dois casos.
+	if _, err := os.Stat(profile.ProfileRecordPath(target)); err != nil {
+		if os.IsNotExist(err) {
+			return "", nil, nil, nil
+		}
+		return "", nil, nil, err
+	}
+
 	prof, err := profile.LoadForTarget(home.ProfilesDir, target, "")
 	if err != nil {
-		// Sem receita registrada não há o que comparar. Não é erro do
-		// comando: um .claude/ pode ter sido copiado à mão.
-		return "", nil, nil
+		return "", nil, []string{fmt.Sprintf("recorded profile could not be loaded: %v", err)}, nil
 	}
 
 	st := store.New(home.StoreDir)
@@ -37,11 +51,11 @@ func checkForks(check runner.Runner, target string, home Home) (string, []Compon
 		coord := acq.Key(c)
 		destRel, err := acquire.DestRel(c)
 		if err != nil {
-			return "", nil, err
+			return "", nil, nil, err
 		}
 		leaf, err := acquire.LeafName(c)
 		if err != nil {
-			return "", nil, err
+			return "", nil, nil, err
 		}
 		path := filepath.Join(target, destRel, leaf)
 
@@ -49,7 +63,7 @@ func checkForks(check runner.Runner, target string, home Home) (string, []Compon
 			if os.IsNotExist(err) {
 				continue
 			}
-			return "", nil, err
+			return "", nil, nil, err
 		}
 
 		pristine, hasPristine := st.PristineHash(target, coord)
@@ -59,7 +73,7 @@ func checkForks(check runner.Runner, target string, home Home) (string, []Compon
 		}
 		onDisk, err := store.HashTree(path)
 		if err != nil {
-			return "", nil, err
+			return "", nil, nil, err
 		}
 		state := ForkEdited
 		if onDisk == pristine {
@@ -67,5 +81,5 @@ func checkForks(check runner.Runner, target string, home Home) (string, []Compon
 		}
 		out = append(out, ComponentState{Coord: coord, State: state})
 	}
-	return prof.Name, out, nil
+	return prof.Name, out, nil, nil
 }
