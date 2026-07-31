@@ -37,7 +37,7 @@ func TestFirstRunInsideAProjectPointsAtTheSession(t *testing.T) {
 		t.Fatalf("runFirstRun() error = %v", err)
 	}
 	got := out.String()
-	for _, want := range []string{"profile: go-backend", "1 skills", "claude", "ray status"} {
+	for _, want := range []string{"profile: go-backend", "1 skill", "claude", "ray status"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("output = %q, want it to contain %q", got, want)
 		}
@@ -59,7 +59,7 @@ func TestFirstRunInsideAProjectWithoutARecordedProfile(t *testing.T) {
 	if strings.Contains(got, "profile:") {
 		t.Errorf("output = %q, want no profile line without a .ray-profile", got)
 	}
-	if !strings.Contains(got, "1 skills") {
+	if !strings.Contains(got, "1 skill") {
 		t.Errorf("output = %q, want the inventory anyway", got)
 	}
 }

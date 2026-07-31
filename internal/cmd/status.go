@@ -86,17 +86,25 @@ func printFacts(out io.Writer, profile string, inv status.Inventory) {
 	if profile != "" {
 		parts = append(parts, "profile: "+profile)
 	}
+	// Os dois rótulos vêm escritos, não derivados de uma regra sobre o "s"
+	// final: um ambiente com uma skill só é comum, e "1 skills" na primeira
+	// linha do primeiro comando que a pessoa roda é o tipo de descuido que
+	// ela leva para a opinião sobre o resto.
 	for _, p := range []struct {
-		n     int
-		label string
+		n         int
+		one, many string
 	}{
-		{inv.Skills, "skills"},
-		{inv.Agents, "agents"},
-		{inv.Commands, "commands"},
-		{inv.MCPServers, "MCP servers"},
+		{inv.Skills, "skill", "skills"},
+		{inv.Agents, "agent", "agents"},
+		{inv.Commands, "command", "commands"},
+		{inv.MCPServers, "MCP server", "MCP servers"},
 	} {
 		if p.n > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s", p.n, p.label))
+			label := p.many
+			if p.n == 1 {
+				label = p.one
+			}
+			parts = append(parts, fmt.Sprintf("%d %s", p.n, label))
 		}
 	}
 	if len(parts) > 0 {

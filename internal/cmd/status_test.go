@@ -26,6 +26,37 @@ func TestPrintStatusHealthyEnvironmentShowsNoWarnings(t *testing.T) {
 	}
 }
 
+// A linha de fatos concorda com o número que ela mesma imprime. Compara a
+// linha inteira porque "1 skill" é prefixo de "1 skills": asserção de
+// substring passaria com o plural errado.
+func TestPrintFactsAgreesWithTheCount(t *testing.T) {
+	cases := []struct {
+		name string
+		inv  status.Inventory
+		want string
+	}{
+		{
+			"one of each",
+			status.Inventory{Skills: 1, Agents: 1, Commands: 1, MCPServers: 1},
+			"profile: go · 1 skill · 1 agent · 1 command · 1 MCP server",
+		},
+		{
+			"more than one",
+			status.Inventory{Skills: 4, Agents: 2, Commands: 3, MCPServers: 2},
+			"profile: go · 4 skills · 2 agents · 3 commands · 2 MCP servers",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			printFacts(&out, "go", tc.inv)
+			if got := strings.TrimRight(out.String(), "\n"); got != tc.want {
+				t.Errorf("facts = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestPrintStatusNeverTrackedIsANoteNotAWarning(t *testing.T) {
 	var out bytes.Buffer
 	printStatus(&out, status.Report{
