@@ -66,14 +66,22 @@ ray/
 ├── .gitignore
 ├── README.md
 └── internal/
-    ├── cmd/          # Cobra: root, init, init_ai, new, run, profile, vault, docs, doctor
+    ├── cmd/          # Cobra: root, init, init_ai, new, run, profile, brain,
+    │                 #   doctor, update, status, stats, learn
     ├── runner/       # ÚNICA fronteira de exec. ExecRunner (real, dry-run) + FakeRunner
     ├── profile/      # struct da receita + load/validate + defaults + list/add/remove
     ├── installer/    # receita → Plan{Commands, Globals, Servers} (puro, não executa)
+    ├── acquire/      # componente (skills|aitmpl|git) → bytes locais, sem symlink
+    ├── store/        # cache content-addressed do conteúdo adquirido; só filesystem
+    ├── update/       # `ray update`: re-adquire e protege edição por hash pristino
+    ├── status/       # `ray status`: diagnóstico do ambiente vendorizado; só lê
     ├── mcp/          # Server + merge idempotente de .mcp.json
     ├── claudecfg/    # merge de .claude/settings.json
     ├── scaffold/     # renderiza orientation files (go:embed templates) + modos
-    ├── vault/        # cria/garante ~/.ray/vault (Obsidian-compatível)
+    ├── vault/        # valida a vault Obsidian do usuário (Verify/Status); não cria
+    ├── economy/      # mecanismos de Token Economy como implementações plugáveis
+    ├── metrics/      # agrega os proxies de atividade que os mecanismos deixam
+    ├── learn/        # máquina verificável do modo learn (marcos + diário)
     ├── preflight/    # checagens de deps (fonte única p/ doctor + init ai), c/ Fix
     ├── initai/       # orquestra o fluxo init ai ponta-a-ponta
     ├── runfile/      # aliases do `ray run` (ray.yaml + ~/.ray/commands.yaml)
@@ -85,7 +93,10 @@ ray/
 **Regras de fronteira (cada peça testável isolada):**
 - `installer` não sabe de CLI nem executa — devolve **dados** (`Plan`).
 - `profile` só carrega/valida — não executa.
-- `runner` é o único que toca processos (`os/exec`).
+- `runner` é o único que toca processos (`os/exec`). `preflight.PathLooker` usa
+  `exec.LookPath` e não fura a regra: resolver nome contra o `$PATH` é stat de
+  diretório, não criação de processo. É o que deixa o `ray status` responder
+  "este comando do `.mcp.json` existe?" sem executar binário de terceiro.
 - `scaffold` só escreve arquivos — não chama processos.
 - `cmd`/`initai` orquestram: load receita → resolve plan → runner → mcp/settings → scaffold → resumo.
 
@@ -149,17 +160,27 @@ global por nome. `Resolved{Name, Description, Steps, BaseDir, Source}` —
 
 ## 5. Árvore de comandos (CLI)
 
+Espelha o `root.AddCommand` (`internal/cmd/root.go`) — dez comandos de topo.
+
 ```
 ray
 ├── new <perfil> <nome>     # cria projeto do stack (create + git init) + init ai
 ├── run [alias]             # executa aliases; sem alias ou --list lista (com origem)
-├── init ai                 # monta o ambiente de IA numa pasta existente
+├── init ai [path]          # monta o ambiente de IA numa pasta existente
 ├── profile  list | show <n> | add <n> | edit <n> | remove <n> | path
-├── vault    init | status | open | path        # ~/.ray/vault (vault da IA)
-├── docs     init <path> | set <path> | open | path   # vault central de docs do usuário
-└── doctor   [--fix]        # checa deps; --fix instala o que o ray consegue
+├── brain    set <path> | status | open | path   # a vault Obsidian do usuário
+├── doctor   [--fix]        # checa deps; --fix instala o que o ray consegue
+├── update   [path]         # re-adquire conteúdo e atualiza ferramentas
+├── status   [path]         # diagnostica o ambiente vendorizado (drift, forks)
+├── stats    [path]         # atividade medida dos mecanismos de Token Economy
+└── learn    check [path]   # roda o verify do marco corrente e registra a passagem
 ```
 Cobra fornece `version`, `help`, `completion` de graça.
+
+**Não existem `ray vault` nem `ray docs`.** O `brain` os substituiu: o ray deixou
+de guardar vault própria em `~/.ray/vault` e passou a apontar para uma vault que
+o usuário já mantém (§9, §16). O `internal/vault` sobreviveu como validador —
+`Verify`/`Status` —, mas não há mais comando com esse nome.
 
 **`ray` sem subcomando** não cai no help do Cobra: imprime a tela de abertura
 (§10.1). Fora de um projeto ela sugere `ray new` / `ray init ai`; dentro de um
@@ -183,6 +204,12 @@ Reaproveita as do `init ai` + `--no-git` (pula `git init`). Fluxo: valida alvo
 vazio/inexistente → `MkdirAll` → roda `create` (templates `{{.Name}}`) no novo
 dir → `git init -q` (salvo `--no-git`) → chama `initai.Run`. Falha num passo de
 `create` **aborta** (não montar IA sobre projeto meio-criado).
+
+### Demais flags
+`doctor --fix` · `run --list` · `update --profile <n> --force` ·
+`learn check --profile <n>`. O `--profile` do `update` e do `learn` sobrescreve
+a receita gravada em `.claude/.ray-profile`; o `--force` do `update` passa por
+cima de edição local e de árvore suja. `status` e `stats` não têm flag própria.
 
 ---
 
