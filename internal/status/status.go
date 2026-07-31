@@ -3,8 +3,10 @@
 package status
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/TheBud4/ray/internal/preflight"
 	"github.com/TheBud4/ray/internal/runner"
@@ -143,26 +145,50 @@ func run(check runner.Runner, l preflight.Looker, opts Options, home Home) (Repo
 	return rep, nil
 }
 
-// countInventory conta as entradas de topo de cada diretório de conteúdo.
-// Diretório ausente conta zero — o ambiente pode legitimamente não ter agents.
+// countInventory conta o conteúdo de cada diretório do ambiente.
+//
+// Conta arquivo, não entrada de topo: uma skill é um SKILL.md, um agente e um
+// comando são um .md. Contar `len(os.ReadDir)` fazia um README solto valer uma
+// skill e um grupo de três comandos com namespace valer um comando.
 func countInventory(target string) (Inventory, error) {
 	var inv Inventory
 	for _, pair := range []struct {
-		dir string
-		n   *int
+		dir   string
+		n     *int
+		match func(name string) bool
 	}{
-		{"skills", &inv.Skills},
-		{"agents", &inv.Agents},
-		{"commands", &inv.Commands},
+		{"skills", &inv.Skills, func(name string) bool { return name == "SKILL.md" }},
+		{"agents", &inv.Agents, isMarkdown},
+		{"commands", &inv.Commands, isMarkdown},
 	} {
-		entries, err := os.ReadDir(filepath.Join(claudeDir(target), pair.dir))
+		n, err := countFiles(filepath.Join(claudeDir(target), pair.dir), pair.match)
 		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
 			return Inventory{}, err
 		}
-		*pair.n = len(entries)
+		*pair.n = n
 	}
 	return inv, nil
+}
+
+func isMarkdown(name string) bool { return strings.EqualFold(filepath.Ext(name), ".md") }
+
+// countFiles conta os arquivos sob root cujo nome casa com match, descendo em
+// subdiretórios: skill vendorizada mora em skills/<nome>/SKILL.md, e comando
+// com namespace mora em commands/<grupo>/<nome>.md. Diretório ausente conta
+// zero — o ambiente pode legitimamente não ter agents.
+func countFiles(root string, match func(name string) bool) (int, error) {
+	n := 0
+	err := filepath.WalkDir(root, func(_ string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && match(d.Name()) {
+			n++
+		}
+		return nil
+	})
+	if err != nil && !os.IsNotExist(err) {
+		return 0, err
+	}
+	return n, nil
 }

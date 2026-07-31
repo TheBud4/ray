@@ -71,6 +71,45 @@ func TestRunCountsInventory(t *testing.T) {
 	}
 }
 
+// O inventário conta conteúdo, não entradas de topo. Uma skill é um SKILL.md;
+// README solto em skills/ e diretório sem SKILL.md não são skill, e agente que
+// não é .md não é agente. Contar entradas de topo inflava os três números com
+// qualquer arquivo que alguém deixasse ali.
+func TestInventoryCountsContentNotTopLevelEntries(t *testing.T) {
+	target := newTarget(t,
+		[]string{"tdd/SKILL.md", "brainstorm/SKILL.md", "README.md"},
+		[]string{"reviewer.md", "notas.txt"},
+		[]string{"revisar.md"})
+	if err := os.MkdirAll(filepath.Join(target, ".claude", "skills", "rascunho"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := Run(nil, Options{Target: target}, Home{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	want := Inventory{Skills: 2, Agents: 1, Commands: 1}
+	if rep.Inventory != want {
+		t.Errorf("Inventory = %+v, want %+v", rep.Inventory, want)
+	}
+}
+
+// Comando com namespace mora em commands/<grupo>/<nome>.md e vira
+// `/grupo:nome`. Contando entradas de topo, um grupo com três comandos contava
+// 1 — o mesmo que um comando solto.
+func TestInventoryCountsNamespacedCommands(t *testing.T) {
+	target := newTarget(t, nil, nil,
+		[]string{"revisar.md", "frontend/component.md", "frontend/layout.md"})
+
+	rep, err := Run(nil, Options{Target: target}, Home{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if rep.Inventory.Commands != 3 {
+		t.Errorf("Inventory.Commands = %d, want 3", rep.Inventory.Commands)
+	}
+}
+
 // writeEnv monta receita + registro de perfil e devolve a Home.
 func writeEnv(t *testing.T, target string, comps []profile.Component) Home {
 	t.Helper()
