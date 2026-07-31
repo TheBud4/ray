@@ -576,17 +576,31 @@ na segunda volta — documentados aqui pra não se perderem:
      `internal/store`, dizendo o que o `ray update` faria: atualizar
      (intocado) ou preservar (editado). Sem linha-base o veredito é
      *procedência desconhecida*, **não** "intocado" — ver o Apêndice.
+     Sem `.claude/.ray-profile` a checagem inteira cala: não há receita a
+     comparar, e `.claude/` copiado à mão é caso normal. Com o registro
+     presente e a receita ilegível (ausente, corrompida, inválida) é o
+     oposto — vira problema com o erro junto. Os dois casos saíam iguais, e o
+     segundo deixava o usuário sem `profile:` na saída e sem pista do porquê.
   2. **Git** — `ls-files` primeiro, `status --porcelain` depois. A primeira
      consulta separa "nunca versionei" de "versionei e depois divergiu",
      porque logo após o `init ai` tudo está untracked e isso é o estado
-     normal. Escopo: `.claude/` e `.mcp.json`; `docs/` e `CLAUDE.md` ficam de
-     fora por serem do usuário.
+     normal. O escopo é **derivado das negações do bloco do `.gitignore`** —
+     hoje `.claude/` e `.mcp.json` — menos um denylist explícito onde mora o
+     `docs/`, que é do usuário. Derivado, e não fixo, porque lista fixa
+     dessincroniza em silêncio: a whitelist ganha entrada e o status para de
+     vigiar parte do ambiente sem nada falhar. O `git add` da nota usa a
+     whitelist **inteira**, docs/ incluído: ele manda commitar, não vigiar.
   3. **`.gitignore`** — o bloco entre os marcadores está inteiro? Negação
      removida é falha silenciosa: o vendorizado volta a ser ignorado e nada
      avisa.
   4. **MCP** — `RAY_BRAIN` aponta para caminho existente, e o `Command` de
      cada servidor está no PATH. Não há checagem genérica de "caminho morto":
      `mcp.Server` não tipa nada como caminho.
+
+  A linha de fatos conta **conteúdo, não entradas de topo**: uma skill é um
+  `SKILL.md`, um agente e um comando são um `.md`, e a contagem desce em
+  subdiretório. Contar `os.ReadDir` fazia um README solto em `skills/` valer
+  uma skill e um grupo de comandos com namespace valer um comando só.
 
   Degrada em vez de falhar: fora de repo git, ou sem o binário, a seção de git
   some inteira sem afetar as outras; sem `.claude/`, diz uma frase e para.
