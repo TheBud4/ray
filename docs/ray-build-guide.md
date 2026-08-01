@@ -666,6 +666,17 @@ mora agora**, porque é isso que serve a quem lê o guia hoje.
      dessincroniza em silêncio: a whitelist ganha entrada e o status para de
      vigiar parte do ambiente sem nada falhar. O `git add` da nota usa a
      whitelist **inteira**, docs/ incluído: ele manda commitar, não vigiar.
+
+     Mas **a whitelist sozinha não é o `git add`**, e a razão é estrutural:
+     ela só lista o que precisa de **negação**, então o que ninguém ignora
+     nunca aparece nela. Ficavam de fora o `.gitignore` — cujas negações são
+     o que faz o vendorizado ser commitado por quem clona, de modo que sem
+     ele no add o ambiente não viaja — e os arquivos que a receita escreve na
+     raiz (`CLAUDE.md`, `SECURITY.md`). O add é a união de três fontes, todas
+     filtradas por existir em disco: whitelist, `scaffold.files` da receita, e
+     o `.gitignore`, que entra sempre porque o `ray` sempre o escreve, mesmo
+     com receita ilegível. Antes disso o `ray status` mandava commitar
+     **menos** que o `ray new` para o mesmo projeto.
   3. **`.gitignore`** — o bloco entre os marcadores está inteiro? Negação
      removida é falha silenciosa: o vendorizado volta a ser ignorado e nada
      avisa.

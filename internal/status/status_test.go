@@ -138,6 +138,28 @@ func writeEnv(t *testing.T, target string, comps []profile.Component) Home {
 	return home
 }
 
+// writeEnvScaffold é o writeEnv com uma lista de arquivos de scaffold na
+// receita. O `git add` da nota precisa conhecê-los: a whitelist do .gitignore
+// só lista o que precisa de negação, e nada que o scaffold escreve na raiz
+// (CLAUDE.md, SECURITY.md) é ignorado por alguém.
+func writeEnvScaffold(t *testing.T, target string, scaffoldPaths []string) Home {
+	t.Helper()
+	home := writeEnv(t, target, nil)
+	files := make([]profile.ScaffoldFile, len(scaffoldPaths))
+	for i, p := range scaffoldPaths {
+		files[i] = profile.ScaffoldFile{Path: p}
+	}
+	prof := &profile.Profile{Name: "test", Scaffold: profile.Scaffold{Files: files}}
+	data, err := yaml.Marshal(prof)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home.ProfilesDir, "test.yaml"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return home
+}
+
 // skillComponent é o componente que os testes de fork usam: via skills, que
 // vendoriza em .claude/skills/<skill>.
 func skillComponent() profile.Component {
@@ -306,6 +328,67 @@ func TestGitNeverTrackedWhenLsFilesIsEmpty(t *testing.T) {
 	}
 	if len(rep.AddPaths) == 0 {
 		t.Error("AddPaths is empty; the note has no git add to offer")
+	}
+}
+
+// O `git add` da nota tem que incluir o .gitignore. A whitelist não o conhece
+// por construção — ela só lista o que precisa de negação, e o .gitignore não é
+// ignorado por ninguém —, mas é o arquivo cujas negações fazem o conteúdo
+// vendorizado ser commitado na máquina de quem clonar. Sem ele no add, o
+// ambiente não viaja, que é a promessa inteira do produto.
+func TestAddPathsIncludesTheGitignore(t *testing.T) {
+	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
+	if err := os.WriteFile(filepath.Join(target, ".gitignore"), []byte("# >>> ray\n# <<< ray\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := Run(gitFake("", ""), Options{Target: target}, Home{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !slices.Contains(rep.AddPaths, ".gitignore") {
+		t.Errorf("AddPaths = %v, want it to include .gitignore", rep.AddPaths)
+	}
+}
+
+// Arquivo que a receita manda escrever e que ninguém ignora — CLAUDE.md,
+// SECURITY.md — também é ambiente a commitar, e some da whitelist pelo mesmo
+// motivo que o .gitignore.
+func TestAddPathsIncludesScaffoldedFilesOutsideTheWhitelist(t *testing.T) {
+	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
+	home := writeEnvScaffold(t, target, []string{"CLAUDE.md", "SECURITY.md", "docs/README.md"})
+	for _, p := range []string{"CLAUDE.md", "SECURITY.md"} {
+		if err := os.WriteFile(filepath.Join(target, p), []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	rep, err := Run(gitFake("", ""), Options{Target: target}, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	for _, want := range []string{"CLAUDE.md", "SECURITY.md"} {
+		if !slices.Contains(rep.AddPaths, want) {
+			t.Errorf("AddPaths = %v, want it to include %q", rep.AddPaths, want)
+		}
+	}
+}
+
+// Caminho que a receita declara mas que não existe em disco não entra: o add
+// falharia com pathspec inexistente, e a nota deixaria de ser copiável.
+func TestAddPathsSkipsScaffoldedFilesNotOnDisk(t *testing.T) {
+	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
+	home := writeEnvScaffold(t, target, []string{"CLAUDE.md", "SECURITY.md"})
+	if err := os.WriteFile(filepath.Join(target, "CLAUDE.md"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := Run(gitFake("", ""), Options{Target: target}, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if slices.Contains(rep.AddPaths, "SECURITY.md") {
+		t.Errorf("AddPaths = %v, want SECURITY.md out of it — it is not on disk", rep.AddPaths)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/runner"
 	"github.com/TheBud4/ray/internal/scaffold"
 )
@@ -48,7 +49,7 @@ var errNotARepo = errors.New("git reported a non-zero exit")
 //
 // Qualquer falha (não é repo, git ausente) devolve GitUnavailable sem erro: a
 // seção some e o resto do diagnóstico continua.
-func checkGit(check runner.Runner, target string) (GitState, int, []string) {
+func checkGit(check runner.Runner, target string, home Home) (GitState, int, []string) {
 	if check == nil {
 		return GitUnavailable, 0, nil
 	}
@@ -58,7 +59,9 @@ func checkGit(check runner.Runner, target string) (GitState, int, []string) {
 		return GitUnavailable, 0, nil
 	}
 	if strings.TrimSpace(tracked) == "" {
-		return GitNeverTracked, 0, addPaths(target)
+		// A receita só é lida aqui: fora do estado never-tracked não há
+		// `git add` a montar, e o status não deve pagar por ela à toa.
+		return GitNeverTracked, 0, addPaths(target, scaffoldTopLevel(home, target))
 	}
 
 	porcelain, err := gitOut(check, target, append([]string{"status", "--porcelain", "--"}, gitScope()...))
@@ -95,9 +98,60 @@ func countLines(s string) int {
 // addPaths são os caminhos de topo do ambiente que existem em disco, para o
 // `git add` da nota. Deliberadamente por nome, nunca `-A` nem `.`: o
 // guard-add.sh que o próprio ray instala avisa contra add cego.
-func addPaths(target string) []string {
-	out := environmentTopLevel(target)
+//
+// A whitelist do .gitignore sozinha não basta, e a razão é estrutural: ela só
+// lista o que precisa de **negação**, e o que não é ignorado por ninguém nunca
+// aparece lá. Faltavam o `.gitignore` — cujas negações são o que faz o
+// vendorizado ser commitado por quem clona, então fora do add o ambiente não
+// viaja — e os arquivos que a receita manda escrever na raiz (CLAUDE.md,
+// SECURITY.md). O resultado era o `ray status` mandando commitar menos que o
+// `ray new` para o mesmo projeto.
+func addPaths(target string, scaffoldPaths []string) []string {
+	seen := map[string]bool{}
+	for _, p := range environmentTopLevel(target) {
+		seen[p] = true
+	}
+	// O .gitignore não vem de lista nenhuma: o ray sempre o escreve, com ou
+	// sem receita legível.
+	for _, p := range append([]string{".gitignore"}, scaffoldPaths...) {
+		if _, err := os.Stat(filepath.Join(target, p)); err != nil {
+			continue
+		}
+		seen[p] = true
+	}
+	out := make([]string, 0, len(seen))
+	for p := range seen {
+		out = append(out, p)
+	}
 	sort.Strings(out)
+	return out
+}
+
+// scaffoldTopLevel são os caminhos de topo que a receita manda escrever.
+//
+// Carrega a receita por conta própria em vez de reaproveitar a do checkForks
+// porque as duas querem coisas opostas do mesmo erro: lá, receita ilegível é
+// problema a reportar; aqui é silêncio. O `git add` da nota não pode encolher
+// porque o .ray-profile sumiu — o `.gitignore` entra de qualquer jeito.
+func scaffoldTopLevel(home Home, target string) []string {
+	prof, err := profile.LoadForTarget(home.ProfilesDir, target, "")
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, f := range prof.Scaffold.Files {
+		if filepath.IsAbs(f.Path) {
+			continue
+		}
+		p := filepath.ToSlash(filepath.Clean(f.Path))
+		if p == "." || p == ".." || strings.HasPrefix(p, "../") {
+			continue
+		}
+		if i := strings.IndexByte(p, '/'); i > 0 {
+			p = p[:i]
+		}
+		out = append(out, p)
+	}
 	return out
 }
 

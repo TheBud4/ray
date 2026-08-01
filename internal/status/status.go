@@ -131,7 +131,7 @@ func run(check runner.Runner, l preflight.Looker, opts Options, home Home) (Repo
 	rep.Forks = forks
 	rep.Problems = append(rep.Problems, forkProblems...)
 
-	rep.Git, rep.DirtyN, rep.AddPaths = checkGit(check, target)
+	rep.Git, rep.DirtyN, rep.AddPaths = checkGit(check, target, home)
 
 	gitignoreProblems, err := checkGitignore(target)
 	if err != nil {
