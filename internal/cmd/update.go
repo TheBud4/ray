@@ -98,4 +98,13 @@ func printUpdateSummary(out io.Writer, sum update.Summary) {
 	printList("Skipped", sum.Skipped)
 	printList("Failed", sum.Failed)
 	printList("Warnings", sum.Warnings)
+
+	// Quatro listas vazias só acontecem quando o perfil não tem componente:
+	// todo componente processado cai em alguma delas. Passo global
+	// bem-sucedido não entra em nenhuma — por isso a linha fala de
+	// componentes, e não "nada a fazer", que contradiria a saída dos passos
+	// globais logo acima quando o --no-global não foi passado.
+	if len(sum.Updated)+len(sum.Skipped)+len(sum.Failed)+len(sum.Warnings) == 0 {
+		fmt.Fprintln(out, "no components to update")
+	}
 }

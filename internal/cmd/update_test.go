@@ -79,6 +79,43 @@ func TestRunUpdatePrintsSummaryAndErrorsOnFailure(t *testing.T) {
 	}
 }
 
+// Quatro listas vazias significam que o perfil não tem componente — todo
+// componente processado cai em alguma delas. Sem esta linha o comando termina
+// com sucesso e sem uma palavra, e quem rodou não sabe se funcionou.
+func TestPrintUpdateSummarySaysWhenThereWasNothing(t *testing.T) {
+	var out bytes.Buffer
+	printUpdateSummary(&out, update.Summary{})
+
+	if got := strings.TrimSpace(out.String()); got != "no components to update" {
+		t.Errorf("output = %q, want %q", got, "no components to update")
+	}
+}
+
+// A recíproca, e é ela que impede a correção de virar ruído: execução que
+// processou componente não ganha a linha.
+func TestPrintUpdateSummaryStaysQuietWhenSomethingHappened(t *testing.T) {
+	cases := []struct {
+		name string
+		sum  update.Summary
+	}{
+		{"updated", update.Summary{Updated: []string{"skills:o/r#s"}}},
+		{"skipped", update.Summary{Skipped: []string{"skills:o/r#s"}}},
+		{"failed", update.Summary{Failed: []string{"skills:o/r#s"}}},
+		{"warnings", update.Summary{Warnings: []string{"skills:o/r#s: fork"}}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			printUpdateSummary(&out, tc.sum)
+
+			if strings.Contains(out.String(), "no components to update") {
+				t.Errorf("output = %q, want no empty-summary line when something happened", out.String())
+			}
+		})
+	}
+}
+
 func TestUpdateCmdFlags(t *testing.T) {
 	resetUpdateFlags(t)
 	c := newUpdateCmd()
