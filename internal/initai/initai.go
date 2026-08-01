@@ -179,7 +179,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	}
 
 	// 3. carrega a receita.
-	prof, err := profile.Load(filepath.Join(home.ProfilesDir, opts.Profile+".yaml"))
+	prof, err := profile.LoadByName(home.ProfilesDir, opts.Profile)
 	if err != nil {
 		return Summary{}, err
 	}

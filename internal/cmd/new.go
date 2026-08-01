@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"text/template"
 
@@ -91,7 +90,7 @@ func runNew(r runner.Runner, l preflight.Looker, profilesDir, profileName, proje
 	if err := profile.EnsureDir(profilesDir); err != nil {
 		return initai.Summary{}, err
 	}
-	prof, err := profile.Load(filepath.Join(profilesDir, profileName+".yaml"))
+	prof, err := profile.LoadByName(profilesDir, profileName)
 	if err != nil {
 		return initai.Summary{}, err
 	}

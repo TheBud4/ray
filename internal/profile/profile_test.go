@@ -355,6 +355,38 @@ func TestLoadForTargetMissingBothErrors(t *testing.T) {
 	}
 }
 
+// Três chamadores montavam `filepath.Join(dir, name+".yaml")` na mão e
+// entregavam o erro cru do os.ReadFile, que fala de arquivo — o usuário digitou
+// um nome de receita e recebia um caminho.
+func TestLoadByNameNamesTheProfile(t *testing.T) {
+	dir := t.TempDir()
+
+	_, err := LoadByName(dir, "naoexiste")
+	if err == nil {
+		t.Fatal("LoadByName() = nil error, want error for a profile that is not there")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, `"naoexiste"`) {
+		t.Errorf("error = %q, want it to quote the profile name", msg)
+	}
+	if strings.Contains(msg, "no such file or directory") {
+		t.Errorf("error = %q, want the recipe vocabulary, not the raw file error", msg)
+	}
+}
+
+func TestLoadByNameLoadsAndValidates(t *testing.T) {
+	dir := t.TempDir()
+	writeTestProfile(t, dir, "go")
+
+	p, err := LoadByName(dir, "go")
+	if err != nil {
+		t.Fatalf("LoadByName() error = %v", err)
+	}
+	if p.Name != "go" {
+		t.Errorf("Name = %q, want %q", p.Name, "go")
+	}
+}
+
 // Um erro de leitura que não seja "não existe" não pode virar a mesma frase:
 // "nenhum perfil registrado" seria mentira se o arquivo existe e não pôde ser
 // lido.

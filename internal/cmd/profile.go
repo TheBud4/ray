@@ -83,7 +83,7 @@ func newProfileShowCmd() *cobra.Command {
 }
 
 func runProfileShow(dir, name, brainPath string, out io.Writer) error {
-	p, err := profile.Load(filepath.Join(dir, name+".yaml"))
+	p, err := profile.LoadByName(dir, name)
 	if err != nil {
 		return err
 	}

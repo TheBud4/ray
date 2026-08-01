@@ -171,6 +171,19 @@ func (c Component) validate() error {
 	return nil
 }
 
+// LoadByName lê e valida a receita chamada name em profilesDir. É o caminho
+// para quem tem um nome — que é todo mundo, já que nome é o que o usuário
+// digita. Existe para o erro falar de receita: o os.ReadFile fala de arquivo,
+// e devolver o caminho cru a quem digitou `--profile web` troca o vocabulário
+// no meio do caminho.
+func LoadByName(profilesDir, name string) (*Profile, error) {
+	path := filepath.Join(profilesDir, name+".yaml")
+	if _, err := os.Stat(path); err != nil && os.IsNotExist(err) {
+		return nil, fmt.Errorf("profile %q not found in %s", name, profilesDir)
+	}
+	return Load(path)
+}
+
 // Load lê e valida a receita em path.
 func Load(path string) (*Profile, error) {
 	data, err := os.ReadFile(path)
@@ -212,5 +225,5 @@ func LoadForTarget(profilesDir, target, overrideName string) (*Profile, error) {
 		}
 		name = strings.TrimSpace(string(data))
 	}
-	return Load(filepath.Join(profilesDir, name+".yaml"))
+	return LoadByName(profilesDir, name)
 }
