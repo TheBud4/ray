@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/TheBud4/ray/internal/mcp"
 	"github.com/TheBud4/ray/internal/preflight"
 	"github.com/TheBud4/ray/internal/runner"
 )
@@ -123,6 +124,14 @@ func run(check runner.Runner, l preflight.Looker, opts Options, home Home) (Repo
 	}
 	rep.Inventory = inv
 
+	// Aqui o .mcp.json ilegível é erro, e não silêncio: o `status` existe para
+	// diagnosticar, e engolir o arquivo quebrado seria o comando dizendo "tudo
+	// em ordem" sobre justamente o que está errado.
+	rep.Inventory.MCPServers, err = countMCPServers(target)
+	if err != nil {
+		return Report{}, err
+	}
+
 	name, forks, forkProblems, err := checkForks(check, target, home)
 	if err != nil {
 		return Report{}, err
@@ -139,11 +148,10 @@ func run(check runner.Runner, l preflight.Looker, opts Options, home Home) (Repo
 	}
 	rep.Problems = append(rep.Problems, gitignoreProblems...)
 
-	n, mcpProblems, err := checkMCP(l, target)
+	mcpProblems, err := checkMCP(l, target)
 	if err != nil {
 		return Report{}, err
 	}
-	rep.Inventory.MCPServers = n
 	rep.Problems = append(rep.Problems, mcpProblems...)
 
 	return rep, nil
@@ -154,8 +162,12 @@ func run(check runner.Runner, l preflight.Looker, opts Options, home Home) (Repo
 // Conta arquivo, não entrada de topo: uma skill é um SKILL.md, um agente e um
 // comando são um .md. Contar `len(os.ReadDir)` fazia um README solto valer uma
 // skill e um grupo de três comandos com namespace valer um comando.
+//
+// Não conta os servidores MCP: isso é countMCPServers, separado porque os dois
+// chamadores discordam sobre o que fazer quando o .mcp.json não parseia.
 func countInventory(target string) (Inventory, error) {
 	var inv Inventory
+
 	for _, pair := range []struct {
 		dir   string
 		n     *int
@@ -172,6 +184,20 @@ func countInventory(target string) (Inventory, error) {
 		*pair.n = n
 	}
 	return inv, nil
+}
+
+// countMCPServers conta os servidores declarados no .mcp.json. É o inventário,
+// não o diagnóstico: quantos são se responde lendo o arquivo, e é por isso que
+// não mora no checkMCP, que precisa do Looker para dizer se o comando de cada
+// um está no PATH. Enquanto a contagem morava lá, a tela de `ray` sem
+// subcomando — que não paga MCP — imprimia um inventário sem servidores e
+// discordava do `ray status` sobre o mesmo projeto.
+func countMCPServers(target string) (int, error) {
+	servers, err := mcp.ReadServers(target)
+	if err != nil {
+		return 0, err
+	}
+	return len(servers), nil
 }
 
 func isMarkdown(name string) bool { return strings.EqualFold(filepath.Ext(name), ".md") }

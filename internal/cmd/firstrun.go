@@ -10,8 +10,10 @@ import (
 
 // runFirstRun imprime a tela de `ray` sem subcomando. Ela orienta, não
 // diagnostica: o `ray status` responde "como está este projeto" melhor do que
-// uma tela de abertura conseguiria, e por isso aqui não há git, não há MCP e
-// não há receita carregada.
+// uma tela de abertura conseguiria, e por isso aqui não há git, não há veredito
+// sobre cada servidor MCP e não há receita carregada. A linha de fatos é a
+// mesma do `ray status`, inventário incluído — duas contagens diferentes para
+// o mesmo projeto seria pior que não contar.
 //
 // Devolve erro só em falha de leitura. Dependência required faltando é alerta
 // na tela, não exit ≠ 0 — quem erra por dependência é o doctor.

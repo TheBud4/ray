@@ -20,10 +20,10 @@ import (
 // l é um preflight.PathLooker: a pergunta se responde com lookup, e rodar
 // `<command> --version` de cada entrada faria um comando de diagnóstico
 // executar binário de terceiro só para saber que ele existe.
-func checkMCP(l preflight.Looker, target string) (int, []string, error) {
+func checkMCP(l preflight.Looker, target string) ([]string, error) {
 	servers, err := mcp.ReadServers(target)
 	if err != nil {
-		return 0, nil, err
+		return nil, err
 	}
 
 	var problems []string
@@ -40,5 +40,5 @@ func checkMCP(l preflight.Looker, target string) (int, []string, error) {
 			problems = append(problems, fmt.Sprintf("mcp/%s: command %q is not on PATH", s.Name, s.Command))
 		}
 	}
-	return len(servers), problems, nil
+	return problems, nil
 }

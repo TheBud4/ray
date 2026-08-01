@@ -193,8 +193,12 @@ o usuário já mantém (§9, §16). O `internal/vault` sobreviveu como validador
 **`ray` sem subcomando** não cai no help do Cobra: imprime a tela de abertura
 (§10.1). Fora de um projeto ela sugere `ray new` / `ray init ai`; dentro de um
 `.claude/`, mostra perfil e inventário e aponta `claude` / `ray status`. Lê só
-arquivo — sem git, sem MCP, sem carregar receita — e sai **0** mesmo com
-dependência required faltando, que vira alerta na própria tela. Não há linha
+arquivo — sem git, sem lookup de PATH, sem carregar receita — e sai **0** mesmo
+com dependência required faltando, que vira alerta na própria tela. A linha de
+fatos é a mesma do `ray status`, servidores MCP incluídos: contá-los é leitura
+de arquivo, e duas contagens diferentes para o mesmo projeto faziam as duas
+telas mentirem uma sobre a outra. Um `.mcp.json` ilegível derruba o `status`,
+que existe para diagnosticar, mas só apaga o número aqui. Não há linha
 "deps: ok": a linha de dependência só existe quando falta algo. `ray --help`
 segue inalterado, e `cobra.NoArgs` faz comando inexistente errar em vez de cair
 na tela.

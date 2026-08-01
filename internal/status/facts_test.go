@@ -2,6 +2,7 @@ package status
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/TheBud4/ray/internal/profile"
@@ -18,6 +19,8 @@ func TestReadFactsCountsTheSameWayRunDoes(t *testing.T) {
 		[]string{"reviewer.md", "notas.txt"},
 		[]string{"revisar.md", "frontend/component.md"})
 
+	writeMCP(t, target, "brain", "npx")
+
 	f, err := ReadFacts(target)
 	if err != nil {
 		t.Fatalf("ReadFacts() error = %v", err)
@@ -26,15 +29,36 @@ func TestReadFactsCountsTheSameWayRunDoes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if f.Inventory.Skills != rep.Inventory.Skills ||
-		f.Inventory.Agents != rep.Inventory.Agents ||
-		f.Inventory.Commands != rep.Inventory.Commands {
+	// A comparação é do Inventory inteiro de propósito: comparar campo a campo
+	// deixava o MCPServers de fora, e era por lá que as duas telas divergiam.
+	if f.Inventory != rep.Inventory {
 		t.Errorf("ReadFacts = %+v, Run = %+v; the two counts must not diverge",
 			f.Inventory, rep.Inventory)
 	}
-	want := Inventory{Skills: 2, Agents: 1, Commands: 2}
+	want := Inventory{Skills: 2, Agents: 1, Commands: 2, MCPServers: 1}
 	if f.Inventory != want {
 		t.Errorf("Inventory = %+v, want %+v", f.Inventory, want)
+	}
+}
+
+// Um .mcp.json quebrado à mão não pode derrubar a tela mais vista do CLI: ela
+// orienta, e orientar sem o número de servidores continua orientando. Quem
+// nomeia o arquivo quebrado é o `ray status`, que existe para diagnosticar.
+func TestReadFactsSurvivesAnUnparseableMCPConfig(t *testing.T) {
+	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
+	if err := os.WriteFile(filepath.Join(target, ".mcp.json"), []byte("{nope"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := ReadFacts(target)
+	if err != nil {
+		t.Fatalf("ReadFacts() error = %v, want the screen to still render", err)
+	}
+	if !f.HasEnvironment || f.Inventory.Skills != 1 {
+		t.Errorf("Facts = %+v, want the rest of the inventory intact", f)
+	}
+	if f.Inventory.MCPServers != 0 {
+		t.Errorf("Inventory.MCPServers = %d, want 0 when the file cannot be parsed", f.Inventory.MCPServers)
 	}
 }
 
