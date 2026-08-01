@@ -92,7 +92,7 @@ func TestLearnOverlayWritesTeachingPrompt(t *testing.T) {
 	}
 }
 
-func TestHookSettingsBuildHasGuardAddAndGuardPlansPreToolUse(t *testing.T) {
+func TestHookSettingsBuildHasThreeWarningGuardsInPreToolUse(t *testing.T) {
 	settings := HookSettings(ModeBuild)
 	hooks, ok := settings["hooks"].(map[string]any)
 	if !ok {
@@ -103,10 +103,10 @@ func TestHookSettingsBuildHasGuardAddAndGuardPlansPreToolUse(t *testing.T) {
 	}
 	pre, ok := hooks["PreToolUse"].([]any)
 	if !ok {
-		t.Fatalf("hooks = %#v, want PreToolUse in build mode (guard-add and guard-plans are unconditional)", hooks)
+		t.Fatalf("hooks = %#v, want PreToolUse in build mode (the three warning guards are unconditional)", hooks)
 	}
-	if len(pre) != 2 {
-		t.Fatalf("PreToolUse = %#v, want the guard-add and guard-plans matchers in build mode", pre)
+	if len(pre) != 3 {
+		t.Fatalf("PreToolUse = %#v, want guard-add, guard-plans and guard-vocab in build mode", pre)
 	}
 	first, ok := pre[0].(map[string]any)
 	if !ok || first["matcher"] != "Bash" {
@@ -115,6 +115,18 @@ func TestHookSettingsBuildHasGuardAddAndGuardPlansPreToolUse(t *testing.T) {
 	second, ok := pre[1].(map[string]any)
 	if !ok || second["matcher"] != "Edit|Write|MultiEdit" {
 		t.Fatalf("PreToolUse[1] = %#v, want matcher \"Edit|Write|MultiEdit\" (guard-plans.sh)", pre[1])
+	}
+	third, ok := pre[2].(map[string]any)
+	if !ok || third["matcher"] != "Edit|Write|MultiEdit" {
+		t.Fatalf("PreToolUse[2] = %#v, want matcher \"Edit|Write|MultiEdit\" (guard-vocab.sh)", pre[2])
+	}
+
+	// guard-vocab lê o payload, não o disco: não há mais razão para rodar
+	// depois da escrita, e avisar depois não redireciona nada. Sem esta
+	// asserção, deixar o hook declarado nos dois eventos passaria verde — e o
+	// aviso sairia em dobro.
+	if _, ok := hooks["PostToolUse"]; ok {
+		t.Errorf("hooks still declare PostToolUse: %#v", hooks["PostToolUse"])
 	}
 }
 
@@ -128,8 +140,8 @@ func TestHookSettingsLearnHasPreToolUse(t *testing.T) {
 	if !ok {
 		t.Fatalf("hooks = %#v, want PreToolUse in learn mode", hooks)
 	}
-	if len(pre) != 3 {
-		t.Fatalf("PreToolUse = %#v, want guard-add (Bash) plus guard-plans (Edit|Write|MultiEdit) plus guard-code (Edit|Write|MultiEdit)", pre)
+	if len(pre) != 4 {
+		t.Fatalf("PreToolUse = %#v, want guard-add (Bash) plus guard-plans, guard-vocab and guard-code (Edit|Write|MultiEdit)", pre)
 	}
 	first, ok := pre[0].(map[string]any)
 	if !ok || first["matcher"] != "Bash" {
@@ -141,7 +153,13 @@ func TestHookSettingsLearnHasPreToolUse(t *testing.T) {
 	}
 	third, ok := pre[2].(map[string]any)
 	if !ok || third["matcher"] != "Edit|Write|MultiEdit" {
-		t.Fatalf("PreToolUse[2] = %#v, want matcher \"Edit|Write|MultiEdit\" (guard-code.sh)", pre[2])
+		t.Fatalf("PreToolUse[2] = %#v, want matcher \"Edit|Write|MultiEdit\" (guard-vocab.sh)", pre[2])
+	}
+	// O guard-code é do overlay de learn e entra por último, depois dos três
+	// guards de aviso que os dois modos compartilham.
+	fourth, ok := pre[3].(map[string]any)
+	if !ok || fourth["matcher"] != "Edit|Write|MultiEdit" {
+		t.Fatalf("PreToolUse[3] = %#v, want matcher \"Edit|Write|MultiEdit\" (guard-code.sh)", pre[3])
 	}
 }
 

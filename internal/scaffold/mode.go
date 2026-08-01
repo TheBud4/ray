@@ -32,11 +32,12 @@ func SystemFiles(mode string) []profile.ScaffoldFile {
 
 // HookSettings devolve o bloco "hooks" a mesclar em settings.json (via
 // claudecfg.MergeSettings): SessionStart sempre injeta o handoff; PreToolUse
-// sempre traz o guard-add (avisa em `git add` cego) e o guard-plans (avisa
-// em plano/design escrito dentro do repositório); PostToolUse sempre traz
-// o guard-vocab (avisa em vocabulário de processo vazado para artefato
-// entregue); learn soma ao PreToolUse o guard-code, que bloqueia edição de
-// código fora da allowlist.
+// sempre traz os três guards de aviso — guard-add (avisa em `git add` cego),
+// guard-plans (avisa em plano/design escrito dentro do repositório) e
+// guard-vocab (avisa em vocabulário de processo vazado para artefato
+// entregue). Todos avisam antes da escrita, quando ainda dá para redirecionar.
+// learn soma ao PreToolUse o guard-code, que bloqueia edição de código fora da
+// allowlist.
 func HookSettings(mode string) map[string]any {
 	hooks := map[string]any{
 		"SessionStart": []any{
@@ -59,8 +60,6 @@ func HookSettings(mode string) map[string]any {
 					map[string]any{"type": "command", "command": "bash .claude/hooks/guard-plans.sh"},
 				},
 			},
-		},
-		"PostToolUse": []any{
 			map[string]any{
 				"matcher": "Edit|Write|MultiEdit",
 				"hooks": []any{

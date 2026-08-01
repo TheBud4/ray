@@ -11,13 +11,11 @@
         "hooks": [{ "type": "command", "command": "bash .claude/hooks/guard-add.sh" }]
       },
       {
-        "matcher": "Write",
+        "matcher": "Edit|Write|MultiEdit",
         "hooks": [{ "type": "command", "command": "bash .claude/hooks/guard-plans.sh" }]
-      }
-    ],
-    "PostToolUse": [
+      },
       {
-        "matcher": "Edit|Write",
+        "matcher": "Edit|Write|MultiEdit",
         "hooks": [{ "type": "command", "command": "bash .claude/hooks/guard-vocab.sh" }]
       }
     ]
