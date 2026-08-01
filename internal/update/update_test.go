@@ -563,6 +563,39 @@ func TestRunPinnedRefIsNoOp(t *testing.T) {
 	}
 }
 
+// acquire.For devolve !ok para via: aitmpl + type: mcp. O laço fazia `continue`
+// mudo: o perfil declarava o componente, o update não o tocava, não dizia nada
+// e saía 0 — dizer que está tudo certo tendo ignorado algo que a receita
+// declara.
+func TestRunReportsComponentWithNoAcquirer(t *testing.T) {
+	home := newHome(t)
+	p := &profile.Profile{
+		Name:       "test",
+		Components: []profile.Component{{Via: profile.ViaAitmpl, Type: profile.TypeMCP, Ref: "some/mcp-server"}},
+	}
+	writeProfile(t, home.ProfilesDir, p)
+	target := t.TempDir()
+	writeProfileRecord(t, target, "test")
+
+	sum, err := Run(&seedingRunner{}, cleanGitCheck(), Options{Target: target, NoGlobal: true}, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	found := false
+	for _, s := range sum.Skipped {
+		if strings.Contains(s, "no acquirer") && strings.Contains(s, profile.ViaAitmpl) {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Skipped = %v, want an entry naming the component with no acquirer", sum.Skipped)
+	}
+	if sum.HadFailure {
+		t.Error("HadFailure = true: a component with no acquirer is reported, not a failure")
+	}
+}
+
 // ---- Run: dry-run ---------------------------------------------------
 
 func TestRunDryRunFetchesNothing(t *testing.T) {

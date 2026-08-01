@@ -102,6 +102,11 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 	for _, c := range prof.Components {
 		acq, ok := acquire.For(c, r)
 		if !ok {
+			// O identificador sai dos campos do componente: acq é nil aqui, e
+			// acq.Key(c) — a forma usada nos outros skips — seria panic. Sem
+			// esta entrada o componente some do resumo e o update afirma que
+			// está tudo certo tendo ignorado algo que a receita declara.
+			sum.Skipped = append(sum.Skipped, describeUnacquirable(c))
 			continue
 		}
 		coord := acq.Key(c)
@@ -192,6 +197,19 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 
 	sum.HadFailure = len(sum.Failed) > 0
 	return sum, nil
+}
+
+// describeUnacquirable nomeia um componente que nenhum adquiridor atende. Não
+// usa acquire.Key porque não há adquiridor — é essa a condição.
+func describeUnacquirable(c profile.Component) string {
+	desc := fmt.Sprintf("no acquirer for via=%s", c.Via)
+	if c.Type != "" {
+		desc += fmt.Sprintf(" type=%s", c.Type)
+	}
+	if c.Ref != "" {
+		desc += fmt.Sprintf(" (%s)", c.Ref)
+	}
+	return desc
 }
 
 // decideOverwrite delega para store.DecideOverwrite. A política mora no
