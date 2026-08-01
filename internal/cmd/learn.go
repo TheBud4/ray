@@ -15,10 +15,7 @@ import (
 var flagLearnProfile string
 
 func newLearnCmd() *cobra.Command {
-	c := &cobra.Command{
-		Use:   "learn",
-		Short: "Learn-mode verifiable machine (milestones, journal)",
-	}
+	c := groupCmd("learn", "Learn-mode verifiable machine (milestones, journal)")
 	c.AddCommand(newLearnCheckCmd())
 	return c
 }

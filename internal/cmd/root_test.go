@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/spf13/cobra"
 )
 
 // O Cobra toma `-v` para `--version` quando encontra o atalho livre, e o
@@ -25,6 +27,45 @@ func TestVerboseOwnsTheVShorthand(t *testing.T) {
 	}
 	if root.Flags().Lookup("version") == nil {
 		t.Error("--version is gone; it must survive in its long form")
+	}
+}
+
+// Comando que só agrupa não roda nada, e o Cobra responde a um filho
+// inexistente imprimindo o help e devolvendo nil — ou seja, `ray profile lst`
+// saía 0 sem ter feito nada. A varredura é da árvore inteira de propósito: um
+// grupo novo não pode nascer com o defeito.
+func TestGroupCommandsRejectUnknownSubcommand(t *testing.T) {
+	var walk func(c *cobra.Command)
+	walk = func(c *cobra.Command) {
+		if c.HasSubCommands() {
+			if err := c.ValidateArgs([]string{"bogus"}); err == nil {
+				t.Errorf("%q accepts an unknown subcommand; want it rejected", c.CommandPath())
+			}
+		}
+		for _, sub := range c.Commands() {
+			walk(sub)
+		}
+	}
+	walk(newRootCmd())
+}
+
+// A consequência, pelo caminho real: o Execute tem de devolver erro, que é o
+// que vira exit 1 no Execute() do pacote.
+func TestUnknownSubcommandIsAnError(t *testing.T) {
+	t.Setenv("RAY_HOME", t.TempDir())
+
+	var out bytes.Buffer
+	root := newRootCmd()
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"profile", "lst"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("Execute() = nil, want an error for an unknown subcommand")
+	}
+	if !strings.Contains(err.Error(), "lst") {
+		t.Errorf("error = %q, want it to name the unknown subcommand", err)
 	}
 }
 

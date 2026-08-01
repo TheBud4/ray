@@ -18,7 +18,7 @@ import (
 )
 
 func newProfileCmd() *cobra.Command {
-	c := &cobra.Command{Use: "profile", Short: "Manage recipe profiles"}
+	c := groupCmd("profile", "Manage recipe profiles")
 	c.AddCommand(newProfileListCmd(), newProfileShowCmd(), newProfileAddCmd(),
 		newProfileEditCmd(), newProfileRemoveCmd(), newProfilePathCmd())
 	return c

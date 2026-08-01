@@ -17,6 +17,22 @@ var (
 	flagDryRun  bool
 )
 
+// groupCmd é o esqueleto de um comando que só agrupa filhos: sem argumento
+// imprime o help, com argumento recusa.
+//
+// O `Args` sozinho não bastaria. O Cobra checa `Runnable()` antes de validar
+// argumento, então um grupo sem `RunE` devolve o help e `nil` para qualquer
+// filho inexistente — `ray profile lst` saía 0 sem ter feito nada. É o `RunE`
+// que torna o comando runnable e faz o `NoArgs` ser consultado.
+func groupCmd(use, short string) *cobra.Command {
+	return &cobra.Command{
+		Use:   use,
+		Short: short,
+		Args:  cobra.NoArgs,
+		RunE:  func(cmd *cobra.Command, args []string) error { return cmd.Help() },
+	}
+}
+
 func newRootCmd() *cobra.Command {
 
 	root := &cobra.Command{

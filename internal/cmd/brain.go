@@ -17,10 +17,7 @@ import (
 // apontavam servers MCP idênticos para diretórios do mesmo tipo; a distinção
 // entre "vault da IA" e "vault do usuário" só existia na prosa das regras.
 func newBrainCmd() *cobra.Command {
-	c := &cobra.Command{
-		Use:   "brain",
-		Short: "Manage the brain: the Obsidian vault the AI reads and writes",
-	}
+	c := groupCmd("brain", "Manage the brain: the Obsidian vault the AI reads and writes")
 	c.AddCommand(newBrainSetCmd(), newBrainStatusCmd(), newBrainOpenCmd(), newBrainPathCmd())
 	return c
 }
