@@ -69,7 +69,11 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 
 	// 2. guard de árvore limpa (ortogonal) — mantém o diff do update legível.
 	// Se não der para checar (não é repo git, git ausente), segue sem bloquear.
-	if !opts.Force {
+	//
+	// O --dry-run passa: o guard protege a legibilidade de um diff, e uma
+	// simulação não produz diff nenhum. Barrá-la só empurrava a pessoa para o
+	// --force, que é exatamente o que o guard quer evitar que vire hábito.
+	if !opts.Force && !opts.DryRun {
 		dirty, gerr := isTreeDirty(check, target)
 		if gerr == nil && dirty {
 			return Summary{}, fmt.Errorf("%s has uncommitted changes; commit/stash or pass --force so the update diff stays legible", target)

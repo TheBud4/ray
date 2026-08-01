@@ -156,6 +156,25 @@ func TestRunDirtyTreeWithForceProceeds(t *testing.T) {
 	}
 }
 
+// O guard existe para o diff do update ficar legível — e um dry-run não
+// produz diff nenhum. Barrar a simulação empurra a pessoa para o --force, que
+// é o oposto do que o guard quer.
+func TestRunDirtyTreeAllowsDryRun(t *testing.T) {
+	home := newHome(t)
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+	writeProfileRecord(t, target, "test")
+
+	sum, err := Run(runner.ExecRunner{DryRun: true}, dirtyGitCheck(),
+		Options{Target: target, DryRun: true, Out: &bytes.Buffer{}}, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v, want nil — a dry-run cannot dirty anything", err)
+	}
+	if len(sum.Updated) == 0 {
+		t.Error("Summary.Updated is empty, want the dry-run to still report the plan")
+	}
+}
+
 func TestRunCleanTreeProceeds(t *testing.T) {
 	home := newHome(t)
 	writeProfile(t, home.ProfilesDir, testProfile())

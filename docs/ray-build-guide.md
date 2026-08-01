@@ -634,7 +634,9 @@ mora agora**, porque é isso que serve a quem lê o guia hoje.
   re-adquire cada componente, decidindo por **hash de conteúdo** — não por
   git-status — se sobrescreve (disco == linha-base pristina) ou preserva
   (divergiu). Recusa rodar com árvore suja sem `--force`, para o diff do update
-  ficar legível. `--profile` sobrescreve a receita gravada.
+  ficar legível — **o `--dry-run` passa por esse guard**, porque uma simulação
+  não produz diff nenhum e barrá-la só ensinava a alcançar o `--force`.
+  `--profile` sobrescreve a receita gravada.
   O **`--dry-run` aplica a decisão de fork**, não só lista o que buscaria: com
   linha-base gravada o veredito sai de dois hashes locais e é exato, então a
   simulação já mostra `preserve` no que está editado. Sem linha-base ele avisa
