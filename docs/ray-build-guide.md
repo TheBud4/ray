@@ -668,65 +668,34 @@ mora agora**, porque é isso que serve a quem lê o guia hoje.
   shell, abortando no 1º exit≠0; respeita `--dry-run`/`--verbose`.
 - **`update [path]`**: atualiza as ferramentas globais (`uv tool upgrade`) e
   re-adquire cada componente, decidindo por **hash de conteúdo** — não por
-  git-status — se sobrescreve (disco == linha-base pristina) ou preserva
-  (divergiu). Recusa rodar com árvore suja sem `--force`, para o diff do update
-  ficar legível — **o `--dry-run` passa por esse guard**, porque uma simulação
-  não produz diff nenhum e barrá-la só ensinava a alcançar o `--force`.
-  `--profile` sobrescreve a receita gravada.
-  O **`--dry-run` aplica a decisão de fork**, não só lista o que buscaria: com
-  linha-base gravada o veredito sai de dois hashes locais e é exato, então a
-  simulação já mostra `preserve` no que está editado. Sem linha-base ele avisa
-  em vez de afirmar — esse ramo precisa do upstream, e o dry-run não busca
-  nada. Um dry-run que anuncia sobrescrever o que a execução real preserva é
-  pior que dry-run nenhum: ele existe para se confiar nele antes de rodar.
-- **`status [path]`**: diagnostica o ambiente vendorizado **deste projeto**.
-  A fronteira com o `doctor` decide o conteúdo de cada um: o `doctor` pergunta
-  se a **máquina** está pronta (dependências externas, global), o `status`
-  pergunta se **este projeto** está são. Por isso o `status` não repete a
-  tabela de dependências. Quatro checagens, todas offline:
-  1. **Fork** — hash da árvore vendorizada contra a linha-base pristina do
-     `internal/store`, dizendo o que o `ray update` faria: atualizar
-     (intocado) ou preservar (editado). Sem linha-base o veredito é
-     *procedência desconhecida*, **não** "intocado" — ver o Apêndice.
-     Sem `.claude/.ray-profile` a checagem inteira cala: não há receita a
-     comparar, e `.claude/` copiado à mão é caso normal. Com o registro
-     presente e a receita ilegível (ausente, corrompida, inválida) é o
-     oposto — vira problema com o erro junto. Os dois casos saíam iguais, e o
-     segundo deixava o usuário sem `profile:` na saída e sem pista do porquê.
-  2. **Git** — `ls-files` primeiro, `status --porcelain` depois. A primeira
-     consulta separa "nunca versionei" de "versionei e depois divergiu",
-     porque logo após o `init ai` tudo está untracked e isso é o estado
-     normal. O escopo é **derivado das negações do bloco do `.gitignore`** —
-     hoje `.claude/` e `.mcp.json` — menos um denylist explícito onde mora o
-     `docs/`, que é do usuário. Derivado, e não fixo, porque lista fixa
-     dessincroniza em silêncio: a whitelist ganha entrada e o status para de
-     vigiar parte do ambiente sem nada falhar. O `git add` da nota usa a
-     whitelist **inteira**, docs/ incluído: ele manda commitar, não vigiar.
+  git-status. Flags: `--force` (árvore suja e sobrescrita), `--profile`
+  (sobrescreve a receita gravada), `--no-global` (pula os passos globais).
+  O que a feature garante, e o que o `--dry-run` aplica: `features.md`.
+- **`status [path]`**: diagnostica o ambiente vendorizado **deste projeto**, em
+  quatro checagens offline (fork, git, `.gitignore`, MCP). O princípio, os três
+  níveis de saída e o que cada checagem garante: `features.md`. Aqui ficam só as
+  duas mecânicas que não cabem lá:
+  - **O escopo de vigilância é derivado das negações do bloco do `.gitignore`**
+    — hoje `.claude/` e `.mcp.json` — menos um denylist onde mora o `docs/`, que
+    é do usuário. Derivado, e não fixo, porque lista fixa dessincroniza em
+    silêncio: a whitelist ganha entrada e o status para de vigiar parte do
+    ambiente sem nada falhar. **O `git add` da nota é outra pergunta** e usa
+    três fontes unidas, filtradas por existir em disco: a whitelist inteira,
+    os arquivos que a receita escreve na raiz, e o `.gitignore` — que entra
+    sempre, porque o `ray` sempre o escreve, mesmo com receita ilegível.
+    Commitar e vigiar são perguntas diferentes; antes dessa separação o
+    `ray status` mandava commitar **menos** que o `ray new` para o mesmo projeto.
+  - **A linha de fatos conta conteúdo, não entradas de topo**: uma skill é um
+    `SKILL.md`, um agente e um comando são um `.md`, e a contagem desce em
+    subdiretório. Contar entradas de diretório fazia um README solto em
+    `skills/` valer uma skill, e um grupo de comandos com namespace valer um
+    comando só.
 
-     Mas **a whitelist sozinha não é o `git add`**, e a razão é estrutural:
-     ela só lista o que precisa de **negação**, então o que ninguém ignora
-     nunca aparece nela. Ficavam de fora o `.gitignore` — cujas negações são
-     o que faz o vendorizado ser commitado por quem clona, de modo que sem
-     ele no add o ambiente não viaja — e os arquivos que a receita escreve na
-     raiz (`CLAUDE.md`, `SECURITY.md`). O add é a união de três fontes, todas
-     filtradas por existir em disco: whitelist, `scaffold.files` da receita, e
-     o `.gitignore`, que entra sempre porque o `ray` sempre o escreve, mesmo
-     com receita ilegível. Antes disso o `ray status` mandava commitar
-     **menos** que o `ray new` para o mesmo projeto.
-  3. **`.gitignore`** — o bloco entre os marcadores está inteiro? Negação
-     removida é falha silenciosa: o vendorizado volta a ser ignorado e nada
-     avisa.
-  4. **MCP** — `RAY_BRAIN` aponta para caminho existente, e o `Command` de
-     cada servidor está no PATH. Não há checagem genérica de "caminho morto":
-     `mcp.Server` não tipa nada como caminho.
-
-  A linha de fatos conta **conteúdo, não entradas de topo**: uma skill é um
-  `SKILL.md`, um agente e um comando são um `.md`, e a contagem desce em
-  subdiretório. Contar `os.ReadDir` fazia um README solto em `skills/` valer
-  uma skill e um grupo de comandos com namespace valer um comando só.
-
-  Degrada em vez de falhar: fora de repo git, ou sem o binário, a seção de git
-  some inteira sem afetar as outras; sem `.claude/`, diz uma frase e para.
+  Um caso de degradação que vale registrar: sem `.claude/.ray-profile` a
+  checagem de fork inteira cala — não há receita a comparar, e `.claude/`
+  copiado à mão é caso normal. Com o registro presente e a receita ilegível é o
+  oposto: vira problema, com o erro junto. Os dois casos saíam iguais, e o
+  segundo deixava o usuário sem `profile:` na saída e sem pista do porquê.
 
 ---
 

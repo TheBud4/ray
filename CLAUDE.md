@@ -74,8 +74,8 @@ fato, pare e reporte em vez de escolher uma.
 <!-- Ponteiro, não cópia. A descrição do sistema mora em docs/ e é corrigida junto
      com a mudança que a defasou. Aqui ficam só as decisões travadas — elas são
      curtas, mudam quase nunca, e precisam estar no contexto sem ir buscar. -->
-Estrutura, módulos e fronteiras: `docs/architecture.md`. Não repita aqui o que
-está lá.
+Estrutura, módulos e fronteiras: `docs/architecture.md`. O que cada feature faz
+e os invariantes dela: `docs/features.md`. Não repita aqui o que está lá.
 
 - Decisões arquiteturais travadas (NÃO reabrir sem perguntar):
   - **O ray não embute conteúdo de componentes.** Ele orquestra installers

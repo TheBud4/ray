@@ -155,8 +155,14 @@ make fmt-check   # falha se algo precisar de gofmt
 make ci          # fmt-check + vet + test (o que o CI roda)
 ```
 
-Detalhes de arquitetura, modelo de dados e o plano de fases de construção
-estão em [`docs/ray-build-guide.md`](docs/ray-build-guide.md).
+Documentação de projeto, em `docs/`:
+
+| Arquivo | Responde |
+|---|---|
+| [`features.md`](docs/features.md) | o que cada feature faz e o que precisa continuar verdade |
+| [`architecture.md`](docs/architecture.md) | como o sistema é montado: pacotes, fronteiras, regras de dependência |
+| [`conventions.md`](docs/conventions.md) | como se escreve código aqui |
+| [`ray-build-guide.md`](docs/ray-build-guide.md) | por que as decisões de construção foram tomadas |
 
 ## Licença
 
