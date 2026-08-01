@@ -331,9 +331,10 @@ de projeto. Alavanca ainda não usada: o frontmatter `paths` escopa uma regra po
 glob, carregando-a só quando a IA toca arquivos que casam — a saída natural se as
 regras de learn crescerem.
 
-A regra que sustenta o conjunto: **o que está no `CLAUDE.md` nunca se repete numa
-spec.** E todo critério de aceite vira um teste nomeado `CA-NN:`, de modo que
-`grep -r "CA-03" test/` responde "isso está implementado?" em um segundo.
+A regra que sustenta o conjunto: **o que está no `CLAUDE.md` nunca se repete no
+documento por feature.** E cada item verificável desse documento vira um teste
+que carrega o mesmo identificador, de modo que um `grep` pelo identificador no
+diretório de testes responde "isso está implementado?" em um segundo.
 
 **Templates** (`internal/scaffold/templates/*.tmpl`, `go:embed`), placeholders
 `{{.ProjectName}}` e `{{.Stack}}`. `EnsureTemplates(~/.ray/templates)` copia os
@@ -360,8 +361,12 @@ receita + os de sistema são deduplicados por path (receita ganha).
      usar em PreToolUse. O `{"decision":"block"}` de topo ainda funciona
      (verificado em 2.1.220), mas é desaconselhado, e este é o único bloqueio
      do modo learn: não se apoia em forma tolerada. Piso de suporte: **Claude
-     Code 2.x**. Em PostToolUse o `decision` de topo segue correto — é o que o
-     `guard-vocab` usa, e não muda. A negação é montada com `jq`, não com aspas
+     Code 2.x**. É o único hook do conjunto que nega: os três guards de aviso
+     — `guard-add`, `guard-plans` e `guard-vocab` — emitem `systemMessage` e
+     saem **0**, sem exceção. Um deles saía 2, que devolve o achado como erro e
+     interrompe o turno; como a varredura do `guard-vocab` é do arquivo
+     inteiro, e não do que a edição acrescentou, isso interrompia edição por
+     linha que o autor da edição não escreveu. A negação é montada com `jq`, não com aspas
      escapadas: caminho com `"` produziria JSON inválido, e JSON inválido num
      hook que nega falha **aberto**. `mode_test.go` trava as duas coisas. Sem
      `jq`, nega tudo — hook que bloqueia falha fechado. É um **freio de

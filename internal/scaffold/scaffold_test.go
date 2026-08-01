@@ -841,6 +841,16 @@ func TestGuardVocabWarnsOnDeliveredArtifacts(t *testing.T) {
 		// em docs/superpowers/, que é artefato entregue — não sessão local.
 		{"docs superpowers e artefato entregue", "docs/superpowers/plans/x.md", "Ver spec 012.\n", true},
 		{"superpowers sem ponto nao e isento", "superpowers/x.md", "Ver spec 012.\n", true},
+		// Um guard precisa escrever o vocabulário que caça. Sem a isenção ele
+		// se acusa a cada edição — e o template, que é de onde a cópia sai, não
+		// mora sob `.claude/`, então não pegava carona na isenção de lá. A
+		// cópia gerada não vira caso aqui: seu caminho é o do próprio hook que
+		// o teste executa, e escrevê-la substituiria o hook pelo conteúdo do
+		// caso. `.claude/*` já a isenta de qualquer forma.
+		{"o template do guard e isento", "internal/scaffold/templates/claude/hooks/guard-vocab.sh.tmpl", "grep -E 'CA-[0-9]|critério de aceite'\n", false},
+		// A isenção é do guard, não de qualquer arquivo sob hooks/: doc de hook
+		// é artefato entregue como outro qualquer.
+		{"doc de hooks nao e isento", "docs/hooks/README.md", "Ver spec 012.\n", true},
 	}
 
 	for _, tc := range cases {
@@ -877,12 +887,20 @@ func TestGuardVocabWarnsOnDeliveredArtifacts(t *testing.T) {
 				t.Fatalf("rodando guard-vocab.sh: %v", err)
 			}
 
-			warned := res.ExitCode == 2
-			if warned != tc.warns {
-				t.Errorf("avisou = %v, want %v (exit %d, stderr %q)", warned, tc.warns, res.ExitCode, res.Stderr)
+			// O contrato mudou junto com o hook: ele avisa como os irmãos,
+			// por systemMessage e saindo 0, em vez de sair 2. Um exit 2 em
+			// PostToolUse devolve o achado como erro e interrompe o turno —
+			// bloquear é exatamente o que o cabeçalho do hook promete não
+			// fazer, e o guard-code é o único da família com esse direito.
+			if res.ExitCode != 0 {
+				t.Fatalf("ExitCode = %d, want 0: a warning hook never fails", res.ExitCode)
 			}
-			if warned && !strings.Contains(res.Stderr, tc.relPath) {
-				t.Errorf("stderr does not name the file: %q", res.Stderr)
+			warned := strings.Contains(res.Stdout, "systemMessage")
+			if warned != tc.warns {
+				t.Errorf("avisou = %v, want %v (stdout: %q)", warned, tc.warns, res.Stdout)
+			}
+			if warned && !strings.Contains(res.Stdout, tc.relPath) {
+				t.Errorf("stdout does not name the file: %q", res.Stdout)
 			}
 		})
 	}
