@@ -57,48 +57,15 @@ não no binário.
 
 ## 3. Arquitetura e fronteiras de pacotes
 
-```
-ray/
-├── main.go                       # chama cmd.Execute()
-├── go.mod / go.sum
-├── Makefile                      # build/test/vet/fmt/ci
-├── .github/workflows/ci.yml      # roda `make ci`
-├── .gitignore
-├── README.md
-└── internal/
-    ├── cmd/          # Cobra: root, init, init_ai, new, run, profile, brain,
-    │                 #   doctor, update, status, stats, learn
-    ├── runner/       # ÚNICA fronteira de exec. ExecRunner (real, dry-run) + FakeRunner
-    ├── profile/      # struct da receita + load/validate + defaults + list/add/remove
-    ├── installer/    # receita → Plan{Commands, Globals, Servers} (puro, não executa)
-    ├── acquire/      # componente (skills|aitmpl|git) → bytes locais, sem symlink
-    ├── store/        # cache content-addressed do conteúdo adquirido; só filesystem
-    ├── update/       # `ray update`: re-adquire e protege edição por hash pristino
-    ├── status/       # `ray status`: diagnóstico do ambiente vendorizado; só lê
-    ├── mcp/          # Server + merge idempotente de .mcp.json
-    ├── claudecfg/    # merge de .claude/settings.json
-    ├── scaffold/     # renderiza orientation files (go:embed templates) + modos
-    ├── vault/        # valida a vault Obsidian do usuário (Verify/Stat); não cria
-    ├── economy/      # mecanismos de Token Economy como implementações plugáveis
-    ├── metrics/      # agrega os proxies de atividade que os mecanismos deixam
-    ├── learn/        # máquina verificável do modo learn (marcos + diário)
-    ├── preflight/    # checagens de deps (fonte única p/ doctor + init ai), c/ Fix
-    ├── initai/       # orquestra o fluxo init ai ponta-a-ponta
-    ├── runfile/      # aliases do `ray run` (ray.yaml + ~/.ray/commands.yaml)
-    ├── rayconfig/    # ~/.ray/config.yaml (Config) + ~/.ray/state.yaml (State)
-    ├── raypaths/     # resolve ~/.ray (RAY_HOME override)
-    └── openutil/     # abrir caminho no app default (xdg-open/open)
-```
+A estrutura de pacotes, as regras de dependência e as fronteiras estão em
+[`architecture.md`](architecture.md), que é a fonte — descreve o sistema como
+ele é hoje e é corrigido junto com a mudança que o defasa. Não repita aqui o
+que está lá.
 
-**Regras de fronteira (cada peça testável isolada):**
-- `installer` não sabe de CLI nem executa — devolve **dados** (`Plan`).
-- `profile` só carrega/valida — não executa.
-- `runner` é o único que toca processos (`os/exec`). `preflight.PathLooker` usa
-  `exec.LookPath` e não fura a regra: resolver nome contra o `$PATH` é stat de
-  diretório, não criação de processo. É o que deixa o `ray status` responder
-  "este comando do `.mcp.json` existe?" sem executar binário de terceiro.
-- `scaffold` só escreve arquivos — não chama processos.
-- `cmd`/`initai` orquestram: load receita → resolve plan → runner → mcp/settings → scaffold → resumo.
+O que este guia acrescenta sobre arquitetura são as **razões** das fronteiras,
+e elas estão distribuídas nas seções que as originaram: o `Plan` como dado
+puro no §6, o scaffold em camadas no §7, e a ordem dos passos do `init ai` no
+§8.
 
 ---
 
@@ -198,11 +165,11 @@ ignorar cegaria o marcador para o caso que ele existe para pegar.
 
 **Não existem `ray vault` nem `ray docs`.** O `brain` os substituiu: o ray deixou
 de guardar vault própria em `~/.ray/vault` e passou a apontar para uma vault que
-o usuário já mantém (§9, §16). O `internal/vault` sobreviveu como validador —
+o usuário já mantém (§9, §14). O `internal/vault` sobreviveu como validador —
 `Verify`/`Status` —, mas não há mais comando com esse nome.
 
-**`ray` sem subcomando** não cai no help do Cobra: imprime a tela de abertura
-(§10.1). Fora de um projeto ela sugere `ray new` / `ray init ai`; dentro de um
+**`ray` sem subcomando** não cai no help do Cobra: imprime a tela de abertura.
+Fora de um projeto ela sugere `ray new` / `ray init ai`; dentro de um
 `.claude/`, mostra perfil e inventário e aponta `claude` / `ray status`. Lê só
 arquivo — sem git, sem lookup de PATH, sem carregar receita — e sai **0** mesmo
 com dependência required faltando, que vira alerta na própria tela. A linha de
@@ -586,74 +553,7 @@ A fronteira `runner` torna tudo testável sem rede. Por pacote:
 
 ---
 
-## 14. Plano de fases (ordem de construção)
-
-> Cada fase deixa `go build ./...` e `go test ./...` verdes; commit por fase.
-> TDD onde há lógica (profile, installer, scaffold, runner, vault, mcp).
-
-```
-Fase 0  Bootstrap: git init + .gitignore Go + go mod + Cobra/yaml + main.go +
-        root (--verbose/--dry-run) + esqueleto da árvore de comandos.
-Fase 1  runner: interface Run(ctx,Command)→Result; ExecRunner (real+dryrun);
-        FakeRunner.
-Fase 2  profile: structs + Load/Validate + Defaults + EnsureDir + List/Starter/
-        WriteNew/Remove.
-Fase 3  installer: Resolve → Plan{Commands,Globals,Servers}; componentCommand +
-        integrations.go (tabela §6).
-Fase 4  mcp + claudecfg: merge idempotente de .mcp.json e settings.json.
-Fase 5  vault: Verify + Stat (validação da vault do usuário; o ray não cria).
-Fase 6  scaffold: templates go:embed + EnsureTemplates + WriteFiles (não-sobrescr.)
-        + modos (SystemFiles/HookSettings) + guard-code.sh/session-start.sh.
-Fase 7  preflight + doctor (com Fix/--fix).
-Fase 8  rayconfig (Config+State) + raypaths + initai.Run (os 10 passos) +
-        cmd/init_ai.go.
-Fase 9  cmd de gestão: profile (list/show/add/edit/remove/path), brain
-        (set/status/open/path), openutil.
-Fase 10 runfile + cmd/run.go (aliases) + cmd/new.go (create+git init+init ai).
-Fase 11 Makefile + CI (make ci) + README.
-Fase 12 Validação manual num dir descartável (RAY_HOME apontado a temp):
-        doctor, brain set, init ai --dry-run, depois real; inspecionar .claude/,
-        docs/, .mcp.json, settings.json; testar --mode learn (guard bloqueia código).
-```
-
-Dependências: 0 → 1 → 2 → 3 → {4,5,6,7} → 8 → {9,10} → 11 → 12.
-
-Isto é a ordem do **bootstrap**, não o inventário do que existe. O que veio
-depois entrou pelos incrementos I1–I9 e não cabe numa fase: `acquire` + `store`
-(I1–I2), `update` (I3), `economy` + `metrics` (I5), `learn` (I6a) e `status`
-(I8). Para o que existe hoje, o §3 é a fonte.
-
----
-
-## 15. Gaps do código antigo — todos fechados
-
-Cinco pontos ficaram imperfeitos na primeira volta e foram anotados aqui para não
-se perderem. Os cinco entraram; a seção fica como registro de **onde cada um
-mora agora**, porque é isso que serve a quem lê o guia hoje.
-
-1. **`.gitignore` no `ray new`.** `ray new` fazia `git init` sem gerar
-   `.gitignore`, e `graphify update .` cria `graphify-out/` em todo projeto —
-   commitado por engano junto com `.env` e artefatos de stack.
-   → `scaffold.MergeGitignore`: bloco entre marcadores idempotentes, whitelist do
-   conteúdo vendorizado + blacklist de runtime/segredos + `stackLines` por
-   perfil. A whitelist virou a "regra-mãe" do I1, e o `ray status` a verifica.
-
-2. **`ray run` com passagem de argumentos.** → `cmd.ArgsLenAtDash` em
-   `splitAliasArgs`: `ray run test -- -run TestX` repassa tudo após o `--`.
-
-3. **`ray update`.** → `internal/update` + `cmd/update.go`, que foi além do
-   previsto: re-adquire conteúdo pelo Acquirer de cada componente e protege
-   edição local **por hash pristino** do `internal/store`, não por git-status.
-
-4. **Testes do pacote `cmd`.** → 11 arquivos de teste, um por comando.
-
-5. **`ray completion` documentado.** → seção no README com bash, zsh e fish. O
-   `ray completion install` de conveniência foi descartado: o Cobra já entrega o
-   script, e o caminho de instalação é do shell, não do ray.
-
----
-
-## 16. Comandos de gestão — detalhes
+## 14. Comandos de gestão — detalhes
 
 - **`profile list`**: garante defaults, imprime `nome — descrição` (ordenado).
   **Receita quebrada aparece na lista, marcada** — `(invalid: …)` quando parseia e
@@ -705,7 +605,7 @@ mora agora**, porque é isso que serve a quem lê o guia hoje.
 
 ---
 
-## 17. Erros, segurança, exit codes
+## 15. Erros, segurança, exit codes
 
 - **Abortam no início:** alvo inválido/sem permissão; perfil inexistente; `npx`
   ausente; (se headroom/code_graph) `python3.10+`+`uv` ausentes.
@@ -727,7 +627,7 @@ mora agora**, porque é isso que serve a quem lê o guia hoje.
 
 ---
 
-## 18. Makefile / CI / commits
+## 16. Makefile / CI / commits
 
 - **Makefile:** `build`, `install`, `test`, `vet`, `fmt`, `fmt-check`,
   `ci` (= fmt-check + vet + test).
