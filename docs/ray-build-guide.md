@@ -175,7 +175,15 @@ ray
 ├── stats    [path]         # atividade medida dos mecanismos de Token Economy
 └── learn    check [path]   # roda o verify do marco corrente e registra a passagem
 ```
-Cobra fornece `version`, `help`, `completion` de graça.
+Cobra fornece `help` e `completion` de graça. **`--version` não é de graça:**
+ele só registra a flag quando o comando raiz preenche o campo `Version` — e
+enquanto isso não foi feito, `ray --version` respondia *"unknown flag"*. O valor
+vem do `debug.ReadBuildInfo` (`internal/cmd/version.go`), não de `-ldflags -X`:
+o caminho de instalação documentado é `go install .`, e ldflags só alcança quem
+passa a flag, então a versão ficaria `devel` exatamente para quem instalou como
+o README manda. Build de tag mostra a versão do módulo; build local mostra
+`devel` com revisão, data e — o que mais importa — `dirty` quando a árvore não
+estava limpa.
 
 **Não existem `ray vault` nem `ray docs`.** O `brain` os substituiu: o ray deixou
 de guardar vault própria em `~/.ray/vault` e passou a apontar para uma vault que

@@ -93,7 +93,17 @@ execução criou.
 | `ray learn check [path]` | Roda o `verify` do marco corrente e registra a passagem. |
 
 Flags globais: `--verbose`, `--dry-run` (imprime o que seria feito, sem
-executar nada).
+executar nem escrever nada) e `--version`.
+
+O `--version` sai do que o `go install` grava no binário: build de tag mostra a
+versão do módulo, build local mostra `devel` com revisão, data e `dirty` quando
+a árvore não estava limpa — um binário de árvore suja não corresponde a commit
+nenhum.
+
+```sh
+ray --version
+# ray version devel (f905791, 2026-08-01T00:41:58Z, dirty)
+```
 
 ### `--mode build\|learn`
 

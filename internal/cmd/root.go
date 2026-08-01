@@ -20,8 +20,12 @@ var (
 func newRootCmd() *cobra.Command {
 
 	root := &cobra.Command{
-		Use:           "ray",
-		Short:         "Personal CLI for bootstrapping projects and AI dev environments",
+		Use:   "ray",
+		Short: "Personal CLI for bootstrapping projects and AI dev environments",
+		// O Cobra não dá `--version` de graça: só registra a flag quando este
+		// campo está preenchido. Sem ele, `ray --version` respondia "unknown
+		// flag" e não havia como saber qual build estava rodando.
+		Version:       buildVersion(),
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		Args:          cobra.NoArgs,
