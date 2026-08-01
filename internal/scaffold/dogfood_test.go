@@ -1,8 +1,10 @@
 package scaffold
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -123,6 +125,55 @@ func TestRayOwnHooksHaveNoStrays(t *testing.T) {
 		sort.Strings(strays)
 		t.Errorf(".claude/hooks/ has %v, which scaffold does not write in build mode; remove it or add it to SystemFiles", strays)
 	}
+}
+
+// TestRayOwnSettingsMatchHookSettings fecha o outro lado do gate de dogfood. O
+// ray declara a mesma fiação de hooks em dois lugares: HookSettings, que a
+// escreve nos projetos dos outros, e .claude/settings.json, que ele usa em si.
+// Só o primeiro era testado, e o segundo derivou — os matchers do guard-plans e
+// do guard-vocab ficaram para trás quando o MultiEdit entrou.
+//
+// TestFileEditingHooksCoverMultiEdit existe justamente para impedir esse
+// buraco, e passava verde o tempo todo: ele olha o que o HookSettings gera,
+// nunca o arquivo que o ray usa. Uma asserção sobre o gerador não diz nada
+// sobre a cópia que ninguém regenera.
+func TestRayOwnSettingsMatchHookSettings(t *testing.T) {
+	root := repoRoot(t)
+
+	raw, err := os.ReadFile(filepath.Join(root, ".claude", "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var own map[string]any
+	if err := json.Unmarshal(raw, &own); err != nil {
+		t.Fatalf(".claude/settings.json is not valid JSON: %v", err)
+	}
+
+	// Modo build: o ray não roda em learn, então o guard-code do overlay
+	// legitimamente não aparece no arquivo dele.
+	want := HookSettings(ModeBuild)["hooks"]
+	got := own["hooks"]
+
+	// DeepEqual e não comparação de texto: o arquivo é JSON escrito à mão e
+	// alvo de merge, então indentação e ordem de chave não são contrato. A
+	// ordem *dentro* de cada evento é: ela decide qual aviso sai primeiro.
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf(".claude/settings.json diverged from HookSettings(ModeBuild).\ngot:\n%s\nwant:\n%s\nThe two declare the same wiring; align the file by hand.",
+			indentJSON(t, got), indentJSON(t, want))
+	}
+}
+
+// indentJSON formata um lado da comparação para a falha ser legível em vez de
+// um despejo de map[string]interface {} numa linha só.
+func indentJSON(t *testing.T, v any) []byte {
+	t.Helper()
+
+	b, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
 }
 
 // firstDiff localiza a primeira linha divergente, para a falha apontar onde
