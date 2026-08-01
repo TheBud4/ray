@@ -58,6 +58,13 @@ com a correção ao lado, para virar item de revisão em vez de prosa:
   projeto novo, e nenhum teste pega.
 - ❌ Instruir o agente a buscar por um campo que só a vault do autor tem →
   ✅ só assumir o que o próprio scaffold estabelece.
+- ❌ Mensagem ao usuário escrita em português, no meio de uma saída em inglês →
+  ✅ a regra de idioma tem uma fronteira só, e ela não é o arquivo: **comentário
+  e doc de pacote em português, tudo que o usuário lê em inglês**. Aconteceu
+  três vezes no mesmo `internal/initai/initai.go`, e nenhuma apareceu na
+  revisão — um aviso só é visto quando o caminho que o emite roda. A exceção
+  é **conteúdo scaffoldado** (templates, bloco do `.gitignore`): aquilo é
+  material do projeto gerado, que é pt-BR por inteiro, não mensagem do CLI.
 
 Esta lista cresce por acúmulo: um item entra quando o mesmo erro aparece pela
 segunda vez, não na primeira. Se um item aqui for verificável por lint ou teste,

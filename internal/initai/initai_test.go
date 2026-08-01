@@ -561,7 +561,7 @@ func TestRunWarnsWhenBrainUnconfigured(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if !hasWarning(sum, "brain ligado mas não configurado") {
+	if !hasWarning(sum, "brain integration is on but no brain is configured") {
 		t.Errorf("Warnings = %v, want one about the unconfigured brain", sum.Warnings)
 	}
 	if slices.Contains(mcpServerNames(t, target), "brain") {

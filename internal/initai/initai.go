@@ -171,7 +171,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 			// (disco == embed → atualiza; divergiu → preserva). Abortar aqui
 			// trocaria um efeito recuperável por um comando morto.
 			if err := st.SetPristine(home.TemplatesDir, s.Rel, s.Hash); err != nil {
-				sum.Warnings = append(sum.Warnings, fmt.Sprintf("template %s: linha-base pristina não gravada (%v)", s.Rel, err))
+				sum.Warnings = append(sum.Warnings, fmt.Sprintf("template %s: pristine baseline not recorded (%v)", s.Rel, err))
 			}
 		case scaffold.TemplateKept:
 			sum.Warnings = append(sum.Warnings, fmt.Sprintf("template %s: %s", s.Rel, s.Reason))
@@ -206,7 +206,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	brainPath := cfg.BrainPath()
 	if prof.Integrations.Brain {
 		if brainPath == "" {
-			sum.Warnings = append(sum.Warnings, "brain ligado mas não configurado (rode `ray brain set <path>`)")
+			sum.Warnings = append(sum.Warnings, "brain integration is on but no brain is configured (run `ray brain set <path>`)")
 		} else if verr := vault.Verify(brainPath); verr != nil {
 			sum.Warnings = append(sum.Warnings, verr.Error())
 			brainPath = ""
@@ -303,7 +303,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 				continue
 			}
 			if !res.HasLicense {
-				sum.Warnings = append(sum.Warnings, fmt.Sprintf("%s: sem LICENSE detectada na fonte", coord))
+				sum.Warnings = append(sum.Warnings, fmt.Sprintf("%s: no LICENSE detected at the source", coord))
 			}
 			if _, putErr := st.Put(coord, res.Dir); putErr != nil {
 				return Summary{}, putErr
