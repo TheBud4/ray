@@ -844,9 +844,7 @@ func TestGuardVocabWarnsOnDeliveredArtifacts(t *testing.T) {
 		// Um guard precisa escrever o vocabulário que caça. Sem a isenção ele
 		// se acusa a cada edição — e o template, que é de onde a cópia sai, não
 		// mora sob `.claude/`, então não pegava carona na isenção de lá. A
-		// cópia gerada não vira caso aqui: seu caminho é o do próprio hook que
-		// o teste executa, e escrevê-la substituiria o hook pelo conteúdo do
-		// caso. `.claude/*` já a isenta de qualquer forma.
+		// cópia gerada não precisa de caso próprio: `.claude/*` já a isenta.
 		{"o template do guard e isento", "internal/scaffold/templates/claude/hooks/guard-vocab.sh.tmpl", "grep -E 'CA-[0-9]|critério de aceite'\n", false},
 		// A isenção é do guard, não de qualquer arquivo sob hooks/: doc de hook
 		// é artefato entregue como outro qualquer.
@@ -856,45 +854,14 @@ func TestGuardVocabWarnsOnDeliveredArtifacts(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
-
-			if _, err := WriteFiles([]profile.ScaffoldFile{{Path: ".claude/hooks/guard-vocab.sh"}}, Options{
-				Target: dir,
-				Data:   Data{ProjectName: "demo", Stack: "go"},
-			}); err != nil {
-				t.Fatal(err)
-			}
-
 			target := filepath.Join(dir, filepath.FromSlash(tc.relPath))
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(target, []byte(tc.content), 0o644); err != nil {
-				t.Fatal(err)
-			}
 
-			payloadPath := filepath.Join(dir, "payload.json")
-			payload := `{"tool_input":{"file_path":` + strconv.Quote(target) + `}}`
-			if err := os.WriteFile(payloadPath, []byte(payload), 0o644); err != nil {
-				t.Fatal(err)
-			}
+			// O arquivo não é escrito no disco de propósito: o hook não o lê
+			// mais, e um teste que o escrevesse não distinguiria as duas fontes.
+			payload := `{"tool_input":{"file_path":` + strconv.Quote(target) +
+				`,"new_string":` + strconv.Quote(tc.content) + `}}`
 
-			res, err := runner.ExecRunner{}.Run(context.Background(), runner.Command{
-				Name: "bash",
-				Args: []string{"-c", "cat " + payloadPath + " | bash " + filepath.Join(dir, ".claude/hooks/guard-vocab.sh")},
-				Dir:  dir,
-			})
-			if err != nil {
-				t.Fatalf("rodando guard-vocab.sh: %v", err)
-			}
-
-			// O contrato mudou junto com o hook: ele avisa como os irmãos,
-			// por systemMessage e saindo 0, em vez de sair 2. Um exit 2 em
-			// PostToolUse devolve o achado como erro e interrompe o turno —
-			// bloquear é exatamente o que o cabeçalho do hook promete não
-			// fazer, e o guard-code é o único da família com esse direito.
-			if res.ExitCode != 0 {
-				t.Fatalf("ExitCode = %d, want 0: a warning hook never fails", res.ExitCode)
-			}
+			res := runGuardVocab(t, dir, payload)
 			warned := strings.Contains(res.Stdout, "systemMessage")
 			if warned != tc.warns {
 				t.Errorf("avisou = %v, want %v (stdout: %q)", warned, tc.warns, res.Stdout)
@@ -903,6 +870,116 @@ func TestGuardVocabWarnsOnDeliveredArtifacts(t *testing.T) {
 				t.Errorf("stdout does not name the file: %q", res.Stdout)
 			}
 		})
+	}
+}
+
+// runGuardVocab escreve o hook num diretório temporário, entrega o payload por
+// stdin e devolve o resultado. O hook roda com cwd na raiz do diretório, que é
+// de onde o Claude Code o invoca.
+//
+// O contrato de saída é dos irmãos: aviso por systemMessage e exit 0, nunca
+// exit 2 — que devolveria o achado como erro e interromperia o turno. Por isso
+// o exit code é conferido aqui, uma vez, e não em cada caso.
+func runGuardVocab(t *testing.T, dir, payload string) runner.Result {
+	t.Helper()
+
+	if _, err := WriteFiles([]profile.ScaffoldFile{{Path: ".claude/hooks/guard-vocab.sh"}}, Options{
+		Target: dir,
+		Data:   Data{ProjectName: "demo", Stack: "go"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	payloadPath := filepath.Join(dir, "payload.json")
+	if err := os.WriteFile(payloadPath, []byte(payload), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := runner.ExecRunner{}.Run(context.Background(), runner.Command{
+		Name: "bash",
+		Args: []string{"-c", "cat " + payloadPath + " | bash " + filepath.Join(dir, ".claude/hooks/guard-vocab.sh")},
+		Dir:  dir,
+	})
+	if err != nil {
+		t.Fatalf("rodando guard-vocab.sh: %v", err)
+	}
+	if res.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0: a warning hook never fails", res.ExitCode)
+	}
+	return res
+}
+
+// O hook não lê o disco. Um arquivo cheio de vocabulário antigo, editado por uma
+// chamada que não acrescenta nenhum, não rende aviso — era esse aviso, sobre
+// linha que o autor da edição não escreveu, que se repetia a cada edição.
+func TestGuardVocabIgnoresWhatTheEditDidNotWrite(t *testing.T) {
+	if !hasJQ(t) {
+		t.Skip("jq ausente; o hook faz no-op por design")
+	}
+
+	dir := t.TempDir()
+	target := filepath.Join(dir, "README.md")
+	if err := os.WriteFile(target, []byte("Ver spec 012 para detalhes.\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	payload := `{"tool_input":{"file_path":` + strconv.Quote(target) +
+		`,"new_string":"Uma frase inteiramente limpa.\n"}}`
+
+	res := runGuardVocab(t, dir, payload)
+	if strings.Contains(res.Stdout, "systemMessage") {
+		t.Errorf("warned about text the edit did not write: %q", res.Stdout)
+	}
+}
+
+// Os três campos que carregam texto escrito, um por ferramenta. O arquivo não
+// existe no disco em nenhum dos casos: se o hook ainda dependesse dele, os três
+// passariam em silêncio.
+func TestGuardVocabReadsEveryWrittenTextField(t *testing.T) {
+	if !hasJQ(t) {
+		t.Skip("jq ausente; o hook faz no-op por design")
+	}
+
+	cases := []struct {
+		name  string
+		input string
+	}{
+		{"content do Write", `"content":"Ver spec 012.\n"`},
+		{"new_string do Edit", `"new_string":"Ver spec 012.\n"`},
+		{"edits do MultiEdit", `"edits":[{"new_string":"linha limpa\n"},{"new_string":"Ver spec 012.\n"}]`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			target := filepath.Join(dir, "README.md")
+
+			payload := `{"tool_input":{"file_path":` + strconv.Quote(target) + `,` + tc.input + `}}`
+
+			res := runGuardVocab(t, dir, payload)
+			if !strings.Contains(res.Stdout, "systemMessage") {
+				t.Errorf("did not warn: %q", res.Stdout)
+			}
+			if !strings.Contains(res.Stdout, "README.md") {
+				t.Errorf("stdout does not name the file: %q", res.Stdout)
+			}
+		})
+	}
+}
+
+// Payload sem nenhum dos três campos — uma chamada que só apaga, por exemplo.
+// Nada a varrer é silêncio, não erro.
+func TestGuardVocabIsSilentWithoutWrittenText(t *testing.T) {
+	if !hasJQ(t) {
+		t.Skip("jq ausente; o hook faz no-op por design")
+	}
+
+	dir := t.TempDir()
+	target := filepath.Join(dir, "README.md")
+
+	res := runGuardVocab(t, dir, `{"tool_input":{"file_path":`+strconv.Quote(target)+`}}`)
+	if strings.TrimSpace(res.Stdout) != "" {
+		t.Errorf("stdout = %q, want empty with nothing written", res.Stdout)
 	}
 }
 
