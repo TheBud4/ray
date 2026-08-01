@@ -2,6 +2,8 @@ package initai
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -11,7 +13,18 @@ import (
 
 // ensureWritableDir garante que dir existe e é gravável, escrevendo e
 // removendo um arquivo-probe.
-func ensureWritableDir(dir string) error {
+//
+// Em dryRun não faz nem uma coisa nem outra: um dry-run que cria o diretório
+// do projeto já executou a parte irreversível antes de o usuário decidir. O
+// --dry-run só alcança o runner.ExecRunner, então todo caminho que toca o
+// disco fora dele tem de perguntar por ele à mão — imprime o que faria, como
+// o ExecRunner faz com processo. O preço é não checar gravabilidade na
+// simulação, e isso é o certo: dry-run mostra o plano, não valida o terreno.
+func ensureWritableDir(dir string, dryRun bool, out io.Writer) error {
+	if dryRun {
+		fmt.Fprintf(out, "+ mkdir -p %s\n", dir)
+		return nil
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}

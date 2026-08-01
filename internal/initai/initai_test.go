@@ -231,6 +231,24 @@ func TestRunDryRunWritesNothing(t *testing.T) {
 	}
 }
 
+// O alvo inexistente é o caso que o teste acima não cobre: com t.TempDir() o
+// diretório já existe, o MkdirAll do ensureWritableDir é no-op e o probe é
+// apagado — o vazamento fica invisível. É por aqui que ele aparece.
+func TestRunDryRunDoesNotCreateTheTargetDir(t *testing.T) {
+	home := newHome(t)
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := filepath.Join(t.TempDir(), "ainda-nao-existe")
+
+	opts := Options{Profile: "test", Target: target, Mode: scaffold.ModeBuild, DryRun: true, Out: &bytes.Buffer{}}
+	if _, err := Run(&runner.FakeRunner{}, allFound, opts, home); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
+		t.Errorf("stat(%s) err = %v, want IsNotExist — dry-run must not create the target", target, statErr)
+	}
+}
+
 func TestRunComponentFailureDoesNotAbort(t *testing.T) {
 	home := newHome(t)
 	writeProfile(t, home.ProfilesDir, testProfile())

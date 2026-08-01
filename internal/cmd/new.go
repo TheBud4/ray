@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,7 +42,7 @@ func newNewCmd() *cobra.Command {
 			execRunner := runner.ExecRunner{DryRun: flagDryRun, Out: cmd.OutOrStdout()}
 			initOpts := buildInitAIOptions("", cmd.OutOrStdout())
 
-			sum, err := runNew(execRunner, looker, profilesDir, args[0], args[1], flagNoGit, initOpts, home)
+			sum, err := runNew(execRunner, looker, profilesDir, args[0], args[1], flagNoGit, flagDryRun, initOpts, home)
 			if err != nil {
 				return err
 			}
@@ -64,7 +65,7 @@ func newNewCmd() *cobra.Command {
 // runNew cria o projeto (create + git init) e então monta a IA nele via
 // initai.Run. Falha num passo de create ou no git init aborta antes de
 // montar IA sobre um projeto meio-criado (build guide §17).
-func runNew(r runner.Runner, l preflight.Looker, profilesDir, profileName, projectName string, noGit bool, initOpts initai.Options, home initai.Home) (initai.Summary, error) {
+func runNew(r runner.Runner, l preflight.Looker, profilesDir, profileName, projectName string, noGit, dryRun bool, initOpts initai.Options, home initai.Home) (initai.Summary, error) {
 	target := projectName
 
 	empty, err := isEmptyOrMissingDir(target)
@@ -74,7 +75,16 @@ func runNew(r runner.Runner, l preflight.Looker, profilesDir, profileName, proje
 	if !empty {
 		return initai.Summary{}, fmt.Errorf("target %q already exists and is not empty", target)
 	}
-	if err := os.MkdirAll(target, 0o755); err != nil {
+	// O MkdirAll não passa pelo runner, então o --dry-run não o alcança
+	// sozinho: sem esta guarda, simular um `ray new` deixa a pasta para trás.
+	// Out normalizado como o initai.Run faz — chamador pode não ter passado um.
+	if dryRun {
+		out := initOpts.Out
+		if out == nil {
+			out = io.Discard
+		}
+		fmt.Fprintf(out, "+ mkdir -p %s\n", target)
+	} else if err := os.MkdirAll(target, 0o755); err != nil {
 		return initai.Summary{}, err
 	}
 

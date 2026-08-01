@@ -681,7 +681,13 @@ mora agora**, porque é isso que serve a quem lê o guia hoje.
   comando quebra de verdade; no `status`, "3 arquivos não commitados" é
   informação, e exit ≠ 0 tornaria o comando inútil em qualquer script que o
   encadeie. Só falha de leitura erra.
-- **`--dry-run`** imprime tudo, não executa nada.
+- **`--dry-run`** imprime tudo, não executa nada e **não escreve nada**. As duas
+  metades precisam ser ditas: o `--dry-run` só alcança o `runner.ExecRunner`,
+  então todo caminho que toca o disco fora do runner (`os.MkdirAll`,
+  `os.WriteFile`) tem de perguntar por ele à mão. Foi assim que `ray new
+  --dry-run` e `ray init ai --dry-run` passaram a criar o diretório-alvo sem
+  que nenhum teste percebesse — o que existia usava `t.TempDir()`, um diretório
+  que já existe, onde o `MkdirAll` é no-op.
 - **Não-sobrescrita** de scaffold (exceto regenerar com `--force`; handoff nunca).
 
 ---

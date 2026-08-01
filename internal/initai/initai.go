@@ -143,7 +143,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	if err != nil {
 		return Summary{}, err
 	}
-	if err := ensureWritableDir(target); err != nil {
+	if err := ensureWritableDir(target, opts.DryRun, out); err != nil {
 		return Summary{}, fmt.Errorf("target %s is not writable: %w", target, err)
 	}
 
