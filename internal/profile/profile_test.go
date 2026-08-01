@@ -338,8 +338,41 @@ func TestLoadForTargetMissingBothErrors(t *testing.T) {
 	profilesDir := t.TempDir()
 	target := t.TempDir()
 
-	if _, err := LoadForTarget(profilesDir, target, ""); err == nil {
+	_, err := LoadForTarget(profilesDir, target, "")
+	if err == nil {
 		t.Fatal("LoadForTarget() = nil error, want error when no record and no override")
+	}
+
+	msg := err.Error()
+	// O erro do os.ReadFile já carrega o caminho, e envolvê-lo repetia o
+	// caminho inteiro duas vezes na mesma linha.
+	if n := strings.Count(msg, ProfileRecordPath(target)); n != 1 {
+		t.Errorf("error names the path %d times, want once: %q", n, msg)
+	}
+	// Sem registro e sem override, a saída é uma só: dizer qual.
+	if !strings.Contains(msg, "--profile") {
+		t.Errorf("error = %q, want it to point at --profile", msg)
+	}
+}
+
+// Um erro de leitura que não seja "não existe" não pode virar a mesma frase:
+// "nenhum perfil registrado" seria mentira se o arquivo existe e não pôde ser
+// lido.
+func TestLoadForTargetSurfacesRealReadErrors(t *testing.T) {
+	profilesDir := t.TempDir()
+	target := t.TempDir()
+	// Um diretório no lugar do arquivo de registro: existe, e ReadFile falha
+	// com algo que não é IsNotExist.
+	if err := os.MkdirAll(ProfileRecordPath(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadForTarget(profilesDir, target, "")
+	if err == nil {
+		t.Fatal("LoadForTarget() = nil error, want the underlying read error")
+	}
+	if strings.Contains(err.Error(), "no profile recorded") {
+		t.Errorf("error = %q, want it to report the read failure, not a missing record", err)
 	}
 }
 

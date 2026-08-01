@@ -202,7 +202,13 @@ func LoadForTarget(profilesDir, target, overrideName string) (*Profile, error) {
 	if name == "" {
 		data, err := os.ReadFile(ProfileRecordPath(target))
 		if err != nil {
-			return nil, fmt.Errorf("no profile recorded at %s and --profile not given: %w", ProfileRecordPath(target), err)
+			// O erro do os.ReadFile já carrega o caminho: envolvê-lo repetia
+			// o caminho inteiro duas vezes na mesma linha. E "não existe"
+			// merece frase própria — é o caso comum, e a saída é uma só.
+			if os.IsNotExist(err) {
+				return nil, fmt.Errorf("no profile recorded at %s (pass --profile to choose one)", ProfileRecordPath(target))
+			}
+			return nil, fmt.Errorf("reading the recorded profile: %w", err)
 		}
 		name = strings.TrimSpace(string(data))
 	}
