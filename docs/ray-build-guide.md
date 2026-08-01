@@ -122,7 +122,7 @@ type Integrations struct { // YAML keys entre parênteses
 type Component struct {
     Via    string // "skills" | "aitmpl"
     Skill, Source string // via: skills
-    Type, Ref     string // via: aitmpl (type: agent|command|mcp)
+    Type, Ref     string // via: aitmpl (type: agent|command)
 }
 type Scaffold struct {
     Files    []ScaffoldFile      // {Path, Template?}
@@ -130,8 +130,14 @@ type Scaffold struct {
 }
 ```
 **Validação** (`Validate`): `name` obrigatório; `via ∈ {skills, aitmpl}`;
-`skills` exige `skill`+`source`; `aitmpl` exige `type ∈ {agent,command,mcp}`+`ref`;
+`skills` exige `skill`+`source`; `aitmpl` exige `type ∈ {agent,command}`+`ref`;
 todo `ScaffoldFile.Path` não-vazio. Erro claro no primeiro problema.
+
+**Servidor MCP não é componente.** Declara-se em `integrations`, e sai no
+`.mcp.json` — `plan.Servers` é preenchido por `resolveIntegrations`, nunca a
+partir de `Components`. `type: mcp` numa receita é **recusado na validação**,
+com a mensagem apontando `integrations`: aceitá-lo sem implementar rota fazia a
+receita declarar um componente que ninguém adquiria e ninguém registrava.
 
 **Helpers do pacote:** `Load(path)`, `List(dir)→[]Entry`, `EnsureDir(dir)`
 (escreve defaults faltantes, nunca sobrescreve), `Starter(name)` (perfil mínimo
@@ -236,7 +242,7 @@ rastreados por `Key` em `state.yaml`), `Servers` (entradas de `.mcp.json`).
 |---|---|---|
 | `via: git` ⟶v2 | Acquirer | `GitAcquirer`: tarball/clone de `<repo>@<ref>`, extrai `<path>`, copia p/ `.claude/` + captura `LICENSE`/`.ray-origin` (preferido p/ fontes oficiais) |
 | `via: skills` | Command | `DO_NOT_TRACK=1 npx skills add <source> --skill <skill> -a claude-code --copy -y` (+`-g` se `--global`) ⟶v2: **`--copy` e telemetria off** |
-| `via: aitmpl, type: agent\|command\|mcp` | Command | `npx claude-code-templates@latest --<type>=<ref> --yes` (copia arquivos p/ `.claude/agents\|commands/`) |
+| `via: aitmpl, type: agent\|command` | Command | `npx claude-code-templates@latest --<type>=<ref> --yes` (copia arquivos p/ `.claude/agents\|commands/`) |
 | `headroom` | Global `headroom` + Server | install: `uv tool install headroom-ai[mcp]` · server `headroom` → `headroom mcp` |
 | `brain` | Server (condicional) | só se `ray brain set` configurou path válido: `brain` → `npx -y @modelcontextprotocol/server-filesystem <path>` |
 | `code_graph` | Global `code_graph` + Command + Server | global: `uv tool install graphifyy` **e** `graphify install --platform claude` · por-projeto: `graphify update .` (constrói o grafo, tree-sitter, sem LLM) · server `graphify` → `graphify-mcp` (stdio, lê `graphify-out/graph.json`) |
