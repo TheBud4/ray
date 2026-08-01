@@ -32,8 +32,13 @@ type Options struct {
 	Profile string
 	Target  string
 	Force   bool
-	DryRun  bool
-	Out     io.Writer
+	// NoGlobal pula os passos que mexem na máquina inteira (upgrade das
+	// ferramentas uv), deixando só o que é do projeto-alvo. Mesmo recorte que
+	// o flag homônimo de `ray new` e `ray init ai`: atualizar um projeto não
+	// deveria ser a única forma de subir a versão global de uma ferramenta.
+	NoGlobal bool
+	DryRun   bool
+	Out      io.Writer
 }
 
 // Summary é o resultado de Run.
@@ -80,12 +85,15 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 		}
 	}
 
-	// 3. ferramentas (latest) — só as que a receita liga.
-	for _, cmd := range toolUpgradeCommands(prof.Integrations) {
-		if runOne(r, cmd) {
-			sum.Updated = append(sum.Updated, cmd.String())
-		} else {
-			sum.Failed = append(sum.Failed, cmd.String())
+	// 3. ferramentas (latest) — só as que a receita liga, e só se o --no-global
+	// não tiver recortado a máquina para fora deste update.
+	if !opts.NoGlobal {
+		for _, cmd := range toolUpgradeCommands(prof.Integrations) {
+			if runOne(r, cmd) {
+				sum.Updated = append(sum.Updated, cmd.String())
+			} else {
+				sum.Failed = append(sum.Failed, cmd.String())
+			}
 		}
 	}
 

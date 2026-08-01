@@ -214,10 +214,11 @@ dir → `git init -q` (salvo `--no-git`) → chama `initai.Run`. Falha num passo
 `create` **aborta** (não montar IA sobre projeto meio-criado).
 
 ### Demais flags
-`doctor --fix` · `run --list` · `update --profile <n> --force` ·
+`doctor --fix` · `run --list` · `update --profile <n> --force --no-global` ·
 `learn check --profile <n>`. O `--profile` do `update` e do `learn` sobrescreve
 a receita gravada em `.claude/.ray-profile`; o `--force` do `update` passa por
-cima de edição local e de árvore suja. `status` e `stats` não têm flag própria.
+cima de edição local e de árvore suja; o `--no-global` pula os `uv tool upgrade`.
+`status` e `stats` não têm flag própria.
 
 ---
 

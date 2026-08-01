@@ -18,8 +18,10 @@ import (
 func resetUpdateFlags(t *testing.T) {
 	t.Helper()
 	prevProfile, prevForce, prevDryRun := flagUpdateProfile, flagUpdateForce, flagDryRun
+	prevNoGlobal := flagNoGlobal
 	t.Cleanup(func() {
 		flagUpdateProfile, flagUpdateForce, flagDryRun = prevProfile, prevForce, prevDryRun
+		flagNoGlobal = prevNoGlobal
 	})
 }
 
@@ -89,5 +91,22 @@ func TestUpdateCmdFlags(t *testing.T) {
 	}
 	if c.Flags().Lookup("force") == nil {
 		t.Error("missing --force flag")
+	}
+	if c.Flags().Lookup("no-global") == nil {
+		t.Error("missing --no-global flag")
+	}
+}
+
+func TestBuildUpdateOptionsMapsFlags(t *testing.T) {
+	resetUpdateFlags(t)
+
+	flagUpdateProfile, flagUpdateForce, flagNoGlobal, flagDryRun = "p", true, true, true
+	opts := buildUpdateOptions("t", &bytes.Buffer{})
+
+	if opts.Profile != "p" || opts.Target != "t" {
+		t.Errorf("Profile/Target = %q/%q, want %q/%q", opts.Profile, opts.Target, "p", "t")
+	}
+	if !opts.Force || !opts.NoGlobal || !opts.DryRun {
+		t.Errorf("Force/NoGlobal/DryRun = %v/%v/%v, want all true", opts.Force, opts.NoGlobal, opts.DryRun)
 	}
 }

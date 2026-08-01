@@ -269,6 +269,32 @@ func TestRunUpgradesTools(t *testing.T) {
 	}
 }
 
+func TestRunNoGlobalSkipsToolUpgrades(t *testing.T) {
+	home := newHome(t)
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+	writeProfileRecord(t, target, "test")
+
+	fr := &seedingRunner{}
+	sum, err := Run(fr, cleanGitCheck(), Options{Target: target, NoGlobal: true}, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if sum.HadFailure {
+		t.Fatalf("HadFailure = true, Failed = %v", sum.Failed)
+	}
+
+	for _, call := range fr.Calls {
+		if s := call.String(); strings.Contains(s, "uv tool upgrade") {
+			t.Errorf("global tool upgrade ran despite --no-global: %q", s)
+		}
+	}
+	// O passo project-local segue: --no-global recorta a máquina, não o alvo.
+	if len(sum.Updated) == 0 {
+		t.Error("Updated is empty, want the project-local content step to still run")
+	}
+}
+
 // ---- Run: content re-acquisition + fork detection ------------------------
 
 func TestRunOverwritesWhenDiskMatchesPristine(t *testing.T) {

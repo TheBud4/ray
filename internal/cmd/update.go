@@ -34,20 +34,27 @@ func newUpdateCmd() *cobra.Command {
 
 			checkRunner := runner.ExecRunner{}
 			execRunner := runner.ExecRunner{DryRun: flagDryRun, Out: cmd.OutOrStdout()}
-			opts := update.Options{
-				Profile: flagUpdateProfile,
-				Target:  target,
-				Force:   flagUpdateForce,
-				DryRun:  flagDryRun,
-				Out:     cmd.OutOrStdout(),
-			}
+			opts := buildUpdateOptions(target, cmd.OutOrStdout())
 
 			return runUpdate(execRunner, checkRunner, opts, home, cmd.OutOrStdout())
 		},
 	}
 	c.Flags().StringVar(&flagUpdateProfile, "profile", "", "override the recipe recorded in .claude/.ray-profile")
 	c.Flags().BoolVar(&flagUpdateForce, "force", false, "overwrite local edits and proceed despite an uncommitted tree")
+	c.Flags().BoolVar(&flagNoGlobal, "no-global", false, "skip the machine-wide tool upgrades and update only this project")
 	return c
+}
+
+// buildUpdateOptions traduz os flags do comando em update.Options.
+func buildUpdateOptions(target string, out io.Writer) update.Options {
+	return update.Options{
+		Profile:  flagUpdateProfile,
+		Target:   target,
+		Force:    flagUpdateForce,
+		NoGlobal: flagNoGlobal,
+		DryRun:   flagDryRun,
+		Out:      out,
+	}
 }
 
 // resolveUpdateHome resolve os caminhos de ~/.ray usados por update.Run.
