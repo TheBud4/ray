@@ -39,7 +39,11 @@ func newRootCmd() *cobra.Command {
 		},
 	}
 
-	root.PersistentFlags().BoolVar(&flagVerbose, "verbose", false, "verbose output")
+	// O `v` é declarado aqui de propósito: o Cobra só dá o atalho a `--version`
+	// se o encontrar livre no Execute, então quem chega antes fica com ele.
+	// Sem isto, `ray -v <comando>` imprime a versão, não roda o comando e sai
+	// 0 — sucesso aparente em script.
+	root.PersistentFlags().BoolVarP(&flagVerbose, "verbose", "v", false, "verbose output")
 	root.PersistentFlags().BoolVar(&flagDryRun, "dry-run", false, "print actions without doing them")
 
 	// Build the command tree

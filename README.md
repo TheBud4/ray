@@ -92,8 +92,9 @@ execução criou.
 | `ray status [path]` | Diagnostica o ambiente vendorizado: o que o `ray update` faria com cada componente, se o `.claude/` está versionado, se o bloco do `.gitignore` segue intacto e se os servidores MCP resolvem. Ambiente são imprime duas linhas. |
 | `ray learn check [path]` | Roda o `verify` do marco corrente e registra a passagem. |
 
-Flags globais: `--verbose`, `--dry-run` (imprime o que seria feito, sem
-executar nem escrever nada) e `--version`.
+Flags globais: `--verbose` (`-v`), `--dry-run` (imprime o que seria feito, sem
+executar nem escrever nada) e `--version`, que não tem forma curta — o `-v` é da
+verbosidade.
 
 O `--version` sai do que o `go install` grava no binário: build de tag mostra a
 versão do módulo, build local mostra `devel` com revisão, data e `dirty` quando
