@@ -47,7 +47,14 @@ func runProfileList(dir string, out io.Writer) error {
 		return err
 	}
 	for _, e := range entries {
-		fmt.Fprintf(out, "%s — %s\n", e.Name, e.Description)
+		switch {
+		case e.Unreadable:
+			fmt.Fprintf(out, "%s — (unreadable: %s)\n", e.Name, e.Problem)
+		case e.Problem != "":
+			fmt.Fprintf(out, "%s — %s  (invalid: %s)\n", e.Name, e.Description, e.Problem)
+		default:
+			fmt.Fprintf(out, "%s — %s\n", e.Name, e.Description)
+		}
 	}
 	return nil
 }

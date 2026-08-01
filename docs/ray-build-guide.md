@@ -650,6 +650,10 @@ mora agora**, porque é isso que serve a quem lê o guia hoje.
 ## 16. Comandos de gestão — detalhes
 
 - **`profile list`**: garante defaults, imprime `nome — descrição` (ordenado).
+  **Receita quebrada aparece na lista, marcada** — `(invalid: …)` quando parseia e
+  não valida, `(unreadable: …)` quando nem parseia, e aí o nome exibido é o do
+  arquivo. Omitir seria esconder: quem não vê o nome não tem o que passar para
+  `profile show`, que é onde mora o erro completo com caminho.
 - **`profile show <n>`**: load+valida e imprime componentes resolvidos + comandos
   que rodariam (equivale a um dry-run só do perfil).
 - **`profile add <n>`**: `Starter(n)` → `WriteNew` (erro se existe).

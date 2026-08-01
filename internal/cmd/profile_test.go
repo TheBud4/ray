@@ -29,6 +29,41 @@ func TestRunProfileListIncludesDefaultsAndExtra(t *testing.T) {
 	}
 }
 
+// A lista é o único lugar onde uma receita quebrada pode ser descoberta: quem
+// não sabe o nome não tem o que passar para `profile show`. Marca e motivo
+// curto na própria linha; o erro completo continua sendo do show.
+func TestRunProfileListMarksBrokenProfiles(t *testing.T) {
+	dir := t.TempDir()
+	if err := profile.EnsureDir(dir); err != nil {
+		t.Fatal(err)
+	}
+	const bad = "name: badsemantic\ndescription: parses fine\ncomponents:\n  - name: ctx7\n    type: mcp\n    via: aitmpl\n    ref: context7\n"
+	if err := os.WriteFile(filepath.Join(dir, "badsemantic.yaml"), []byte(bad), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "broken.yaml"), []byte(":\n  - ["), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := runProfileList(dir, &out); err != nil {
+		t.Fatalf("runProfileList() error = %v", err)
+	}
+
+	got := out.String()
+	for _, want := range []string{"badsemantic", "invalid:", "broken.yaml", "unreadable:"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("output = %q, want it to contain %q", got, want)
+		}
+	}
+	// A receita sã não pode ganhar ruído por causa das vizinhas.
+	for _, line := range strings.Split(strings.TrimSpace(got), "\n") {
+		if strings.HasPrefix(line, "go —") && strings.Contains(line, "(") {
+			t.Errorf("healthy profile line = %q, want no marker", line)
+		}
+	}
+}
+
 func TestRunProfileShowPrintsComponentsAndServers(t *testing.T) {
 	dir := t.TempDir()
 	p := &profile.Profile{

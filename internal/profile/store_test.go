@@ -130,7 +130,10 @@ func TestList(t *testing.T) {
 		}
 	})
 
-	t.Run("skips broken yaml", func(t *testing.T) {
+	// Este subteste exigia o contrário — que broken.yaml sumisse da lista.
+	// Sumir é o defeito: quem não vê o nome não sabe que há arquivo para
+	// inspecionar com `profile show`, que é onde o erro completo mora.
+	t.Run("reveals broken yaml", func(t *testing.T) {
 		dir := t.TempDir()
 		if err := EnsureDir(dir); err != nil {
 			t.Fatal(err)
@@ -143,8 +146,89 @@ func TestList(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(entries) != 3 {
-			t.Errorf("List() returned %d entries, want 3 (broken.yaml should be skipped)", len(entries))
+		if len(entries) != 4 {
+			t.Fatalf("List() returned %d entries, want 4 (broken.yaml included)", len(entries))
+		}
+
+		var broken *Entry
+		for i := range entries {
+			if entries[i].Name == "broken.yaml" {
+				broken = &entries[i]
+			}
+		}
+		if broken == nil {
+			t.Fatalf("no entry named broken.yaml; got %v", entries)
+		}
+		// O nome é o do arquivo porque o conteúdo não parseia: não há campo
+		// `name` de onde tirar outro.
+		if broken.Problem == "" {
+			t.Error("broken.yaml has an empty Problem; want the parse error")
+		}
+	})
+
+	t.Run("flags a profile that parses but does not validate", func(t *testing.T) {
+		dir := t.TempDir()
+		// `type: mcp` parseia como componente e é recusado pelo Validate —
+		// MCP se declara em `integrations`, não como componente.
+		const bad = "name: badsemantic\ndescription: parses fine\ncomponents:\n  - name: ctx7\n    type: mcp\n    via: aitmpl\n    ref: context7\n"
+		if err := os.WriteFile(filepath.Join(dir, "badsemantic.yaml"), []byte(bad), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		entries, err := List(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) != 1 {
+			t.Fatalf("List() returned %d entries, want 1", len(entries))
+		}
+		e := entries[0]
+		if e.Name != "badsemantic" {
+			t.Errorf("Name = %q, want %q", e.Name, "badsemantic")
+		}
+		if e.Problem == "" {
+			t.Fatal("Problem is empty; an invalid profile must not list as healthy")
+		}
+		if !strings.Contains(e.Problem, "mcp") {
+			t.Errorf("Problem = %q, want it to name the offending type", e.Problem)
+		}
+	})
+
+	// O yaml.v3 devolve erro multi-linha quando o tipo não bate ("yaml:
+	// unmarshal errors:\n  line N: ..."), e a lista é uma linha por receita.
+	t.Run("problem is always a single line", func(t *testing.T) {
+		dir := t.TempDir()
+		const mismatch = "name: mismatch\ncomponents: not-a-list\n"
+		if err := os.WriteFile(filepath.Join(dir, "mismatch.yaml"), []byte(mismatch), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		entries, err := List(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) != 1 {
+			t.Fatalf("List() returned %d entries, want 1", len(entries))
+		}
+		if p := entries[0].Problem; strings.Contains(p, "\n") {
+			t.Errorf("Problem = %q, want it collapsed to a single line", p)
+		}
+	})
+
+	t.Run("healthy profile has no problem", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := EnsureDir(dir); err != nil {
+			t.Fatal(err)
+		}
+
+		entries, err := List(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range entries {
+			if e.Problem != "" {
+				t.Errorf("seeded profile %q reports Problem = %q, want none", e.Name, e.Problem)
+			}
 		}
 	})
 }
