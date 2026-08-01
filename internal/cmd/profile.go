@@ -108,7 +108,10 @@ func runProfileShow(dir, name, brainPath string, out io.Writer) error {
 	if len(plan.Servers) > 0 {
 		fmt.Fprintln(out, "\nMCP servers:")
 		for _, s := range plan.Servers {
-			fmt.Fprintf(out, "  %s: %s %s\n", s.Name, s.Command, strings.Join(s.Args, " "))
+			// Command e Args juntos numa lista só: interpolar os args num %s
+			// separado pendurava um espaço no fim da linha do servidor que não
+			// tem nenhum.
+			fmt.Fprintf(out, "  %s: %s\n", s.Name, strings.Join(append([]string{s.Command}, s.Args...), " "))
 		}
 	}
 	return nil

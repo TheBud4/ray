@@ -55,6 +55,32 @@ func TestRunProfileShowPrintsComponentsAndServers(t *testing.T) {
 	}
 }
 
+// O graphify é o servidor sem args da receita, e era ele que saía como
+// "graphify: graphify-mcp " — um espaço pendurado no fim da linha, porque o
+// formato juntava os args mesmo quando não havia nenhum.
+func TestRunProfileShowLeavesNoTrailingSpaceOnAServerWithoutArgs(t *testing.T) {
+	dir := t.TempDir()
+	p := &profile.Profile{
+		Name:         "test",
+		Description:  "a test profile",
+		Integrations: profile.Integrations{CodeGraph: true},
+	}
+	if err := profile.WriteNew(dir, p); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := runProfileShow(dir, "test", "", &out); err != nil {
+		t.Fatalf("runProfileShow() error = %v", err)
+	}
+
+	for _, line := range strings.Split(out.String(), "\n") {
+		if strings.TrimRight(line, " ") != line {
+			t.Errorf("line %q has trailing whitespace", line)
+		}
+	}
+}
+
 func TestRunProfileAddCreatesAndRejectsDuplicate(t *testing.T) {
 	dir := t.TempDir()
 
