@@ -630,6 +630,17 @@ mora agora**, porque é isso que serve a quem lê o guia hoje.
 - **`run [alias]`**: sem alias ou `--list` lista (com origem project/global);
   alias inexistente → erro apontando `--list`. Passos rodam em sequência, sem
   shell, abortando no 1º exit≠0; respeita `--dry-run`/`--verbose`.
+- **`update [path]`**: atualiza as ferramentas globais (`uv tool upgrade`) e
+  re-adquire cada componente, decidindo por **hash de conteúdo** — não por
+  git-status — se sobrescreve (disco == linha-base pristina) ou preserva
+  (divergiu). Recusa rodar com árvore suja sem `--force`, para o diff do update
+  ficar legível. `--profile` sobrescreve a receita gravada.
+  O **`--dry-run` aplica a decisão de fork**, não só lista o que buscaria: com
+  linha-base gravada o veredito sai de dois hashes locais e é exato, então a
+  simulação já mostra `preserve` no que está editado. Sem linha-base ele avisa
+  em vez de afirmar — esse ramo precisa do upstream, e o dry-run não busca
+  nada. Um dry-run que anuncia sobrescrever o que a execução real preserva é
+  pior que dry-run nenhum: ele existe para se confiar nele antes de rodar.
 - **`status [path]`**: diagnostica o ambiente vendorizado **deste projeto**.
   A fronteira com o `doctor` decide o conteúdo de cada um: o `doctor` pergunta
   se a **máquina** está pronta (dependências externas, global), o `status`

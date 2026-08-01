@@ -1,6 +1,7 @@
 package update
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -534,6 +535,104 @@ func TestRunDryRunFetchesNothing(t *testing.T) {
 	}
 	if len(sum.Updated) == 0 {
 		t.Error("Summary.Updated should still report what would be updated in dry-run")
+	}
+}
+
+// O dry-run tem de aplicar a mesma decisão da execução real quando ela é
+// decidível offline — que é o caso normal, com linha-base gravada. Dizer
+// "Updated" sobre o que será preservado é pior que não dizer nada: o dry-run
+// existe para se confiar nele antes de rodar.
+func TestRunDryRunReportsForkAsSkipped(t *testing.T) {
+	home := newHome(t)
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+	writeProfileRecord(t, target, "test")
+
+	skillDir := filepath.Join(target, ".claude", "skills", "s")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# my local edit"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	oldPristine, err := store.HashTree(seedTempFile(t, "# original"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := store.New(home.StoreDir)
+	if err := st.SetPristine(target, coordS, oldPristine); err != nil {
+		t.Fatal(err)
+	}
+
+	sum, err := Run(runner.ExecRunner{DryRun: true}, cleanGitCheck(),
+		Options{Target: target, DryRun: true, Out: &bytes.Buffer{}}, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	for _, u := range sum.Updated {
+		if u == coordS {
+			t.Errorf("Updated = %v, want %q out of it — the real run preserves a local edit", sum.Updated, coordS)
+		}
+	}
+	found := false
+	for _, s := range sum.Skipped {
+		if s == coordS {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Skipped = %v, want it to include %q", sum.Skipped, coordS)
+	}
+	if len(sum.Warnings) == 0 {
+		t.Error("Warnings is empty, want the fork warning in dry-run too")
+	}
+}
+
+// Sem linha-base o veredito depende do upstream, e o dry-run não busca nada.
+// A resposta honesta é avisar, não afirmar.
+func TestRunDryRunWarnsWhenForkCannotBeDecidedOffline(t *testing.T) {
+	home := newHome(t)
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+	writeProfileRecord(t, target, "test")
+
+	skillDir := filepath.Join(target, ".claude", "skills", "s")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# whatever"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Nenhum SetPristine: é o caso "procedência desconhecida".
+
+	sum, err := Run(runner.ExecRunner{DryRun: true}, cleanGitCheck(),
+		Options{Target: target, DryRun: true, Out: &bytes.Buffer{}}, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	if len(sum.Warnings) == 0 {
+		t.Error("Warnings is empty, want a warning that the verdict needs the upstream")
+	}
+}
+
+// Guarda de não-regressão: decidir offline não pode virar desculpa para buscar.
+func TestRunDryRunStillFetchesNothing(t *testing.T) {
+	home := newHome(t)
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+	writeProfileRecord(t, target, "test")
+
+	fr := &runner.FakeRunner{}
+	if _, err := Run(fr, cleanGitCheck(), Options{Target: target, DryRun: true, Out: &bytes.Buffer{}}, home); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	for _, c := range fr.Calls {
+		if strings.Contains(c.String(), "skills add") || strings.Contains(c.String(), "clone") {
+			t.Errorf("dry-run ran %q, want no acquisition", c.String())
+		}
 	}
 }
 

@@ -109,6 +109,33 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 		}
 
 		if opts.DryRun {
+			// O dry-run decide o que dá para decidir sem rede. Com linha-base
+			// gravada o veredito sai de dois hashes locais e é exato — é o
+			// caso normal depois do init ai, e é o que impede a simulação de
+			// anunciar que vai sobrescrever o que a execução real preserva.
+			//
+			// Sem linha-base, o ramo de DecideOverwrite que decidiria precisa
+			// do upstream, e buscá-lo aqui quebraria o "dry-run não busca
+			// nada". Afirmar sem buscar seria inventar: vira aviso.
+			onDiskHash, onDiskErr := store.HashTree(onDisk)
+			pristineHash, hasPristine := st.PristineHash(target, coord)
+
+			if hasPristine && onDiskErr == nil {
+				// freshHash vazio de propósito: com hasPristine, o
+				// DecideOverwrite não o consulta. É o que torna a decisão
+				// offline, e não descuido.
+				overwrite, reason := decideOverwrite(opts.Force, true, onDiskHash, "", pristineHash, true)
+				if !overwrite {
+					fmt.Fprintf(out, "+ preserve %s (edited locally)\n", coord)
+					sum.Skipped = append(sum.Skipped, coord)
+					sum.Warnings = append(sum.Warnings, fmt.Sprintf("%s: %s", coord, reason))
+					continue
+				}
+			} else if onDiskErr == nil {
+				sum.Warnings = append(sum.Warnings, fmt.Sprintf(
+					"%s: no pristine baseline — whether this is a local edit needs the upstream, which a dry-run does not fetch", coord))
+			}
+
 			fmt.Fprintf(out, "+ re-acquire %s -> %s\n", coord, destRel)
 			sum.Updated = append(sum.Updated, coord)
 			continue
