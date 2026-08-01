@@ -30,6 +30,40 @@ func TestRunRunCmdListsWithNoAliasOrFlag(t *testing.T) {
 	}
 }
 
+// Sem alias, a tabela saía só com o cabeçalho — que informa tanto quanto uma
+// página em branco, e ainda parece que algo deveria estar listado.
+func TestPrintAliasListSaysWhenThereAreNoRuns(t *testing.T) {
+	var out bytes.Buffer
+	printAliasList(&out, map[string]runfile.Resolved{})
+
+	got := out.String()
+	if !strings.Contains(got, "no runs defined (add a commands: block to ray.yaml)") {
+		t.Errorf("output = %q, want it to say there are no runs and where to define them", got)
+	}
+	if strings.Contains(got, "NAME") {
+		t.Errorf("output = %q, want no table header when there is no row", got)
+	}
+}
+
+// A regressão: com alias, o cabeçalho e as linhas continuam saindo.
+func TestPrintAliasListStillPrintsTheTableWhenThereAreRuns(t *testing.T) {
+	var out bytes.Buffer
+	printAliasList(&out, testCommands())
+
+	got := out.String()
+	if !strings.Contains(got, "NAME") {
+		t.Errorf("output = %q, want the table header", got)
+	}
+	for _, name := range []string{"test", "lint"} {
+		if !strings.Contains(got, name) {
+			t.Errorf("output = %q, want it to list %q", got, name)
+		}
+	}
+	if strings.Contains(got, "no runs defined") {
+		t.Errorf("output = %q, want no empty-list line when there are runs", got)
+	}
+}
+
 func TestRunRunCmdUnknownAliasErrors(t *testing.T) {
 	err := runRunCmd(testCommands(), "nope", nil, false, &runner.FakeRunner{}, false, &bytes.Buffer{})
 	if err == nil {

@@ -98,6 +98,13 @@ func runRunCmd(commands map[string]runfile.Resolved, alias string, extra []strin
 }
 
 func printAliasList(out io.Writer, commands map[string]runfile.Resolved) {
+	// O cabeçalho só faz sentido com linha embaixo: sozinho, ele sugere que
+	// algo deveria estar listado. Nomear o arquivo evita a pergunta seguinte.
+	if len(commands) == 0 {
+		fmt.Fprintln(out, "no runs defined (add a commands: block to ray.yaml)")
+		return
+	}
+
 	names := make([]string, 0, len(commands))
 	for name := range commands {
 		names = append(names, name)
