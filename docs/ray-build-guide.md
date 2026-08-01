@@ -363,10 +363,13 @@ receita + os de sistema são deduplicados por path (receita ganha).
      do modo learn: não se apoia em forma tolerada. Piso de suporte: **Claude
      Code 2.x**. É o único hook do conjunto que nega: os três guards de aviso
      — `guard-add`, `guard-plans` e `guard-vocab` — emitem `systemMessage` e
-     saem **0**, sem exceção. Um deles saía 2, que devolve o achado como erro e
-     interrompe o turno; como a varredura do `guard-vocab` é do arquivo
-     inteiro, e não do que a edição acrescentou, isso interrompia edição por
-     linha que o autor da edição não escreveu. A negação é montada com `jq`, não com aspas
+     saem **0**, sem exceção, e os três rodam em `PreToolUse`, onde o aviso
+     ainda dá tempo de redirecionar. O `guard-vocab` varre o texto que a
+     chamada carrega (`content`, `new_string`, `edits[].new_string`), e não o
+     arquivo no disco: varrer o arquivo inteiro acusava o autor de uma edição
+     por linha que ele não escreveu, a cada edição. O preço, aceito, é que
+     vocabulário já presente num arquivo fica fora do alcance dele.
+     A negação é montada com `jq`, não com aspas
      escapadas: caminho com `"` produziria JSON inválido, e JSON inválido num
      hook que nega falha **aberto**. `mode_test.go` trava as duas coisas. Sem
      `jq`, nega tudo — hook que bloqueia falha fechado. É um **freio de
