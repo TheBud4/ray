@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,7 +20,7 @@ func TestRunBrainSetPersistsExistingDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := runBrainSet(configPath, brain); err != nil {
+	if err := runBrainSet(configPath, brain, io.Discard); err != nil {
 		t.Fatalf("runBrainSet() error = %v", err)
 	}
 
@@ -32,12 +33,32 @@ func TestRunBrainSetPersistsExistingDir(t *testing.T) {
 	}
 }
 
+// Sucesso mudo num comando que grava configuração deixa a pessoa sem saber se
+// pegou: ela roda `ray brain status` em seguida só para conferir. Confirmar
+// nomeando o caminho fecha isso numa linha.
+func TestRunBrainSetConfirmsNamingThePath(t *testing.T) {
+	base := t.TempDir()
+	brain := filepath.Join(base, "MegaBrain")
+	if err := os.Mkdir(brain, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := runBrainSet(filepath.Join(base, "config.yaml"), brain, &out); err != nil {
+		t.Fatalf("runBrainSet() error = %v", err)
+	}
+
+	if !strings.Contains(out.String(), brain) {
+		t.Errorf("output = %q, want it to confirm by naming %q", out.String(), brain)
+	}
+}
+
 func TestRunBrainSetRejectsMissingPathAndWritesNothing(t *testing.T) {
 	base := t.TempDir()
 	configPath := filepath.Join(base, "config.yaml")
 	missing := filepath.Join(base, "nao-existe")
 
-	if err := runBrainSet(configPath, missing); err == nil {
+	if err := runBrainSet(configPath, missing, io.Discard); err == nil {
 		t.Fatal("runBrainSet() = nil for a missing path, want error")
 	}
 
@@ -57,7 +78,7 @@ func TestRunBrainSetRejectsFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := runBrainSet(filepath.Join(base, "config.yaml"), file); err == nil {
+	if err := runBrainSet(filepath.Join(base, "config.yaml"), file, io.Discard); err == nil {
 		t.Fatal("runBrainSet() = nil for a regular file, want error")
 	}
 }
@@ -84,7 +105,7 @@ func TestRunBrainStatusCountsNotes(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(brain, "Notas", "Backend.md"), []byte("# b"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := runBrainSet(configPath, brain); err != nil {
+	if err := runBrainSet(configPath, brain, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 
@@ -117,7 +138,7 @@ func TestResolveBrainPathPrefersEnv(t *testing.T) {
 	if err := os.Mkdir(brain, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := runBrainSet(configPath, brain); err != nil {
+	if err := runBrainSet(configPath, brain, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 
@@ -138,7 +159,7 @@ func TestRunBrainOpenInvokesOpener(t *testing.T) {
 	if err := os.Mkdir(brain, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := runBrainSet(configPath, brain); err != nil {
+	if err := runBrainSet(configPath, brain, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 

@@ -35,12 +35,16 @@ func newBrainSetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runBrainSet(configPath, args[0])
+			return runBrainSet(configPath, args[0], cmd.OutOrStdout())
 		},
 	}
 }
 
-func runBrainSet(configPath, path string) error {
+// runBrainSet valida o caminho e o grava. Confirma nomeando o que gravou:
+// gravar configuração em silêncio obriga quem rodou a checar com um segundo
+// comando se pegou — e o caminho impresso é o que o `vault.Verify` aceitou,
+// não o que foi digitado.
+func runBrainSet(configPath, path string, out io.Writer) error {
 	if err := vault.Verify(path); err != nil {
 		return err
 	}
@@ -48,7 +52,11 @@ func runBrainSet(configPath, path string) error {
 	if err != nil {
 		return err
 	}
-	return cfg.SetBrain(configPath, path)
+	if err := cfg.SetBrain(configPath, path); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "brain set to %s\n", path)
+	return nil
 }
 
 func newBrainStatusCmd() *cobra.Command {
