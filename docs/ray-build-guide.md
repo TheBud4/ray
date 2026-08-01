@@ -212,10 +212,16 @@ telas mentirem uma sobre a outra. Um `.mcp.json` ilegível derruba o `status`,
 que existe para diagnosticar, mas só apaga o número aqui. Não há linha
 "deps: ok": a linha de dependência só existe quando falta algo. `ray --help`
 segue inalterado, e `cobra.NoArgs` faz comando inexistente errar em vez de cair
-na tela.
+na tela. Os comandos-grupo (`init`, `profile`, `brain`, `learn`) saem do mesmo
+esqueleto, e ele precisa de `RunE` além do `Args`: o Cobra checa `Runnable()`
+**antes** de validar argumento, então grupo sem `RunE` respondia help e exit 0
+a qualquer filho inexistente.
 
 ### Flags globais (persistentes, root)
-`--verbose`, `--dry-run`.
+`--verbose` (`-v`), `--dry-run`, e `--version` sem forma curta. O `v` é
+declarado no `--verbose` de propósito: o Cobra só o dá ao `--version` se o
+encontrar livre, e sem isso `ray -v <comando>` imprimia a versão, não rodava o
+comando e saía 0.
 
 ### `ray init ai` — flags
 `--profile` (obrigatório) · `[path]` posicional (default `.`) ·
