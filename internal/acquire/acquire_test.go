@@ -431,3 +431,15 @@ func TestPreviewCommand(t *testing.T) {
 		})
 	}
 }
+
+// Depois da recusa na validação este caso não chega mais por receita
+// carregada — profile.Load valida, e update e initai passam por ele. A guarda
+// fica como defesa, e testá-la exige chamar For direto: é o único nível onde o
+// estado ainda é construível.
+func TestForRejectsMCPAsAcquirable(t *testing.T) {
+	comp := profile.Component{Via: profile.ViaAitmpl, Type: profile.TypeMCP, Ref: "some/server"}
+
+	if acq, ok := For(comp, &runner.FakeRunner{}); ok {
+		t.Errorf("For() = (%T, true), want ok=false: mcp is not acquirable content", acq)
+	}
+}

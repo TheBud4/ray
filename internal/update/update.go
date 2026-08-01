@@ -102,10 +102,13 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 	for _, c := range prof.Components {
 		acq, ok := acquire.For(c, r)
 		if !ok {
+			// Inalcançável por receita carregada desde a recusa de `type: mcp`
+			// em profile.Validate. Fica como defesa: se o invariante quebrar, o
+			// componente aparece no resumo em vez de sumir — que era o defeito
+			// original.
+			//
 			// O identificador sai dos campos do componente: acq é nil aqui, e
-			// acq.Key(c) — a forma usada nos outros skips — seria panic. Sem
-			// esta entrada o componente some do resumo e o update afirma que
-			// está tudo certo tendo ignorado algo que a receita declara.
+			// acq.Key(c) — a forma usada nos outros skips — seria panic.
 			sum.Skipped = append(sum.Skipped, describeUnacquirable(c))
 			continue
 		}

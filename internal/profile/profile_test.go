@@ -77,7 +77,7 @@ func TestValidate(t *testing.T) {
 				Name:       "go",
 				Components: []Component{{Via: ViaAitmpl, Ref: "o/r"}},
 			},
-			wantErr: "requires type agent|command|mcp",
+			wantErr: "requires type agent|command",
 		},
 		{
 			name: "aitmpl invalid type",
@@ -85,7 +85,7 @@ func TestValidate(t *testing.T) {
 				Name:       "go",
 				Components: []Component{{Via: ViaAitmpl, Type: "tool", Ref: "o/r"}},
 			},
-			wantErr: "requires type agent|command|mcp",
+			wantErr: "requires type agent|command",
 		},
 		{
 			name: "aitmpl missing ref",
@@ -385,5 +385,61 @@ func TestProfileValidateStillCatchesBrokenMilestone(t *testing.T) {
 	p := Profile{Name: "go", Milestones: []Milestone{{Goal: "sem verify"}}}
 	if err := p.Validate(); err == nil {
 		t.Fatal("Profile.Validate() = nil, want the error from the milestone missing verify")
+	}
+}
+
+// type: mcp era aceito pelo validador e não chegava a lugar nenhum: nem
+// adquirido, nem registrado como servidor. A rota que o build guide anunciava
+// não existe, e construí-la depende de um upstream quebrado. Recusar aqui é o
+// que torna o formato honesto — o que a receita aceita é o que o ray faz.
+func TestValidateRejectsMCPAsComponent(t *testing.T) {
+	p := &Profile{
+		Name:       "x",
+		Components: []Component{{Via: ViaAitmpl, Type: TypeMCP, Ref: "some/server"}},
+	}
+
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("Validate() = nil, want an error: mcp is not an installable component")
+	}
+	// A mensagem tem de dizer onde declarar de verdade. Recusar sem apontar a
+	// rota certa manda o autor da receita adivinhar.
+	if !strings.Contains(err.Error(), "integrations") {
+		t.Errorf("error = %q, want it to point at `integrations`", err)
+	}
+}
+
+// A regressão: os dois tipos que de fato instalam continuam válidos.
+func TestValidateStillAcceptsAgentAndCommand(t *testing.T) {
+	for _, typ := range []string{TypeAgent, TypeCommand} {
+		t.Run(typ, func(t *testing.T) {
+			p := &Profile{
+				Name:       "x",
+				Components: []Component{{Via: ViaAitmpl, Type: typ, Ref: "some/ref"}},
+			}
+			if err := p.Validate(); err != nil {
+				t.Errorf("Validate() error = %v, want nil for type %q", err, typ)
+			}
+		})
+	}
+}
+
+// Tipo desconhecido continua recusado, e a lista oferecida não pode mais
+// anunciar mcp — anunciar o que se recusa é o defeito que este ciclo corrige.
+func TestValidateUnknownAitmplTypeNoLongerOffersMCP(t *testing.T) {
+	p := &Profile{
+		Name:       "x",
+		Components: []Component{{Via: ViaAitmpl, Type: "widget", Ref: "some/ref"}},
+	}
+
+	err := p.Validate()
+	if err == nil {
+		t.Fatal("Validate() = nil, want an error for an unknown aitmpl type")
+	}
+	if !strings.Contains(err.Error(), "agent|command") {
+		t.Errorf("error = %q, want it to offer agent|command", err)
+	}
+	if strings.Contains(err.Error(), "|mcp") {
+		t.Errorf("error = %q, still offers mcp as a valid type", err)
 	}
 }

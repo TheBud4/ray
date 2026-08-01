@@ -143,10 +143,18 @@ func (c Component) validate() error {
 			return fmt.Errorf("via skills requires both 'skill' and 'source'")
 		}
 	case ViaAitmpl:
+		// `mcp` tem mensagem própria: a receita que o escreveu acreditou numa
+		// rota que a documentação anunciava e que nunca existiu — o componente
+		// não era adquirido nem virava servidor, e o `ray init ai` o descartava
+		// em silêncio. Recusar sem apontar `integrations`, que é a rota que
+		// funciona, manda o autor da receita adivinhar.
+		if c.Type == TypeMCP {
+			return fmt.Errorf("type %q is not an installable component; declare MCP servers under `integrations`", TypeMCP)
+		}
 		switch c.Type {
-		case TypeAgent, TypeCommand, TypeMCP:
+		case TypeAgent, TypeCommand:
 		default:
-			return fmt.Errorf("via aitmpl requires type agent|command|mcp, got %q", c.Type)
+			return fmt.Errorf("via aitmpl requires type agent|command, got %q", c.Type)
 		}
 		if c.Ref == "" {
 			return fmt.Errorf("via aitmpl requires 'ref'")

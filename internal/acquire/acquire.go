@@ -45,7 +45,13 @@ type Acquirer interface {
 }
 
 // For seleciona o Acquirer certo para comp.Via, ou ok=false se comp não é
-// conteúdo adquirível (ex. aitmpl mcp, que é ferramenta — trilha .mcp.json).
+// conteúdo adquirível.
+//
+// `aitmpl mcp` cai aqui por defesa, não por fluxo: desde a recusa em
+// profile.Validate ele não chega mais por receita carregada — Load valida, e
+// update e initai passam por Load. A "trilha .mcp.json" que este comentário já
+// prometeu nunca existiu para componente: plan.Servers só é preenchido por
+// resolveIntegrations, nunca a partir de prof.Components.
 func For(comp profile.Component, r runner.Runner) (Acquirer, bool) {
 	switch comp.Via {
 	case profile.ViaGit:

@@ -563,36 +563,20 @@ func TestRunPinnedRefIsNoOp(t *testing.T) {
 	}
 }
 
-// acquire.For devolve !ok para via: aitmpl + type: mcp. O laço fazia `continue`
-// mudo: o perfil declarava o componente, o update não o tocava, não dizia nada
-// e saía 0 — dizer que está tudo certo tendo ignorado algo que a receita
-// declara.
-func TestRunReportsComponentWithNoAcquirer(t *testing.T) {
-	home := newHome(t)
-	p := &profile.Profile{
-		Name:       "test",
-		Components: []profile.Component{{Via: profile.ViaAitmpl, Type: profile.TypeMCP, Ref: "some/mcp-server"}},
-	}
-	writeProfile(t, home.ProfilesDir, p)
-	target := t.TempDir()
-	writeProfileRecord(t, target, "test")
+// O teste de nível Run que existia aqui deixou de ser construível: com a
+// recusa de `type: mcp` em profile.Validate, Run falha no Load antes de chegar
+// ao resumo. O estado não é mais alcançável, então o que resta a garantir é a
+// forma da mensagem da guarda — se ela algum dia disparar, precisa nomear o
+// componente em vez de deixá-lo sumir.
+func TestDescribeUnacquirableNamesTheComponent(t *testing.T) {
+	got := describeUnacquirable(profile.Component{
+		Via: profile.ViaAitmpl, Type: profile.TypeMCP, Ref: "some/server",
+	})
 
-	sum, err := Run(&seedingRunner{}, cleanGitCheck(), Options{Target: target, NoGlobal: true}, home)
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
-
-	found := false
-	for _, s := range sum.Skipped {
-		if strings.Contains(s, "no acquirer") && strings.Contains(s, profile.ViaAitmpl) {
-			found = true
+	for _, want := range []string{"no acquirer", profile.ViaAitmpl, profile.TypeMCP, "some/server"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("describeUnacquirable() = %q, want it to contain %q", got, want)
 		}
-	}
-	if !found {
-		t.Errorf("Skipped = %v, want an entry naming the component with no acquirer", sum.Skipped)
-	}
-	if sum.HadFailure {
-		t.Error("HadFailure = true: a component with no acquirer is reported, not a failure")
 	}
 }
 
