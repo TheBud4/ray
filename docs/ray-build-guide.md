@@ -189,7 +189,12 @@ o caminho de instalação documentado é `go install .`, e ldflags só alcança 
 passa a flag, então a versão ficaria `devel` exatamente para quem instalou como
 o README manda. Build de tag mostra a versão do módulo; build local mostra
 `devel` com revisão, data e — o que mais importa — `dirty` quando a árvore não
-estava limpa.
+estava limpa. **Arquivo não rastreado conta como sujo**, e o excesso é
+deliberado: um `.go` novo ainda não commitado entra na compilação, e o
+`vcs.modified` não tem como separá-lo de um rascunho solto. Daí a regra que
+parece contraintuitiva — um arquivo qualquer largado na raiz marca o binário
+como sujo, e a resposta é apagar o arquivo, nunca ignorá-lo no `.gitignore`:
+ignorar cegaria o marcador para o caso que ele existe para pegar.
 
 **Não existem `ray vault` nem `ray docs`.** O `brain` os substituiu: o ray deixou
 de guardar vault própria em `~/.ray/vault` e passou a apontar para uma vault que

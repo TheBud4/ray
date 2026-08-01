@@ -98,7 +98,9 @@ executar nem escrever nada) e `--version`.
 O `--version` sai do que o `go install` grava no binário: build de tag mostra a
 versão do módulo, build local mostra `devel` com revisão, data e `dirty` quando
 a árvore não estava limpa — um binário de árvore suja não corresponde a commit
-nenhum.
+nenhum. Arquivo não rastreado conta como sujeira, mesmo que não seja compilado:
+um `.go` ainda não commitado entra no binário, e o marcador prefere errar para
+`dirty` a deixar passar esse caso.
 
 ```sh
 ray --version

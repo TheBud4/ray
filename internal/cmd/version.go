@@ -41,6 +41,11 @@ func buildVersion() string {
 // `devel` mais revisão, data e — o que mais importa — se a árvore estava
 // suja: um binário de árvore suja não corresponde a commit nenhum, e um
 // relato de bug feito com ele não é reproduzível.
+//
+// Sujo inclui arquivo não rastreado, e o excesso é deliberado: um `.go` novo
+// ainda não commitado entra na compilação, e o `vcs.modified` não tem como
+// separá-lo de um rascunho solto. O marcador existe para desconfiar do
+// binário, então errar para `dirty` é o lado seguro.
 func formatVersion(modVersion, revision, when string, dirty bool) string {
 	base := "devel"
 	// Pseudo-versão (`v0.0.0-<data>-<hash>`) é build local, não release: ela
