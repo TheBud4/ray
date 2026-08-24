@@ -158,6 +158,24 @@ func TestRunNewRejectsExistingNonEmptyTarget(t *testing.T) {
 	}
 }
 
+// Um perfil que não existe é um erro cedo o bastante para não deixar rastro:
+// o MkdirAll não pode acontecer antes de saber que há receita para usar.
+func TestRunNewUnknownProfileLeavesNoDirBehind(t *testing.T) {
+	sandbox := t.TempDir()
+	t.Chdir(sandbox)
+
+	home := newTestHome(t)
+	// Nenhum perfil escrito em home.ProfilesDir: "ghost" não existe.
+
+	_, err := runNew(&runner.FakeRunner{}, allFound, home.ProfilesDir, "ghost", "myproj", false, false, initai.Options{}, home)
+	if err == nil {
+		t.Fatal("runNew() = nil error, want error for an unknown profile")
+	}
+	if _, statErr := os.Stat(filepath.Join(sandbox, "myproj")); !os.IsNotExist(statErr) {
+		t.Errorf("stat(myproj) err = %v, want IsNotExist — an unknown profile must not leave the project dir behind", statErr)
+	}
+}
+
 func TestRunNewAbortsOnFailedCreateStepBeforeGitOrInitAI(t *testing.T) {
 	sandbox := t.TempDir()
 	t.Chdir(sandbox)

@@ -72,8 +72,18 @@ func runNew(r runner.Runner, l preflight.Looker, profilesDir, profileName, proje
 	if !empty {
 		return initai.Summary{}, fmt.Errorf("target %q already exists and is not empty", target)
 	}
+	if err := profile.EnsureDir(profilesDir); err != nil {
+		return initai.Summary{}, err
+	}
+	prof, err := profile.LoadByName(profilesDir, profileName)
+	if err != nil {
+		return initai.Summary{}, err
+	}
+
 	// O MkdirAll não passa pelo runner, então o --dry-run não o alcança
 	// sozinho: sem esta guarda, simular um `ray new` deixa a pasta para trás.
+	// Vem depois da validação do perfil: um nome errado não pode deixar
+	// rastro nenhum no disco.
 	// Out normalizado como o initai.Run faz — chamador pode não ter passado um.
 	if dryRun {
 		out := initOpts.Out
@@ -82,14 +92,6 @@ func runNew(r runner.Runner, l preflight.Looker, profilesDir, profileName, proje
 		}
 		fmt.Fprintf(out, "+ mkdir -p %s\n", target)
 	} else if err := os.MkdirAll(target, 0o755); err != nil {
-		return initai.Summary{}, err
-	}
-
-	if err := profile.EnsureDir(profilesDir); err != nil {
-		return initai.Summary{}, err
-	}
-	prof, err := profile.LoadByName(profilesDir, profileName)
-	if err != nil {
 		return initai.Summary{}, err
 	}
 
