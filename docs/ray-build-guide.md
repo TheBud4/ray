@@ -202,8 +202,10 @@ comando e saía 0.
 
 ### `ray new <perfil> <nome>` — flags
 Reaproveita as do `init ai` + `--no-git` (pula `git init`). Fluxo: valida alvo
-vazio/inexistente → `MkdirAll` → roda `create` (templates `{{.Name}}`) no novo
-dir → `git init -q` (salvo `--no-git`) → chama `initai.Run`. Falha num passo de
+vazio/inexistente → carrega e valida o perfil → `MkdirAll` → roda `create`
+(templates `{{.Name}}`) no novo dir → `git init -q` (salvo `--no-git`) → chama
+`initai.Run`. O perfil vem **antes** do `MkdirAll` de propósito: um nome de
+perfil errado não pode deixar um diretório vazio para trás. Falha num passo de
 `create` **aborta** (não montar IA sobre projeto meio-criado).
 
 ### Demais flags
@@ -585,6 +587,11 @@ A fronteira `runner` torna tudo testável sem rede. Por pacote:
   `SystemFiles` os escreve sempre, fora da receita.
 - Globais só entram no `state.yaml` se **todos** os comandos do step deram 0.
 - Servers MCP são por-projeto e sempre re-registrados, mesmo com global já feito.
+- **Um nome de perfil errado não pode deixar rastro no disco.** `ray new
+  badprofile x` validava o perfil **depois** do `MkdirAll` — o comando
+  falhava com "profile not found", mas `x/` vazio sobrevivia. Achado numa
+  varredura manual de QA, corrigido invertendo a ordem (`profile.LoadByName`
+  antes do `MkdirAll`); o `--dry-run` já era imune, por só imprimir a linha.
 - **Sem hash pristino, não se afirma "intocado".** O `store.DecideOverwrite`
   precisa do hash *upstream* para decidir sem linha-base, e obtê-lo exige
   rede. Um diagnóstico offline que chamasse a função com o upstream vazio
