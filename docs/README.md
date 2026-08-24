@@ -1,0 +1,64 @@
+# docs/ — ray
+
+Esta pasta é o **estado atual** do projeto: o que alguém que clonasse o repo
+amanhã precisaria ler. Processo, exploração e trabalho em aberto não moram aqui —
+moram no cérebro (ver `<documentation_sources>` no `CLAUDE.md`).
+
+Fluxo de trabalho: **spec-driven development + TDD**.
+
+## Os dois papéis
+
+| Arquivo | Muda com que frequência | Quem lê |
+|---|---|---|
+| `CLAUDE.md` (raiz) | Quase nunca — só em decisão de arquitetura | A IA, em todo turno |
+| `architecture.md` · `conventions.md` | A cada spec que muda o sistema | Quem chega no projeto |
+
+As specs **não moram aqui**. Elas nascem, amadurecem e ficam no cérebro — são
+processo. Esta pasta é estado: o que alguém que clonasse o repo amanhã
+precisaria ler para entender o sistema como ele é hoje.
+
+## O laço
+
+```
+1. A spec nasce no cérebro, a partir do template de spec de lá.
+2. Preencher. Deixar "Perguntas em aberto" honesta — é aqui que a spec ganha ou perde.
+3. Revisar juntos. A spec só vira status: aprovada quando "Perguntas em aberto" está VAZIA.
+4. Abrir o turno: "implemente a spec NNN". O agente lê a spec direto do cérebro,
+   por filesystem — ela não precisa estar no repo.
+5. Ciclo RED-GREEN-REFACTOR, um CA por vez (workflow no CLAUDE.md).
+6. Fechar: status: implementada + "Decisões durante a implementação" com o que divergiu.
+7. Destilar com /destilar NNN: o que a spec virou estado entra em docs/; o resto
+   fica no cérebro.
+8. Revisar antes do commit com /revisar NNN.
+```
+
+As seções que alimentam o passo 7 são fixas: **Regras de negócio e invariantes**,
+**Contratos**, **Estratégia de teste específica** e **Decisões durante a
+implementação** são as que viram estado; **Dependências e impacto** é de onde o
+`/destilar` tira o escopo a conferir no código. Sem esses nomes na spec, o
+`/destilar` não tem o que ler.
+
+## A regra que impede a spec de apodrecer
+
+Todo teste referencia o ID do critério de aceite no nome:
+
+```
+CA-03: rejeita pedido sem itens com 422
+```
+
+Assim `grep -r "CA-03" test/` responde "isso está implementado?" em um segundo. O
+teste que lê esse CA fica ligado à spec que o definiu, mesmo que a spec more no
+cérebro. A numeração sequencial da spec garante rastreabilidade — desde o turno
+até o commit que fecha a feature.
+
+## Numeração
+
+As specs no cérebro seguem `001`, `002`, … sequencial, nunca reaproveitado.
+Feature abandonada fica com `status: descartada` e mora lá também: o histórico
+do que você decidiu *não* fazer vale tanto quanto o que foi implementado.
+
+## Mantendo em dia
+
+`architecture.md` e `conventions.md` descrevem estado, não intenção. Se um deles
+ficar defasado do código, ele virou ficção — corrija junto com a mudança que o
+defasou, ou deixe o `/destilar` fazer isso ao fechar a spec.

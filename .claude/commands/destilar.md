@@ -1,0 +1,77 @@
+---
+description: Destila uma spec fechada no cérebro para o docs/ deste repositório
+argument-hint: NNN (número da spec)
+---
+
+# /destilar $ARGUMENTS — spec fechada vira estado no repo
+
+Lê a spec `$ARGUMENTS` no cérebro e atualiza o `docs/` deste repositório com o
+que ela transformou em **estado**. A spec não viaja: ela fica no cérebro para
+sempre. O que viaja é o que ela causou.
+
+## Regra de ouro
+
+`docs/` é estado atual. Objetivo, motivação, escopo e o enredo da implementação
+são processo e não entram. Se você está prestes a copiar um parágrafo inteiro da
+spec, pare: destilar é reescrever o que ficou verdade sobre o sistema, não
+transportar texto.
+
+## Passo 1 — ler a spec e checar o portão
+
+Se o cérebro não estiver configurado, **pare**: rode `ray brain set <path>` e
+tente de novo.
+
+Leia a spec direto do cérebro, por filesystem. Se o `status` não for
+`implementada`, **pare**: não se destila plano. Diga qual é o status e
+encerre.
+
+## Passo 2 — extrair os candidatos
+
+Só estas seções produzem estado:
+
+| Seção da spec | Destino |
+|---|---|
+| Regras de negócio e invariantes | `docs/architecture.md` |
+| Contratos | `docs/architecture.md` |
+| Estratégia de teste específica | `docs/conventions.md` — só se virou regra permanente |
+| Decisões durante a implementação | a decisão travada vai para `<architecture>` do `CLAUDE.md`; o enredo do desvio fica no cérebro |
+
+O resto não entra: Requisitos funcionais já viraram código, Critérios de aceite
+já viraram testes `CA-NN`, e Objetivo, Fora de escopo, Dependências e impacto e
+Perguntas em aberto são processo.
+
+## Passo 3 — confirmar cada candidato no código
+
+A superfície a inspecionar são os arquivos que a spec nomeia em **Dependências e
+impacto**, mais o que `git status` e `git diff` mostrarem por commitar. Se as
+duas coisas estiverem vazias, **pergunte** qual é o escopo — não adivinhe.
+
+Para cada candidato, ache a evidência concreta: o símbolo do contrato, o teste
+`CA-NN` correspondente, ou o trecho que implementa a invariante.
+
+Candidato sem evidência **não vira texto**. Reporte: "a spec diz X, o código não
+mostra". É isso que impede o `docs/` de nascer mentindo — a spec descreve o que
+se pretendia, o código descreve o que é.
+
+## Passo 4 — escrever
+
+- `docs/architecture.md` e `docs/conventions.md`: **aplique** e mostre o diff.
+  É descrição, e contradizer o que estava lá é o esperado: o estado mudou.
+- Decisão travada no `CLAUDE.md`: **proponha o texto e espere OK.** Nunca
+  escreva sozinho — a categoria existe justamente para não ser reaberta sem
+  perguntar, e um agente que a reescreve calado esvazia a categoria.
+
+Se a spec **contradiz** uma decisão travada que já está registrada, **pare**. Ou
+a spec estava errada, ou a decisão precisava ter sido reaberta antes de
+implementar. Os dois casos são do usuário, não seus.
+
+Escreva como fato, sem vocabulário de processo: "a navegação usa X", nunca "a
+spec 012 decidiu X".
+
+## Passo 5 — reportar
+
+- o que entrou, e em qual arquivo
+- o que foi recusado por falta de evidência no código
+- a proposta de decisão travada, se houver
+
+Se não havia nada a destilar, diga isso. **Não invente trabalho.**

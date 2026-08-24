@@ -13,3 +13,26 @@
 # Métricas de runtime do session-start hook (I5) — mesma regra que o ray
 # grava em .gitignore de todo projeto scaffoldado (scaffold.go:190)
 .claude/.ray-metrics/
+
+# >>> ray
+# Conteúdo de IA vendorizado — commitado (não editar as negações abaixo)
+!.claude/skills/
+!.claude/agents/
+!.claude/commands/
+!.claude/settings.json
+!.mcp.json
+!docs/
+!.claude/.ray-profile
+!**/.ray-origin
+!**/LICENSE
+
+# Runtime, segredos e pessoal — nunca commitados
+graphify-out/
+.claude/.ray-metrics/
+.claude/.local/
+.claude/handoff.md
+.env
+*.local
+
+/ray
+# <<< ray

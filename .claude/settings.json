@@ -1,29 +1,56 @@
 {
+  "effortLevel": "high",
   "hooks": {
-    "SessionStart": [
+    "PostToolUse": [
       {
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/session-start.sh" }]
+        "hooks": [
+          {
+            "command": "bash .claude/hooks/guard-handoff.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "Write|Edit|MultiEdit"
       }
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash",
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/guard-add.sh" }]
+        "hooks": [
+          {
+            "command": "bash .claude/hooks/guard-add.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
       },
       {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/guard-plans.sh" }]
+        "hooks": [
+          {
+            "command": "bash .claude/hooks/guard-plans.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "Edit|Write|MultiEdit"
       },
       {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/guard-vocab.sh" }]
+        "hooks": [
+          {
+            "command": "bash .claude/hooks/guard-vocab.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "Edit|Write|MultiEdit"
       }
     ],
-    "PostToolUse": [
+    "SessionStart": [
       {
-        "matcher": "Write|Edit|MultiEdit",
-        "hooks": [{ "type": "command", "command": "bash .claude/hooks/guard-handoff.sh" }]
+        "hooks": [
+          {
+            "command": "bash .claude/hooks/session-start.sh",
+            "type": "command"
+          }
+        ]
       }
     ]
-  }
+  },
+  "model": "opus"
 }

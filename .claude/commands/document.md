@@ -1,0 +1,16 @@
+# /document
+
+Documente o que foi feito nesta sessão, roteando para o destino certo (ver
+a seção `<documentation_sources>` do `CLAUDE.md`).
+
+A escolha é binária, e a pergunta é uma só:
+
+> Se alguém clonasse este repo amanhã, isto precisaria estar lá?
+
+- **Sim** → `docs/` deste projeto. É o estado atual: arquitetura, convenções,
+  como rodar, como fazer deploy.
+- **Não** → o cérebro, direto por filesystem. É processo: tarefa, exploração,
+  aprendizado, decisão em disputa, spec ainda em aberto.
+
+Não escreva nos dois lugares. Se a resposta parecer "os dois", o texto está
+misturando estado e processo — separe-o em duas peças antes de escrever.
