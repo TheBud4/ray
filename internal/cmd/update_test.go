@@ -46,7 +46,7 @@ func TestRunUpdatePrintsSummaryAndErrorsOnFailure(t *testing.T) {
 	}
 	prof := &profile.Profile{
 		Name:       "test",
-		Components: []profile.Component{{Via: profile.ViaSkills, Skill: "s", Source: "o/r"}},
+		Components: []profile.Component{{Name: "s", Dest: ".claude/skills"}},
 	}
 	data, err := yaml.Marshal(prof)
 	if err != nil {
@@ -64,15 +64,29 @@ func TestRunUpdatePrintsSummaryAndErrorsOnFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	home := update.Home{ProfilesDir: profilesDir, StoreDir: filepath.Join(base, "store")}
+	componentsDir := filepath.Join(base, "components")
+	if err := os.MkdirAll(filepath.Join(componentsDir, "s"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(componentsDir, "s", "SKILL.md"), []byte("# s"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A cópia é forçada a falhar sem rede: .claude/skills existe mas sem
+	// permissão de escrita, então store.CopyTree não consegue criar
+	// .claude/skills/s dentro dele.
+	skillsDir := filepath.Join(target, ".claude", "skills")
+	if err := os.MkdirAll(skillsDir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(skillsDir, 0o755) })
+
+	home := update.Home{ProfilesDir: profilesDir, StoreDir: filepath.Join(base, "store"), ComponentsDir: componentsDir}
 	opts := update.Options{Target: target, Out: &bytes.Buffer{}}
 
-	// The skills acquisition fails (no seeding runner behind cleanCheckRunner
-	// for npx) — exercises the "one or more steps failed" summary path.
 	out := &bytes.Buffer{}
 	err = runUpdate(cleanCheckRunner{}, cleanCheckRunner{}, opts, home, out)
 	if err == nil {
-		t.Fatal("runUpdate() = nil error, want error: component content never materializes under a plain stub runner")
+		t.Fatal("runUpdate() = nil error, want error: the copy cannot land on a path blocked by a plain file")
 	}
 	if !strings.Contains(out.String(), "Failed") {
 		t.Errorf("output = %q, want it to include a Failed section", out.String())

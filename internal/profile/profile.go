@@ -20,19 +20,6 @@ type Profile struct {
 	Components   []Component  `yaml:"components"`
 	Scaffold     Scaffold     `yaml:"scaffold"`
 	Create       []string     `yaml:"create"`
-	// Milestones é um overlay opcional de projeto-escola (design §9.3,
-	// I6a): cada marco é um comando verificável, não prosa. O `ray` só
-	// fornece a máquina (internal/learn) — a curadoria do currículo vive
-	// na receita do usuário.
-	Milestones []Milestone `yaml:"milestones,omitempty"`
-}
-
-// Milestone é um marco de projeto-escola: Verify é o comando (sem shell,
-// splitado por espaço como os passos de internal/runfile) que precisa
-// passar para o marco contar como cruzado.
-type Milestone struct {
-	Goal   string `yaml:"goal"`
-	Verify string `yaml:"verify"`
 }
 
 // Integrations liga/desliga as capacidades embutidas que o ray conecta num projeto.
@@ -47,30 +34,18 @@ type Integrations struct {
 	CodeGraph bool `yaml:"code_graph"`
 }
 
-// Constantes nomeadas: viram exatamente o valor esperado no YAML.
-const (
-	ViaSkills = "skills"
-	ViaAitmpl = "aitmpl"
-	ViaGit    = "git"
-)
-
-const (
-	TypeAgent   = "agent"
-	TypeCommand = "command"
-	TypeMCP     = "mcp"
-)
-
-// Component é uma unidade instalável vinda de um ecossistema externo.
-// via: "skills" usa Skill+Source; via: "aitmpl" usa Type+Ref; via: "git" usa
-// Repo+Ref+Path (I2: aquisição direta de um repositório, pinada por ref).
+// Component é um pacote de conteúdo (skill, agent, comando) que o usuário
+// mantém localmente em <ComponentsDir>/<Name> — nunca baixado. `ray init ai`
+// copia o conteúdo de lá para <projeto>/<Dest>/<Name>; `ray update` recopia
+// pela mesma política de "o usuário editou isto?" que os arquivos de
+// scaffold (store.DecideOverwrite).
 type Component struct {
-	Via    string `yaml:"via"`
-	Skill  string `yaml:"skill,omitempty"`
-	Source string `yaml:"source,omitempty"`
-	Type   string `yaml:"type,omitempty"`
-	Ref    string `yaml:"ref,omitempty"`
-	Repo   string `yaml:"repo,omitempty"`
-	Path   string `yaml:"path,omitempty"`
+	// Name identifica o componente: o nome da subpasta em <ComponentsDir> e
+	// também o nome que ele ocupa dentro de Dest no projeto.
+	Name string `yaml:"name"`
+	// Dest é o diretório-contêiner relativo ao projeto (ex. ".claude/skills",
+	// ".claude/agents") onde <ComponentsDir>/<Name> é copiado.
+	Dest string `yaml:"dest"`
 }
 
 // Scaffold descreve arquivos que o ray escreve e settings mesclados no .claude.
@@ -104,69 +79,15 @@ func (p *Profile) Validate() error {
 			return fmt.Errorf("scaffold file %d: path is required", i)
 		}
 	}
-	return ValidateMilestones(p.Milestones)
-}
-
-// ValidateMilestones valida uma lista de marcos isolada de qualquer receita.
-// Existe porque `.claude/.local/milestones.yaml` — os marcos negociados na
-// sessão — não é uma receita e não deve ser validado como se fosse.
-//
-// O `learn.LoadMilestones` montava um `Profile{Name: "local milestones"}` falso
-// só para alcançar esta checagem. Funcionava, mas prendia a validação dos marcos
-// a toda regra global de receita: bastaria `Validate` passar a exigir, digamos,
-// uma `Description`, para todo `milestones.yaml` falhar com "description is
-// required" — mensagem que a IA que escreveu o arquivo não tem como corrigir,
-// porque o campo não existe naquele formato.
-func ValidateMilestones(milestones []Milestone) error {
-	for i, m := range milestones {
-		if err := m.validate(); err != nil {
-			return fmt.Errorf("milestone %d: %w", i, err)
-		}
-	}
-	return nil
-}
-
-func (m Milestone) validate() error {
-	if strings.TrimSpace(m.Goal) == "" {
-		return fmt.Errorf("goal is required")
-	}
-	if strings.TrimSpace(m.Verify) == "" {
-		return fmt.Errorf("verify is required")
-	}
 	return nil
 }
 
 func (c Component) validate() error {
-	switch c.Via {
-	case ViaSkills:
-		if c.Skill == "" || c.Source == "" {
-			return fmt.Errorf("via skills requires both 'skill' and 'source'")
-		}
-	case ViaAitmpl:
-		// `mcp` tem mensagem própria: a receita que o escreveu acreditou numa
-		// rota que a documentação anunciava e que nunca existiu — o componente
-		// não era adquirido nem virava servidor, e o `ray init ai` o descartava
-		// em silêncio. Recusar sem apontar `integrations`, que é a rota que
-		// funciona, manda o autor da receita adivinhar.
-		if c.Type == TypeMCP {
-			return fmt.Errorf("type %q is not an installable component; declare MCP servers under `integrations`", TypeMCP)
-		}
-		switch c.Type {
-		case TypeAgent, TypeCommand:
-		default:
-			return fmt.Errorf("via aitmpl requires type agent|command, got %q", c.Type)
-		}
-		if c.Ref == "" {
-			return fmt.Errorf("via aitmpl requires 'ref'")
-		}
-	case ViaGit:
-		if c.Repo == "" || c.Path == "" {
-			return fmt.Errorf("via git requires 'repo' and 'path' (ref is optional, defaults to main)")
-		}
-	case "":
-		return fmt.Errorf("'via' is required")
-	default:
-		return fmt.Errorf("unknown 'via' %q", c.Via)
+	if strings.TrimSpace(c.Name) == "" {
+		return fmt.Errorf("name is required")
+	}
+	if strings.TrimSpace(c.Dest) == "" {
+		return fmt.Errorf("dest is required")
 	}
 	return nil
 }
@@ -201,8 +122,8 @@ func Load(path string) (*Profile, error) {
 }
 
 // ProfileRecordPath é onde `ray init ai` grava o nome do perfil usado
-// (initai.go, passo 12) — permite a comandos como `ray update`/`ray learn
-// check` descobrirem o perfil de um projeto sem exigir --profile.
+// (initai.go, passo 12) — permite a `ray update` descobrir o perfil de um
+// projeto sem exigir --profile.
 func ProfileRecordPath(target string) string {
 	return filepath.Join(target, ".claude", ".ray-profile")
 }

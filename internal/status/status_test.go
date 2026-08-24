@@ -160,10 +160,10 @@ func writeEnvScaffold(t *testing.T, target string, scaffoldPaths []string) Home 
 	return home
 }
 
-// skillComponent é o componente que os testes de fork usam: via skills, que
-// vendoriza em .claude/skills/<skill>.
+// skillComponent é o componente que os testes de fork usam: cópia local que
+// vendoriza em .claude/skills/tdd.
 func skillComponent() profile.Component {
-	return profile.Component{Via: profile.ViaSkills, Skill: "tdd", Source: "o/r"}
+	return profile.Component{Name: "tdd", Dest: ".claude/skills"}
 }
 
 // seedVendored escreve o conteúdo vendorizado do componente e devolve o hash
@@ -190,7 +190,7 @@ func TestForksReportPristineWhenDiskMatchesBaseline(t *testing.T) {
 	h := seedVendored(t, target, "original\n")
 
 	st := store.New(home.StoreDir)
-	if err := st.SetPristine(target, "skills:o/r#tdd", h); err != nil {
+	if err := st.SetPristine(target, "tdd", h); err != nil {
 		t.Fatal(err)
 	}
 
@@ -209,7 +209,7 @@ func TestForksReportEditedWhenDiskDivergedFromBaseline(t *testing.T) {
 	seedVendored(t, target, "original\n")
 
 	st := store.New(home.StoreDir)
-	if err := st.SetPristine(target, "skills:o/r#tdd", "0000deadbeef"); err != nil {
+	if err := st.SetPristine(target, "tdd", "0000deadbeef"); err != nil {
 		t.Fatal(err)
 	}
 

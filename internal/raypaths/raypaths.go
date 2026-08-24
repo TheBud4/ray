@@ -34,9 +34,13 @@ func StatePath() (string, error) { return sub("state.yaml") }
 // CommandsPath é <Home>/commands.yaml (aliases globais do `ray run`).
 func CommandsPath() (string, error) { return sub("commands.yaml") }
 
-// StoreDir é <Home>/store, o cache content-addressed de conteúdo de IA
-// adquirido (internal/store).
+// StoreDir é <Home>/store, o cache content-addressed usado por
+// internal/store para rastrear linha-base pristina (scaffold e componentes).
 func StoreDir() (string, error) { return sub("store") }
+
+// ComponentsDir é <Home>/components, o overlay local de skills/agents que o
+// usuário mantém à mão — o ray nunca baixa nada, só copia de lá pro projeto.
+func ComponentsDir() (string, error) { return sub("components") }
 
 func sub(name string) (string, error) {
 	h, err := Home()

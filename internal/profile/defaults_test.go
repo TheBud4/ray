@@ -13,21 +13,17 @@ func TestDefaultsValidate(t *testing.T) {
 	}
 }
 
-func TestDefaultsComponentCounts(t *testing.T) {
-	want := map[string]int{"go": 11, "web": 11, "flutter": 12}
-
-	got := map[string]int{}
+// O ray não baixa nem embute conteúdo de terceiros: nenhum perfil default
+// declara componente, porque nenhum tem como saber o que o usuário já
+// colocou em internal/raypaths.ComponentsDir().
+func TestDefaultsHaveNoComponents(t *testing.T) {
 	for _, p := range Defaults() {
-		got[p.Name] = len(p.Components)
-	}
-
-	if len(got) != len(want) {
-		t.Fatalf("Defaults() has %d profiles, want %d (%v)", len(got), len(want), got)
-	}
-	for name, wantCount := range want {
-		if got[name] != wantCount {
-			t.Errorf("profile %q has %d components, want %d", name, got[name], wantCount)
-		}
+		p := p
+		t.Run(p.Name, func(t *testing.T) {
+			if len(p.Components) != 0 {
+				t.Errorf("profile %q has %d components, want 0", p.Name, len(p.Components))
+			}
+		})
 	}
 }
 

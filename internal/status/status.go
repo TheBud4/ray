@@ -132,7 +132,7 @@ func run(check runner.Runner, l preflight.Looker, opts Options, home Home) (Repo
 		return Report{}, err
 	}
 
-	name, forks, forkProblems, err := checkForks(check, target, home)
+	name, forks, forkProblems, err := checkForks(target, home)
 	if err != nil {
 		return Report{}, err
 	}

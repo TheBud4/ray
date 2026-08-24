@@ -2,9 +2,9 @@ package update
 
 import (
 	"bytes"
-	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -47,7 +47,7 @@ func testProfile() *profile.Profile {
 	return &profile.Profile{
 		Name:         "test",
 		Integrations: profile.Integrations{Headroom: true, CodeGraph: true},
-		Components:   []profile.Component{{Via: profile.ViaSkills, Skill: "s", Source: "o/r"}},
+		Components:   []profile.Component{{Name: "s", Dest: ".claude/skills"}},
 	}
 }
 
@@ -68,45 +68,24 @@ func writeProfile(t *testing.T, profilesDir string, p *profile.Profile) {
 func newHome(t *testing.T) Home {
 	t.Helper()
 	base := t.TempDir()
-	return Home{ProfilesDir: filepath.Join(base, "profiles"), StoreDir: filepath.Join(base, "store")}
+	return Home{
+		ProfilesDir:   filepath.Join(base, "profiles"),
+		StoreDir:      filepath.Join(base, "store"),
+		ComponentsDir: filepath.Join(base, "components"),
+	}
 }
 
-// seedingRunner registra chamadas e, para `npx skills add`/`git clone`,
-// escreve em disco o conteúdo "fresco" que um adquiridor real deixaria — a
-// aquisição inspeciona o disco depois de rodar o comando (mesmo padrão de
-// internal/initai/initai_test.go). freshContent é o texto do SKILL.md
-// "vindo do upstream" nesta chamada.
-type seedingRunner struct {
-	Calls        []runner.Command
-	Results      map[string]runner.Result
-	freshContent string
-}
-
-func (s *seedingRunner) Run(_ context.Context, c runner.Command) (runner.Result, error) {
-	s.Calls = append(s.Calls, c)
-	if res, ok := s.Results[c.String()]; ok {
-		return res, nil
+// seedComponent grava o conteúdo "upstream" do componente s em
+// home.ComponentsDir — é dali que `ray update` recopia, nunca da rede.
+func seedComponent(t *testing.T, home Home, content string) {
+	t.Helper()
+	dir := filepath.Join(home.ComponentsDir, "s")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
 	}
-	if c.Name == "npx" && len(c.Args) > 0 && c.Args[0] == "skills" {
-		skill := ""
-		for i, a := range c.Args {
-			if a == "--skill" && i+1 < len(c.Args) {
-				skill = c.Args[i+1]
-			}
-		}
-		dir := filepath.Join(c.Dir, ".claude", "skills", skill)
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return runner.Result{}, err
-		}
-		content := s.freshContent
-		if content == "" {
-			content = "# fresh"
-		}
-		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(content), 0o644); err != nil {
-			return runner.Result{}, err
-		}
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	return runner.Result{ExitCode: 0}, nil
 }
 
 // gitClean makes check.Run report a clean tree for `git status --porcelain`.
@@ -122,7 +101,7 @@ func dirtyGitCheck() *runner.FakeRunner {
 	}}
 }
 
-const coordS = "skills:o/r#s"
+const coordS = "s"
 
 // ---- Run: clean-tree guard ---------------------------------------------
 
@@ -132,7 +111,7 @@ func TestRunDirtyTreeAbortsWithoutForce(t *testing.T) {
 	target := t.TempDir()
 	writeProfileRecord(t, target, "test")
 
-	_, err := Run(&seedingRunner{}, dirtyGitCheck(), Options{Target: target}, home)
+	_, err := Run(&runner.FakeRunner{}, dirtyGitCheck(), Options{Target: target}, home)
 	if err == nil {
 		t.Fatal("Run() = nil error, want error on a dirty tree without --force")
 	}
@@ -143,11 +122,12 @@ func TestRunDirtyTreeAbortsWithoutForce(t *testing.T) {
 
 func TestRunDirtyTreeWithForceProceeds(t *testing.T) {
 	home := newHome(t)
+	seedComponent(t, home, "# s")
 	writeProfile(t, home.ProfilesDir, testProfile())
 	target := t.TempDir()
 	writeProfileRecord(t, target, "test")
 
-	sum, err := Run(&seedingRunner{}, dirtyGitCheck(), Options{Target: target, Force: true}, home)
+	sum, err := Run(&runner.FakeRunner{}, dirtyGitCheck(), Options{Target: target, Force: true}, home)
 	if err != nil {
 		t.Fatalf("Run() error = %v, want nil with --force", err)
 	}
@@ -161,6 +141,7 @@ func TestRunDirtyTreeWithForceProceeds(t *testing.T) {
 // é o oposto do que o guard quer.
 func TestRunDirtyTreeAllowsDryRun(t *testing.T) {
 	home := newHome(t)
+	seedComponent(t, home, "# s")
 	writeProfile(t, home.ProfilesDir, testProfile())
 	target := t.TempDir()
 	writeProfileRecord(t, target, "test")
@@ -177,11 +158,12 @@ func TestRunDirtyTreeAllowsDryRun(t *testing.T) {
 
 func TestRunCleanTreeProceeds(t *testing.T) {
 	home := newHome(t)
+	seedComponent(t, home, "# s")
 	writeProfile(t, home.ProfilesDir, testProfile())
 	target := t.TempDir()
 	writeProfileRecord(t, target, "test")
 
-	sum, err := Run(&seedingRunner{}, cleanGitCheck(), Options{Target: target}, home)
+	sum, err := Run(&runner.FakeRunner{}, cleanGitCheck(), Options{Target: target}, home)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -209,7 +191,7 @@ func TestRunReadsProfileFromRecord(t *testing.T) {
 	target := t.TempDir()
 	writeProfileRecord(t, target, "test")
 
-	_, err := Run(&seedingRunner{}, cleanGitCheck(), Options{Target: target}, home)
+	_, err := Run(&runner.FakeRunner{}, cleanGitCheck(), Options{Target: target}, home)
 	if err != nil {
 		t.Fatalf("Run() error = %v, want it to resolve the profile from .claude/.ray-profile", err)
 	}
@@ -221,7 +203,7 @@ func TestRunProfileFlagOverridesRecord(t *testing.T) {
 	target := t.TempDir()
 	writeProfileRecord(t, target, "some-other-nonexistent-profile")
 
-	_, err := Run(&seedingRunner{}, cleanGitCheck(), Options{Target: target, Profile: "test"}, home)
+	_, err := Run(&runner.FakeRunner{}, cleanGitCheck(), Options{Target: target, Profile: "test"}, home)
 	if err != nil {
 		t.Fatalf("Run() error = %v, want --profile to override the record", err)
 	}
@@ -232,7 +214,7 @@ func TestRunMissingProfileRecordAndNoOverrideErrors(t *testing.T) {
 	writeProfile(t, home.ProfilesDir, testProfile())
 	target := t.TempDir()
 
-	_, err := Run(&seedingRunner{}, cleanGitCheck(), Options{Target: target}, home)
+	_, err := Run(&runner.FakeRunner{}, cleanGitCheck(), Options{Target: target}, home)
 	if err == nil {
 		t.Fatal("Run() = nil error, want error when no .claude/.ray-profile and no --profile")
 	}
@@ -242,11 +224,12 @@ func TestRunMissingProfileRecordAndNoOverrideErrors(t *testing.T) {
 
 func TestRunUpgradesTools(t *testing.T) {
 	home := newHome(t)
+	seedComponent(t, home, "# s")
 	writeProfile(t, home.ProfilesDir, testProfile())
 	target := t.TempDir()
 	writeProfileRecord(t, target, "test")
 
-	fr := &seedingRunner{}
+	fr := &runner.FakeRunner{}
 	sum, err := Run(fr, cleanGitCheck(), Options{Target: target}, home)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -271,11 +254,12 @@ func TestRunUpgradesTools(t *testing.T) {
 
 func TestRunNoGlobalSkipsToolUpgrades(t *testing.T) {
 	home := newHome(t)
+	seedComponent(t, home, "# s")
 	writeProfile(t, home.ProfilesDir, testProfile())
 	target := t.TempDir()
 	writeProfileRecord(t, target, "test")
 
-	fr := &seedingRunner{}
+	fr := &runner.FakeRunner{}
 	sum, err := Run(fr, cleanGitCheck(), Options{Target: target, NoGlobal: true}, home)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
@@ -299,6 +283,7 @@ func TestRunNoGlobalSkipsToolUpgrades(t *testing.T) {
 
 func TestRunOverwritesWhenDiskMatchesPristine(t *testing.T) {
 	home := newHome(t)
+	seedComponent(t, home, "# new upstream")
 	writeProfile(t, home.ProfilesDir, testProfile())
 	target := t.TempDir()
 	writeProfileRecord(t, target, "test")
@@ -319,8 +304,7 @@ func TestRunOverwritesWhenDiskMatchesPristine(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fr := &seedingRunner{freshContent: "# new upstream"}
-	sum, err := Run(fr, cleanGitCheck(), Options{Target: target}, home)
+	sum, err := Run(&runner.FakeRunner{}, cleanGitCheck(), Options{Target: target}, home)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -357,6 +341,7 @@ func TestRunOverwritesWhenDiskMatchesPristine(t *testing.T) {
 
 func TestRunSkipsForkWithoutForce(t *testing.T) {
 	home := newHome(t)
+	seedComponent(t, home, "# new upstream")
 	writeProfile(t, home.ProfilesDir, testProfile())
 	target := t.TempDir()
 	writeProfileRecord(t, target, "test")
@@ -379,8 +364,7 @@ func TestRunSkipsForkWithoutForce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fr := &seedingRunner{freshContent: "# new upstream"}
-	sum, err := Run(fr, cleanGitCheck(), Options{Target: target}, home)
+	sum, err := Run(&runner.FakeRunner{}, cleanGitCheck(), Options{Target: target}, home)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -408,6 +392,7 @@ func TestRunSkipsForkWithoutForce(t *testing.T) {
 
 func TestRunForceOverwritesFork(t *testing.T) {
 	home := newHome(t)
+	seedComponent(t, home, "# new upstream")
 	writeProfile(t, home.ProfilesDir, testProfile())
 	target := t.TempDir()
 	writeProfileRecord(t, target, "test")
@@ -428,8 +413,7 @@ func TestRunForceOverwritesFork(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fr := &seedingRunner{freshContent: "# new upstream"}
-	sum, err := Run(fr, cleanGitCheck(), Options{Target: target, Force: true}, home)
+	sum, err := Run(&runner.FakeRunner{}, cleanGitCheck(), Options{Target: target, Force: true}, home)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -448,15 +432,15 @@ func TestRunForceOverwritesFork(t *testing.T) {
 
 func TestRunNewCloneNoPristineMatchesUpstreamOverwrites(t *testing.T) {
 	home := newHome(t)
+	seedComponent(t, home, "# new upstream")
 	writeProfile(t, home.ProfilesDir, testProfile())
 	target := t.TempDir()
 	writeProfileRecord(t, target, "test")
 
-	// On disk already, but no pristine recorded locally (a fresh clone) —
-	// and the content happens to match what upstream has now, so it's not a
-	// fork; the degradation path should overwrite (and record pristine).
-	// .ray-origin mirrors what a real Acquire() would have captured
-	// alongside SKILL.md (acquire.captureCompliance).
+	// On disk already, but no pristine recorded locally (a fresh clone) — and
+	// the content happens to match what home.ComponentsDir has now, so it's
+	// not a fork; the degradation path should overwrite (and record
+	// pristine).
 	skillDir := filepath.Join(target, ".claude", "skills", "s")
 	if err := os.MkdirAll(skillDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -464,12 +448,8 @@ func TestRunNewCloneNoPristineMatchesUpstreamOverwrites(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# new upstream"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(skillDir, ".ray-origin"), []byte("o/r\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
 
-	fr := &seedingRunner{freshContent: "# new upstream"}
-	sum, err := Run(fr, cleanGitCheck(), Options{Target: target}, home)
+	sum, err := Run(&runner.FakeRunner{}, cleanGitCheck(), Options{Target: target}, home)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -494,6 +474,7 @@ func TestRunNewCloneNoPristineMatchesUpstreamOverwrites(t *testing.T) {
 
 func TestRunNewCloneNoPristineDiffersFromUpstreamSkips(t *testing.T) {
 	home := newHome(t)
+	seedComponent(t, home, "# new upstream")
 	writeProfile(t, home.ProfilesDir, testProfile())
 	target := t.TempDir()
 	writeProfileRecord(t, target, "test")
@@ -506,8 +487,7 @@ func TestRunNewCloneNoPristineDiffersFromUpstreamSkips(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fr := &seedingRunner{freshContent: "# new upstream"}
-	sum, err := Run(fr, cleanGitCheck(), Options{Target: target}, home)
+	sum, err := Run(&runner.FakeRunner{}, cleanGitCheck(), Options{Target: target}, home)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -530,53 +510,29 @@ func TestRunNewCloneNoPristineDiffersFromUpstreamSkips(t *testing.T) {
 	}
 }
 
-// ---- Run: pinned ref is a no-op -----------------------------------------
+// ---- Run: component not found in the local overlay -----------------------
 
-func TestRunPinnedRefIsNoOp(t *testing.T) {
+// Sem rede, "componente não encontrado" substitui o antigo caso de exit code
+// de instalador: é a única forma de um componente falhar agora.
+func TestRunSkipsComponentNotFoundInComponentsDir(t *testing.T) {
 	home := newHome(t)
-	p := &profile.Profile{
-		Name:       "test",
-		Components: []profile.Component{{Via: profile.ViaGit, Repo: "acme/skills", Ref: "v1", Path: "skills/widget"}},
-	}
-	writeProfile(t, home.ProfilesDir, p)
+	// Sem seedComponent: home.ComponentsDir/s não existe.
+	writeProfile(t, home.ProfilesDir, testProfile())
 	target := t.TempDir()
 	writeProfileRecord(t, target, "test")
 
-	fr := &seedingRunner{}
-	sum, err := Run(fr, cleanGitCheck(), Options{Target: target}, home)
+	sum, err := Run(&runner.FakeRunner{}, cleanGitCheck(), Options{Target: target}, home)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	for _, c := range fr.Calls {
-		if c.Name == "git" {
-			t.Errorf("Calls = %v, want no `git clone` for a pinned ref (no-op)", fr.Calls)
-		}
-	}
 	found := false
 	for _, s := range sum.Skipped {
-		if strings.Contains(s, "pinned ref") {
+		if strings.Contains(s, "not found") {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("Skipped = %v, want a pinned-ref entry", sum.Skipped)
-	}
-}
-
-// O teste de nível Run que existia aqui deixou de ser construível: com a
-// recusa de `type: mcp` em profile.Validate, Run falha no Load antes de chegar
-// ao resumo. O estado não é mais alcançável, então o que resta a garantir é a
-// forma da mensagem da guarda — se ela algum dia disparar, precisa nomear o
-// componente em vez de deixá-lo sumir.
-func TestDescribeUnacquirableNamesTheComponent(t *testing.T) {
-	got := describeUnacquirable(profile.Component{
-		Via: profile.ViaAitmpl, Type: profile.TypeMCP, Ref: "some/server",
-	})
-
-	for _, want := range []string{"no acquirer", profile.ViaAitmpl, profile.TypeMCP, "some/server"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("describeUnacquirable() = %q, want it to contain %q", got, want)
-		}
+		t.Errorf("Skipped = %v, want an entry naming the missing component", sum.Skipped)
 	}
 }
 
@@ -584,6 +540,7 @@ func TestDescribeUnacquirableNamesTheComponent(t *testing.T) {
 
 func TestRunDryRunFetchesNothing(t *testing.T) {
 	home := newHome(t)
+	seedComponent(t, home, "# new upstream")
 	writeProfile(t, home.ProfilesDir, testProfile())
 	target := t.TempDir()
 	writeProfileRecord(t, target, "test")
@@ -606,6 +563,7 @@ func TestRunDryRunFetchesNothing(t *testing.T) {
 // existe para se confiar nele antes de rodar.
 func TestRunDryRunReportsForkAsSkipped(t *testing.T) {
 	home := newHome(t)
+	seedComponent(t, home, "# new upstream")
 	writeProfile(t, home.ProfilesDir, testProfile())
 	target := t.TempDir()
 	writeProfileRecord(t, target, "test")
@@ -651,10 +609,14 @@ func TestRunDryRunReportsForkAsSkipped(t *testing.T) {
 	}
 }
 
-// Sem linha-base o veredito depende do upstream, e o dry-run não busca nada.
-// A resposta honesta é avisar, não afirmar.
-func TestRunDryRunWarnsWhenForkCannotBeDecidedOffline(t *testing.T) {
+// Sem download, o "upstream" é home.ComponentsDir — uma leitura de disco
+// local, livre mesmo em dry-run. Diferente da versão adquirida por rede, o
+// dry-run agora decide exatamente como uma execução real decidiria, mesmo
+// sem linha-base: não há mais um caso "procedência desconhecida" que só o
+// upstream resolveria.
+func TestRunDryRunDecidesExactlyLikeRealRunWithoutPristine(t *testing.T) {
 	home := newHome(t)
+	seedComponent(t, home, "# new upstream")
 	writeProfile(t, home.ProfilesDir, testProfile())
 	target := t.TempDir()
 	writeProfileRecord(t, target, "test")
@@ -666,7 +628,7 @@ func TestRunDryRunWarnsWhenForkCannotBeDecidedOffline(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# whatever"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// Nenhum SetPristine: é o caso "procedência desconhecida".
+	// Nenhum SetPristine: mesmo caso que TestRunNewCloneNoPristineDiffersFromUpstreamSkips.
 
 	sum, err := Run(runner.ExecRunner{DryRun: true}, cleanGitCheck(),
 		Options{Target: target, DryRun: true, Out: &bytes.Buffer{}}, home)
@@ -674,14 +636,18 @@ func TestRunDryRunWarnsWhenForkCannotBeDecidedOffline(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 
+	if !slices.Contains(sum.Skipped, coordS) {
+		t.Errorf("Skipped = %v, want it to include %q — no pristine, disk differs from the local component", sum.Skipped, coordS)
+	}
 	if len(sum.Warnings) == 0 {
-		t.Error("Warnings is empty, want a warning that the verdict needs the upstream")
+		t.Error("Warnings is empty, want the same reason a real run would give")
 	}
 }
 
 // Guarda de não-regressão: decidir offline não pode virar desculpa para buscar.
 func TestRunDryRunStillFetchesNothing(t *testing.T) {
 	home := newHome(t)
+	seedComponent(t, home, "# new upstream")
 	writeProfile(t, home.ProfilesDir, testProfile())
 	target := t.TempDir()
 	writeProfileRecord(t, target, "test")

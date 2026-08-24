@@ -11,7 +11,6 @@ import (
 	"github.com/TheBud4/ray/internal/initai"
 	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/runner"
-	"github.com/TheBud4/ray/internal/scaffold"
 )
 
 var allFound = stubLooker{
@@ -20,8 +19,8 @@ var allFound = stubLooker{
 }
 
 // newTestProfile propositalmente não traz Components: estes testes exercem
-// `ray new` (create step + git init + scaffold), não a aquisição de
-// conteúdo (coberta em internal/acquire e internal/initai).
+// `ray new` (create step + git init + scaffold), não a cópia local de
+// componente (coberta em internal/initai).
 func newTestProfile(create []string) *profile.Profile {
 	return &profile.Profile{
 		Name:     "test",
@@ -64,7 +63,7 @@ func TestRunNewCreatesGitInitsAndRunsInitAI(t *testing.T) {
 	writeTestProfile(t, home.ProfilesDir, newTestProfile([]string{"echo {{.Name}}"}))
 
 	fr := &runner.FakeRunner{}
-	initOpts := initai.Options{Mode: scaffold.ModeBuild}
+	initOpts := initai.Options{}
 
 	sum, err := runNew(fr, allFound, home.ProfilesDir, "test", "myproj", false, false, initOpts, home)
 	if err != nil {
@@ -108,7 +107,7 @@ func TestRunNewDryRunCreatesNothing(t *testing.T) {
 	writeTestProfile(t, home.ProfilesDir, newTestProfile([]string{"echo {{.Name}}"}))
 
 	fr := &runner.FakeRunner{}
-	initOpts := initai.Options{Mode: scaffold.ModeBuild, DryRun: true, Out: &bytes.Buffer{}}
+	initOpts := initai.Options{DryRun: true, Out: &bytes.Buffer{}}
 
 	if _, err := runNew(fr, allFound, home.ProfilesDir, "test", "myproj", false, true, initOpts, home); err != nil {
 		t.Fatalf("runNew() error = %v", err)
@@ -127,7 +126,7 @@ func TestRunNewNoGitSkipsGitInit(t *testing.T) {
 	writeTestProfile(t, home.ProfilesDir, newTestProfile(nil))
 
 	fr := &runner.FakeRunner{}
-	initOpts := initai.Options{Mode: scaffold.ModeBuild}
+	initOpts := initai.Options{}
 
 	_, err := runNew(fr, allFound, home.ProfilesDir, "test", "myproj", true, false, initOpts, home)
 	if err != nil {
@@ -153,7 +152,7 @@ func TestRunNewRejectsExistingNonEmptyTarget(t *testing.T) {
 	home := newTestHome(t)
 	writeTestProfile(t, home.ProfilesDir, newTestProfile(nil))
 
-	_, err := runNew(&runner.FakeRunner{}, allFound, home.ProfilesDir, "test", "myproj", false, false, initai.Options{Mode: scaffold.ModeBuild}, home)
+	_, err := runNew(&runner.FakeRunner{}, allFound, home.ProfilesDir, "test", "myproj", false, false, initai.Options{}, home)
 	if err == nil {
 		t.Fatal("runNew() = nil error, want error for a non-empty existing target")
 	}
@@ -170,7 +169,7 @@ func TestRunNewAbortsOnFailedCreateStepBeforeGitOrInitAI(t *testing.T) {
 		"false-cmd myproj": {ExitCode: 1},
 	}}
 
-	_, err := runNew(fr, allFound, home.ProfilesDir, "test", "myproj", false, false, initai.Options{Mode: scaffold.ModeBuild}, home)
+	_, err := runNew(fr, allFound, home.ProfilesDir, "test", "myproj", false, false, initai.Options{}, home)
 	if err == nil {
 		t.Fatal("runNew() = nil error, want error when a create step fails")
 	}

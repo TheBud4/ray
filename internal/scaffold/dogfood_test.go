@@ -13,21 +13,19 @@ import (
 	"github.com/TheBud4/ray/internal/profile"
 )
 
-// rayOwnHooks são os hooks que o próprio ray instala em si: os de build, porque
-// o ray não roda em modo learn. Derivar de SystemFiles em vez de listar à mão
-// faz um hook novo entrar no gate sozinho — e mantém guard-code.sh, que é do
-// overlay de learn, legitimamente fora.
+// rayOwnHooks são os hooks que o próprio ray instala em si. Derivar de
+// SystemFiles em vez de listar à mão faz um hook novo entrar no gate sozinho.
 func rayOwnHooks(t *testing.T) []profile.ScaffoldFile {
 	t.Helper()
 
 	var hooks []profile.ScaffoldFile
-	for _, f := range SystemFiles(ModeBuild) {
+	for _, f := range SystemFiles() {
 		if strings.HasPrefix(f.Path, ".claude/hooks/") {
 			hooks = append(hooks, f)
 		}
 	}
 	if len(hooks) == 0 {
-		t.Fatal("SystemFiles(ModeBuild) returned no hooks")
+		t.Fatal("SystemFiles() returned no hooks")
 	}
 	return hooks
 }
@@ -150,16 +148,14 @@ func TestRayOwnSettingsMatchHookSettings(t *testing.T) {
 		t.Fatalf(".claude/settings.json is not valid JSON: %v", err)
 	}
 
-	// Modo build: o ray não roda em learn, então o guard-code do overlay
-	// legitimamente não aparece no arquivo dele.
-	want := HookSettings(ModeBuild)["hooks"]
+	want := HookSettings()["hooks"]
 	got := own["hooks"]
 
 	// DeepEqual e não comparação de texto: o arquivo é JSON escrito à mão e
 	// alvo de merge, então indentação e ordem de chave não são contrato. A
 	// ordem *dentro* de cada evento é: ela decide qual aviso sai primeiro.
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf(".claude/settings.json diverged from HookSettings(ModeBuild).\ngot:\n%s\nwant:\n%s\nThe two declare the same wiring; align the file by hand.",
+		t.Errorf(".claude/settings.json diverged from HookSettings().\ngot:\n%s\nwant:\n%s\nThe two declare the same wiring; align the file by hand.",
 			indentJSON(t, got), indentJSON(t, want))
 	}
 }

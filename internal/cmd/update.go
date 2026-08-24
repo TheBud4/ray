@@ -19,7 +19,7 @@ var (
 func newUpdateCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "update [path]",
-		Short: "Upgrade tools and re-acquire content, protecting local edits by content hash",
+		Short: "Upgrade tools and recopy local components, protecting local edits by content hash",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			target := "."
@@ -67,7 +67,11 @@ func resolveUpdateHome() (update.Home, error) {
 	if err != nil {
 		return update.Home{}, err
 	}
-	return update.Home{ProfilesDir: profilesDir, StoreDir: storeDir}, nil
+	componentsDir, err := raypaths.ComponentsDir()
+	if err != nil {
+		return update.Home{}, err
+	}
+	return update.Home{ProfilesDir: profilesDir, StoreDir: storeDir, ComponentsDir: componentsDir}, nil
 }
 
 // runUpdate é a lógica injetável do comando: roda update.Run, imprime o

@@ -16,17 +16,10 @@ func TestValidate(t *testing.T) {
 		wantErr string // substring expected in the error; "" means no error
 	}{
 		{
-			name: "valid skills component",
+			name: "valid component",
 			profile: Profile{
 				Name:       "go",
-				Components: []Component{{Via: ViaSkills, Skill: "s", Source: "o/r"}},
-			},
-		},
-		{
-			name: "valid aitmpl component",
-			profile: Profile{
-				Name:       "go",
-				Components: []Component{{Via: ViaAitmpl, Type: TypeAgent, Ref: "o/r"}},
+				Components: []Component{{Name: "prompt-engineer", Dest: ".claude/skills"}},
 			},
 		},
 		{
@@ -40,90 +33,36 @@ func TestValidate(t *testing.T) {
 			wantErr: "name is required",
 		},
 		{
-			name: "unknown via",
+			name: "component missing name",
 			profile: Profile{
 				Name:       "go",
-				Components: []Component{{Via: "foo"}},
+				Components: []Component{{Dest: ".claude/skills"}},
 			},
-			wantErr: "unknown 'via'",
+			wantErr: "name is required",
 		},
 		{
-			name: "empty via",
+			name: "component whitespace-only name",
 			profile: Profile{
 				Name:       "go",
-				Components: []Component{{}},
+				Components: []Component{{Name: "   ", Dest: ".claude/skills"}},
 			},
-			wantErr: "'via' is required",
+			wantErr: "name is required",
 		},
 		{
-			name: "skills missing skill",
+			name: "component missing dest",
 			profile: Profile{
 				Name:       "go",
-				Components: []Component{{Via: ViaSkills, Source: "o/r"}},
+				Components: []Component{{Name: "prompt-engineer"}},
 			},
-			wantErr: "requires both 'skill' and 'source'",
+			wantErr: "dest is required",
 		},
 		{
-			name: "skills missing source",
+			name: "component whitespace-only dest",
 			profile: Profile{
 				Name:       "go",
-				Components: []Component{{Via: ViaSkills, Skill: "s"}},
+				Components: []Component{{Name: "prompt-engineer", Dest: "   "}},
 			},
-			wantErr: "requires both 'skill' and 'source'",
-		},
-		{
-			name: "aitmpl missing type",
-			profile: Profile{
-				Name:       "go",
-				Components: []Component{{Via: ViaAitmpl, Ref: "o/r"}},
-			},
-			wantErr: "requires type agent|command",
-		},
-		{
-			name: "aitmpl invalid type",
-			profile: Profile{
-				Name:       "go",
-				Components: []Component{{Via: ViaAitmpl, Type: "tool", Ref: "o/r"}},
-			},
-			wantErr: "requires type agent|command",
-		},
-		{
-			name: "aitmpl missing ref",
-			profile: Profile{
-				Name:       "go",
-				Components: []Component{{Via: ViaAitmpl, Type: TypeAgent}},
-			},
-			wantErr: "requires 'ref'",
-		},
-		{
-			name: "valid git component",
-			profile: Profile{
-				Name:       "go",
-				Components: []Component{{Via: ViaGit, Repo: "o/r", Ref: "main", Path: "skills/x"}},
-			},
-		},
-		{
-			name: "git missing repo",
-			profile: Profile{
-				Name:       "go",
-				Components: []Component{{Via: ViaGit, Path: "skills/x"}},
-			},
-			wantErr: "requires 'repo' and 'path'",
-		},
-		{
-			name: "git missing path",
-			profile: Profile{
-				Name:       "go",
-				Components: []Component{{Via: ViaGit, Repo: "o/r"}},
-			},
-			wantErr: "requires 'repo' and 'path'",
-		},
-		{
-			name: "git ref is optional",
-			profile: Profile{
-				Name:       "go",
-				Components: []Component{{Via: ViaGit, Repo: "o/r", Path: "skills/x"}},
-			},
+			wantErr: "dest is required",
 		},
 		{
 			name: "scaffold file empty path",
@@ -138,45 +77,11 @@ func TestValidate(t *testing.T) {
 			profile: Profile{
 				Name: "go",
 				Components: []Component{
-					{Via: ViaSkills, Skill: "s", Source: "o/r"},
-					{Via: "bogus"},
+					{Name: "prompt-engineer", Dest: ".claude/skills"},
+					{Name: "bogus"},
 				},
 			},
 			wantErr: "component 1",
-		},
-		{
-			name: "valid milestone",
-			profile: Profile{
-				Name:       "go",
-				Milestones: []Milestone{{Goal: "Skeleton compiles", Verify: "go build ./..."}},
-			},
-		},
-		{
-			name: "milestone missing goal",
-			profile: Profile{
-				Name:       "go",
-				Milestones: []Milestone{{Verify: "go build ./..."}},
-			},
-			wantErr: "goal is required",
-		},
-		{
-			name: "milestone missing verify",
-			profile: Profile{
-				Name:       "go",
-				Milestones: []Milestone{{Goal: "Skeleton compiles"}},
-			},
-			wantErr: "verify is required",
-		},
-		{
-			name: "error on second milestone preserves index",
-			profile: Profile{
-				Name: "go",
-				Milestones: []Milestone{
-					{Goal: "a", Verify: "true"},
-					{Goal: "b"},
-				},
-			},
-			wantErr: "milestone 1",
 		},
 	}
 
@@ -206,7 +111,7 @@ func TestLoadRoundTrip(t *testing.T) {
 	want := Profile{
 		Name:        "x",
 		Description: "test profile",
-		Components:  []Component{{Via: ViaSkills, Skill: "s", Source: "o/r"}},
+		Components:  []Component{{Name: "prompt-engineer", Dest: ".claude/skills"}},
 		Scaffold:    Scaffold{Settings: map[string]any{"model": "opus"}},
 	}
 	data, err := yaml.Marshal(want)
@@ -248,7 +153,7 @@ func TestLoadInvalid(t *testing.T) {
 		path := filepath.Join(dir, "bad.yaml")
 		data, err := yaml.Marshal(Profile{
 			Name:       "bad",
-			Components: []Component{{Via: "nope"}},
+			Components: []Component{{Dest: ".claude/skills"}},
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -264,7 +169,7 @@ func TestLoadInvalid(t *testing.T) {
 		if !strings.Contains(err.Error(), path) {
 			t.Errorf("Load() error = %q, want it to contain the path", err.Error())
 		}
-		if !strings.Contains(err.Error(), "unknown 'via'") {
+		if !strings.Contains(err.Error(), "name is required") {
 			t.Errorf("Load() error = %q, want it to contain the validation reason", err.Error())
 		}
 	})
@@ -405,106 +310,5 @@ func TestLoadForTargetSurfacesRealReadErrors(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "no profile recorded") {
 		t.Errorf("error = %q, want it to report the read failure, not a missing record", err)
-	}
-}
-
-// ValidateMilestones existe para desacoplar os marcos negociados na sessão
-// (.claude/.local/milestones.yaml) das regras globais de receita. O teste
-// demonstra o desacoplamento em vez de descrevê-lo: a mesma lista de marcos
-// passa isolada e reprova dentro de um Profile que viola uma regra global —
-// aqui, o Name obrigatório. Antes, learn.LoadMilestones montava um Profile
-// falso só para driblar exatamente essa regra.
-func TestValidateMilestonesIsIndependentOfProfileRules(t *testing.T) {
-	ms := []Milestone{{Goal: "rodar os testes", Verify: "go test ./..."}}
-
-	if err := ValidateMilestones(ms); err != nil {
-		t.Fatalf("ValidateMilestones() = %v, want nil", err)
-	}
-
-	p := Profile{Milestones: ms} // sem Name: viola regra de receita
-	if err := p.Validate(); err == nil {
-		t.Fatal("Profile.Validate() = nil, want a name error: the recipe-level rule must still apply")
-	}
-}
-
-func TestValidateMilestonesRejectsIncompleteItems(t *testing.T) {
-	cases := []struct {
-		name string
-		ms   []Milestone
-	}{
-		{"missing goal", []Milestone{{Verify: "go test ./..."}}},
-		{"missing verify", []Milestone{{Goal: "rodar os testes"}}},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if err := ValidateMilestones(tc.ms); err == nil {
-				t.Fatal("ValidateMilestones() = nil, want an error")
-			}
-		})
-	}
-}
-
-// Profile.Validate delega para ValidateMilestones: marco quebrado numa receita
-// continua sendo erro de receita.
-func TestProfileValidateStillCatchesBrokenMilestone(t *testing.T) {
-	p := Profile{Name: "go", Milestones: []Milestone{{Goal: "sem verify"}}}
-	if err := p.Validate(); err == nil {
-		t.Fatal("Profile.Validate() = nil, want the error from the milestone missing verify")
-	}
-}
-
-// type: mcp era aceito pelo validador e não chegava a lugar nenhum: nem
-// adquirido, nem registrado como servidor. A rota que o build guide anunciava
-// não existe, e construí-la depende de um upstream quebrado. Recusar aqui é o
-// que torna o formato honesto — o que a receita aceita é o que o ray faz.
-func TestValidateRejectsMCPAsComponent(t *testing.T) {
-	p := &Profile{
-		Name:       "x",
-		Components: []Component{{Via: ViaAitmpl, Type: TypeMCP, Ref: "some/server"}},
-	}
-
-	err := p.Validate()
-	if err == nil {
-		t.Fatal("Validate() = nil, want an error: mcp is not an installable component")
-	}
-	// A mensagem tem de dizer onde declarar de verdade. Recusar sem apontar a
-	// rota certa manda o autor da receita adivinhar.
-	if !strings.Contains(err.Error(), "integrations") {
-		t.Errorf("error = %q, want it to point at `integrations`", err)
-	}
-}
-
-// A regressão: os dois tipos que de fato instalam continuam válidos.
-func TestValidateStillAcceptsAgentAndCommand(t *testing.T) {
-	for _, typ := range []string{TypeAgent, TypeCommand} {
-		t.Run(typ, func(t *testing.T) {
-			p := &Profile{
-				Name:       "x",
-				Components: []Component{{Via: ViaAitmpl, Type: typ, Ref: "some/ref"}},
-			}
-			if err := p.Validate(); err != nil {
-				t.Errorf("Validate() error = %v, want nil for type %q", err, typ)
-			}
-		})
-	}
-}
-
-// Tipo desconhecido continua recusado, e a lista oferecida não pode mais
-// anunciar mcp — anunciar o que se recusa é o defeito que este ciclo corrige.
-func TestValidateUnknownAitmplTypeNoLongerOffersMCP(t *testing.T) {
-	p := &Profile{
-		Name:       "x",
-		Components: []Component{{Via: ViaAitmpl, Type: "widget", Ref: "some/ref"}},
-	}
-
-	err := p.Validate()
-	if err == nil {
-		t.Fatal("Validate() = nil, want an error for an unknown aitmpl type")
-	}
-	if !strings.Contains(err.Error(), "agent|command") {
-		t.Errorf("error = %q, want it to offer agent|command", err)
-	}
-	if strings.Contains(err.Error(), "|mcp") {
-		t.Errorf("error = %q, still offers mcp as a valid type", err)
 	}
 }

@@ -11,13 +11,10 @@ import (
 	"github.com/TheBud4/ray/internal/preflight"
 	"github.com/TheBud4/ray/internal/raypaths"
 	"github.com/TheBud4/ray/internal/runner"
-	"github.com/TheBud4/ray/internal/scaffold"
 )
 
 var (
 	flagProfile         string
-	flagMode            string
-	flagGlobal          bool
 	flagForce           bool
 	flagNoGlobal        bool
 	flagReinstallGlobal bool
@@ -48,8 +45,6 @@ func newInitAICmd() *cobra.Command {
 		},
 	}
 	c.Flags().StringVar(&flagProfile, "profile", "", "recipe to install (required)")
-	c.Flags().StringVar(&flagMode, "mode", scaffold.ModeBuild, "build|learn")
-	c.Flags().BoolVarP(&flagGlobal, "global", "g", false, "install content-producing skills as personal, cross-project content instead of project-local/vendored (I1: --global no longer means \"the normal path\")")
 	c.Flags().BoolVar(&flagForce, "force", false, "regenerate scaffold files that already exist (never touches .claude/handoff.md)")
 	c.Flags().BoolVar(&flagNoGlobal, "no-global", false, "skip all install-once global steps")
 	c.Flags().BoolVar(&flagReinstallGlobal, "reinstall-global", false, "ignore state.yaml and reinstall global steps")
@@ -62,8 +57,6 @@ func buildInitAIOptions(target string, out io.Writer) initai.Options {
 	return initai.Options{
 		Profile:         flagProfile,
 		Target:          target,
-		Mode:            flagMode,
-		Global:          flagGlobal,
 		Force:           flagForce,
 		NoGlobal:        flagNoGlobal,
 		ReinstallGlobal: flagReinstallGlobal,
@@ -94,12 +87,17 @@ func resolveInitAIHome() (initai.Home, error) {
 	if err != nil {
 		return initai.Home{}, err
 	}
+	componentsDir, err := raypaths.ComponentsDir()
+	if err != nil {
+		return initai.Home{}, err
+	}
 	return initai.Home{
-		ProfilesDir:  profilesDir,
-		TemplatesDir: templatesDir,
-		ConfigPath:   configPath,
-		StatePath:    statePath,
-		StoreDir:     storeDir,
+		ProfilesDir:   profilesDir,
+		TemplatesDir:  templatesDir,
+		ConfigPath:    configPath,
+		StatePath:     statePath,
+		StoreDir:      storeDir,
+		ComponentsDir: componentsDir,
 	}, nil
 }
 

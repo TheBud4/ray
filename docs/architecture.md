@@ -49,12 +49,12 @@ internal/
 │
 ├── profile/      # modelo de receita: o que um perfil declara
 ├── installer/    # traduz as integrações de uma receita em ações
-├── initai/       # orquestra os 10 passos de `ray init ai`
+├── initai/       # orquestra os 10 passos de `ray init ai`; copia
+│                 #   componentes de ~/.ray/components/, nunca baixa
 ├── scaffold/     # escreve a árvore de orientação; templates embutidos
-├── update/       # `ray update`: re-aquisição protegendo edição local
+├── update/       # `ray update`: recópia local protegendo edição
 │
-├── acquire/      # materializa conteúdo por fonte (git pinado / CLI)
-├── store/        # cache content-addressed do conteúdo adquirido
+├── store/        # linha-base pristina (hash) para decidir "foi editado?"
 │
 ├── claudecfg/    # merge idempotente de .claude/settings.json
 ├── mcp/          # modelo de servidor MCP + merge idempotente de .mcp.json
@@ -63,7 +63,6 @@ internal/
 │
 ├── economy/      # mecanismos de Token Economy
 ├── metrics/      # proxies de atividade desses mecanismos
-├── learn/        # máquina verificável do modo learn
 │
 ├── rayconfig/    # lê e grava ~/.ray/config.yaml e o State
 ├── raypaths/     # resolve onde o ray guarda estado em disco
@@ -93,7 +92,7 @@ o código sozinho não conta:
   checagem no pacote que vai usá-la.
 - `raypaths` é o único que resolve caminho de estado. Nenhum pacote monta
   `~/.ray/...` à mão.
-- O núcleo de domínio (`profile`, `economy`, `learn`) **não** toca disco nem
+- O núcleo de domínio (`profile`, `economy`) **não** toca disco nem
   rede — é o que o mantém testável só com memória.
 - `vault` **valida** o cérebro, nunca o cria. O `ray` é consumidor da vault do
   usuário, não dono dela.

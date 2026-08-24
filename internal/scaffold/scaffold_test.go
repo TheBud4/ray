@@ -42,7 +42,7 @@ var sectionOpen = regexp.MustCompile(`^<([a-z_]+)>$`)
 
 func TestWriteFilesCreatesBaseSetAndSystemFiles(t *testing.T) {
 	target := t.TempDir()
-	files := append(baseFiles(), SystemFiles(ModeBuild)...)
+	files := append(baseFiles(), SystemFiles()...)
 
 	res, err := WriteFiles(files, Options{
 		Target: target,
@@ -1046,24 +1046,21 @@ func TestClaudeMdNamesPlanDestination(t *testing.T) {
 }
 
 func TestFileEditingHooksCoverMultiEdit(t *testing.T) {
-	// guard-code sempre cobriu Edit|Write|MultiEdit. Um hook que inspeciona
-	// arquivo e esquece MultiEdit tem buraco silencioso: a edição em lote é
-	// caminho comum e passaria sem aviso.
-	for _, mode := range []string{ModeBuild, ModeLearn} {
-		hooks := HookSettings(mode)["hooks"].(map[string]any)
-		for _, event := range []string{"PreToolUse", "PostToolUse"} {
-			entries, ok := hooks[event].([]any)
-			if !ok {
-				continue
+	// Um hook que inspeciona arquivo e esquece MultiEdit tem buraco
+	// silencioso: a edição em lote é caminho comum e passaria sem aviso.
+	hooks := HookSettings()["hooks"].(map[string]any)
+	for _, event := range []string{"PreToolUse", "PostToolUse"} {
+		entries, ok := hooks[event].([]any)
+		if !ok {
+			continue
+		}
+		for _, e := range entries {
+			matcher, _ := e.(map[string]any)["matcher"].(string)
+			if matcher == "Bash" {
+				continue // guard-add lê comando, não arquivo
 			}
-			for _, e := range entries {
-				matcher, _ := e.(map[string]any)["matcher"].(string)
-				if matcher == "Bash" {
-					continue // guard-add lê comando, não arquivo
-				}
-				if !strings.Contains(matcher, "MultiEdit") {
-					t.Errorf("mode %s, %s matcher = %q, want cobrindo MultiEdit", mode, event, matcher)
-				}
+			if !strings.Contains(matcher, "MultiEdit") {
+				t.Errorf("%s matcher = %q, want cobrindo MultiEdit", event, matcher)
 			}
 		}
 	}

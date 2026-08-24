@@ -17,19 +17,3 @@ if [[ -f .claude/handoff.md ]]; then
   count=$(cat "$count_file" 2>/dev/null || echo 0)
   echo $((count + 1)) > "$count_file"
 fi
-
-# I6a: injects the learning journal, written only by the assistant. No-ops
-# outside --mode learn or before the assistant has written anything yet.
-if [[ -f .claude/.local/learning-journal.md ]]; then
-  echo "## Learning journal"
-  cat .claude/.local/learning-journal.md
-  echo
-fi
-
-# O progresso de marcos é escrito pelo ray (nunca pela IA) e injetado ao lado
-# do diário. Só existe depois do primeiro `ray learn check` bem-sucedido.
-if [[ -f .claude/.local/milestones-progress.md ]]; then
-  echo "## Milestones"
-  cat .claude/.local/milestones-progress.md
-  echo
-fi

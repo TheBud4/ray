@@ -87,24 +87,32 @@ type Integrations struct { // YAML keys entre parênteses
     CodeGraph bool // code_graph
 }
 type Component struct {
-    Via    string // "skills" | "aitmpl"
-    Skill, Source string // via: skills
-    Type, Ref     string // via: aitmpl (type: agent|command)
+    Name string // subpasta em <ComponentsDir>/<Name>, e nome dentro de Dest no projeto
+    Dest string // diretório-contêiner relativo ao projeto (".claude/skills", ".claude/agents")
 }
 type Scaffold struct {
     Files    []ScaffoldFile      // {Path, Template?}
     Settings map[string]any      // model, effortLevel, ...
 }
 ```
-**Validação** (`Validate`): `name` obrigatório; `via ∈ {skills, aitmpl}`;
-`skills` exige `skill`+`source`; `aitmpl` exige `type ∈ {agent,command}`+`ref`;
-todo `ScaffoldFile.Path` não-vazio. Erro claro no primeiro problema.
+**Validação** (`Validate`): `name` obrigatório; `Component.name` e
+`Component.dest` obrigatórios; todo `ScaffoldFile.Path` não-vazio. Erro claro
+no primeiro problema.
 
 **Servidor MCP não é componente.** Declara-se em `integrations`, e sai no
 `.mcp.json` — `plan.Servers` é preenchido por `resolveIntegrations`, nunca a
-partir de `Components`. `type: mcp` numa receita é **recusado na validação**,
-com a mensagem apontando `integrations`: aceitá-lo sem implementar rota fazia a
-receita declarar um componente que ninguém adquiria e ninguém registrava.
+partir de `Components`.
+
+**v3 — sem aquisição de rede.** Até a v2, `Component` descrevia uma fonte
+externa (`via: skills|aitmpl|git`) e um `Acquirer` buscava o conteúdo pela
+rede (`npx`, `git clone`) num cache content-addressed. Isso foi removido
+inteiro: `internal/acquire` não existe mais, `components:` não aceita mais
+`via`. Um componente hoje é só um nome que aponta para
+`<ComponentsDir>/<Name>` — uma pasta que o **usuário** mantém à mão, nunca o
+`ray`. `init ai`/`update` copiam de lá para `<projeto>/<Dest>/<Name>` pela
+mesma política de sobrescrita (`store.DecideOverwrite`) que já protegia os
+arquivos de scaffold. Zero rede, zero `npx`/`git` para conteúdo, zero cache de
+aquisição — só cópia de arquivo local.
 
 **Helpers do pacote:** `Load(path)`, `List(dir)→[]Entry`, `EnsureDir(dir)`
 (escreve defaults faltantes, nunca sobrescreve), `Starter(name)` (perfil mínimo
@@ -143,10 +151,9 @@ ray
 ├── profile  list | show <n> | add <n> | edit <n> | remove <n> | path
 ├── brain    set <path> | status | open | path   # a vault Obsidian do usuário
 ├── doctor   [--fix]        # checa deps; --fix instala o que o ray consegue
-├── update   [path]         # re-adquire conteúdo e atualiza ferramentas
+├── update   [path]         # recopia componentes do overlay local e atualiza ferramentas
 ├── status   [path]         # diagnostica o ambiente vendorizado (drift, forks)
-├── stats    [path]         # atividade medida dos mecanismos de Token Economy
-└── learn    check [path]   # roda o verify do marco corrente e registra a passagem
+└── stats    [path]         # atividade medida dos mecanismos de Token Economy
 ```
 Cobra fornece `help` e `completion` de graça. **`--version` não é de graça:**
 ele só registra a flag quando o comando raiz preenche o campo `Version` — e
@@ -179,7 +186,7 @@ telas mentirem uma sobre a outra. Um `.mcp.json` ilegível derruba o `status`,
 que existe para diagnosticar, mas só apaga o número aqui. Não há linha
 "deps: ok": a linha de dependência só existe quando falta algo. `ray --help`
 segue inalterado, e `cobra.NoArgs` faz comando inexistente errar em vez de cair
-na tela. Os comandos-grupo (`init`, `profile`, `brain`, `learn`) saem do mesmo
+na tela. Os comandos-grupo (`init`, `profile`, `brain`) saem do mesmo
 esqueleto, e ele precisa de `RunE` além do `Args`: o Cobra checa `Runnable()`
 **antes** de validar argumento, então grupo sem `RunE` respondia help e exit 0
 a qualquer filho inexistente.
@@ -192,7 +199,6 @@ comando e saía 0.
 
 ### `ray init ai` — flags
 `--profile` (obrigatório) · `[path]` posicional (default `.`) ·
-`--mode build|learn` (default `build`) · `--global` (`-g`, skills globais) ·
 `--force` (regenera scaffold) · `--no-global` · `--reinstall-global`.
 
 ### `ray new <perfil> <nome>` — flags
@@ -202,11 +208,10 @@ dir → `git init -q` (salvo `--no-git`) → chama `initai.Run`. Falha num passo
 `create` **aborta** (não montar IA sobre projeto meio-criado).
 
 ### Demais flags
-`doctor --fix` · `run --list` · `update --profile <n> --force --no-global` ·
-`learn check --profile <n>`. O `--profile` do `update` e do `learn` sobrescreve
-a receita gravada em `.claude/.ray-profile`; o `--force` do `update` passa por
-cima de edição local e de árvore suja; o `--no-global` pula os `uv tool upgrade`.
-`status` e `stats` não têm flag própria.
+`doctor --fix` · `run --list` · `update --profile <n> --force --no-global`. O
+`--profile` do `update` sobrescreve a receita gravada em `.claude/.ray-profile`;
+o `--force` passa por cima de edição local e de árvore suja; o `--no-global`
+pula os `uv tool upgrade`. `status` e `stats` não têm flag própria.
 
 ---
 
@@ -218,21 +223,21 @@ rastreados por `Key` em `state.yaml`), `Servers` (entradas de `.mcp.json`).
 
 | Item da receita | Tipo | Comando / Server gerado |
 |---|---|---|
-| `via: git` ⟶v2 | Acquirer | `GitAcquirer`: tarball/clone de `<repo>@<ref>`, extrai `<path>`, copia p/ `.claude/` + captura `LICENSE`/`.ray-origin` (preferido p/ fontes oficiais) |
-| `via: skills` | Command | `DO_NOT_TRACK=1 npx skills add <source> --skill <skill> -a claude-code --copy -y` (+`-g` se `--global`) ⟶v2: **`--copy` e telemetria off** |
-| `via: aitmpl, type: agent\|command` | Command | `npx claude-code-templates@latest --<type>=<ref> --yes` (copia arquivos p/ `.claude/agents\|commands/`) |
+| `components: [{name, dest}]` | Cópia local | `store.CopyTree(<ComponentsDir>/<Name>, <projeto>/<Dest>/<Name>)` — sem rede, decide sobrescrever pela mesma política de hash dos arquivos de scaffold |
 | `headroom` | Global `headroom` + Server | install: `uv tool install headroom-ai[mcp]` · server `headroom` → `headroom mcp` |
 | `brain` | Server (condicional) | só se `ray brain set` configurou path válido: `brain` → `npx -y @modelcontextprotocol/server-filesystem <path>` |
 | `code_graph` | Global `code_graph` + Command + Server | global: `uv tool install graphifyy` **e** `graphify install --platform claude` · por-projeto: `graphify update .` (constrói o grafo, tree-sitter, sem LLM) · server `graphify` → `graphify-mcp` (stdio, lê `graphify-out/graph.json`) |
 
-**Notas que valem ouro (já mordidas uma vez):**
-- ⟶v2 **`npx skills add` faz *symlink* por padrão**, não cópia — o método
-  recomendado aponta cada agente para uma cópia canônica única. Commitar symlink
-  **não** viaja com o repo (o conteúdo fica fora). O vendoring **exige `--copy`**.
-- ⟶v2 **telemetria ligada por padrão** no `skills add` (envia nome+arquivos da
-  skill): desligar sempre com `DO_NOT_TRACK=1`/`DISABLE_TELEMETRY=1`.
-- ⟶v2 `via: git` é o caminho preferido p/ repositórios oficiais: pinado por `ref`,
-  sem exposição a symlink/telemetria/flag-drift de terceiros.
+**Histórico (v2, removido — não se aplica mais):** até a v2, `components:`
+aceitava `via: git|skills|aitmpl` e um `Acquirer` buscava o conteúdo pela rede
+(`npx skills add`, `npx claude-code-templates`, `git clone`), com cache
+content-addressed em `internal/store`. `via: git` era o caminho preferido p/
+repositórios oficiais, pinado por `ref`, sem exposição a symlink/telemetria/
+flag-drift de terceiros — mas as notas sobre symlink do `skills add` e
+telemetria eram problemas **daquele** mecanismo, e não existem mais porque o
+mecanismo não existe mais.
+
+**Notas que ainda valem:**
 - O pacote PyPI é `graphifyy` (dois "y"); o binário é `graphify`.
 - `headroom-ai[mcp]` precisa do extra `[mcp]` pra expor `headroom mcp`.
 - Globais só viram `state.AddGlobal(key)` se **todos** os comandos do step
@@ -274,46 +279,11 @@ seções XML e **nesta ordem**, que é load-bearing e travada por teste:
 atropelada pelo volume da spec colada no turno. `<edge_cases>` fecha o documento:
 é a cláusula que impede invenção quando a premissa falha.
 
-Não há mais `.claude/rules/*` no modo `build`: o que era regra solta virou seção
-do `CLAUDE.md`. `rules/` sobrou só para o que é opt-in por modo (`learn`) — não
-por custo de carregamento (os dois entram no contexto sozinhos, ver abaixo), mas
-porque regra que só vale num modo não deve poluir o documento base do outro.
-
-#### Quem carrega `.claude/rules/` (dependência externa, não código do ray)
-
-**O `ray` nunca carrega essas regras — quem carrega é o Claude Code.** Nenhum
-arquivo gerado aponta para elas: o `CLAUDE.md.tmpl` não tem seção nem `@import`,
-o `session-start.sh` injeta só handoff/diário/marcos, e o `HookSettings` só
-registra hooks. Isso é correto, e não um esquecimento: o Claude Code descobre
-`.claude/rules/**/*.md` recursivamente e, conforme a documentação oficial,
-*"rules without `paths` frontmatter are loaded at launch with the same priority
-as `.claude/CLAUDE.md`"*. Os três templates de learn não têm frontmatter, logo
-carregam incondicionalmente, toda sessão.
-
-Verificado empiricamente em **Claude Code 2.1.220**, com ferramentas desabilitadas
-para excluir leitura por tool call: um canário em `.claude/rules/` volta na
-resposta; o mesmo canário em `.claude/naoregras/` não volta; três arquivos de
-regra voltam os três; e um scaffold real de `--mode learn` responde que não pode
-editar código *citando* `.claude/rules/learn.md`. Para reverificar depois de
-mexer nos templates, o caminho barato é o hook `InstructionsLoaded`, que loga
-quais arquivos de instrução carregaram e por quê.
-
-Duas consequências que valem estar escritas:
-
-- **Injetar as regras pelo `session-start.sh` seria erro**, não alternativa:
-  carregaria em duplicidade e pagaria contexto toda sessão por algo que já vem
-  de graça — contra o argumento de custo que o próprio template do diário faz.
-- **A regra não substitui o hook.** A doc é explícita: *"Claude treats them as
-  context, not enforced configuration. To block an action regardless of what
-  Claude decides, use a PreToolUse hook instead."* É exatamente por isso que
-  `learn.md` (instrução) e `guard-code.sh` (bloqueio) coexistem — um não torna
-  o outro redundante.
-
-Fragilidades conhecidas, ambas fora do caminho padrão: `claudeMdExcludes` pode
-excluir o diretório por glob, e `--setting-sources` sem `project` pula as regras
-de projeto. Alavanca ainda não usada: o frontmatter `paths` escopa uma regra por
-glob, carregando-a só quando a IA toca arquivos que casam — a saída natural se as
-regras de learn crescerem.
+Não há `.claude/rules/*`: o que era regra solta virou seção do `CLAUDE.md`.
+`rules/` existiu só como overlay do modo learn (`learn.md`, `learn-teaching.md`,
+`learning-journal.md`) — removido inteiro junto com o modo. Não sobrou nenhum
+consumidor de `.claude/rules/`; se a pasta reaparecer um dia, é para outro uso,
+não para reviver este.
 
 A regra que sustenta o conjunto: **o que está no `CLAUDE.md` nunca se repete no
 documento por feature.** E cada item verificável desse documento vira um teste
@@ -326,65 +296,24 @@ embutidos como overlay editável; `render` prefere o overlay, cai pro embed.
 Mapa `templateFor` liga cada path → arquivo `.tmpl`. Arquivos `.sh` saem `0755`.
 
 **Arquivos "de sistema" (sempre escritos pelo ray, fora da receita):**
-`scaffold.SystemFiles(mode)` garante `.claude/hooks/session-start.sh`,
-`guard-add.sh`, `guard-vocab.sh`, `guard-plans.sh` e `guard-handoff.sh` (e no
-`learn`: `rules/learn.md`, `rules/learn-teaching.md`, `rules/learning-journal.md` +
-`hooks/guard-code.sh`). Isso garante que todo hook
-referenciado em `settings.json` exista no disco. No `initai`, os arquivos da
-receita + os de sistema são deduplicados por path (receita ganha).
+`scaffold.SystemFiles()` garante `.claude/hooks/session-start.sh`,
+`guard-add.sh`, `guard-vocab.sh`, `guard-plans.sh` e `guard-handoff.sh`. Isso
+garante que todo hook referenciado em `settings.json` exista no disco. No
+`initai`, os arquivos da receita + os de sistema são deduplicados por path
+(receita ganha).
 
-### Modos — `--mode build | learn` (overlay ortogonal ao perfil)
-- **build** (default): IA implementa normalmente; nenhuma restrição.
-- **learn** (mentora/revisora): a IA ensina e revisa mas **não toca em código**.
-  Overlay adiciona:
-  1. **Bloqueio duro** — hook `PreToolUse` (matcher `Edit|Write|MultiEdit`) →
-     `.claude/hooks/guard-code.sh`. Libera só se o path casa a allowlist de docs
-     (`*.md`, `docs/*`, `.claude/*` — no `case` do bash o `*` casa `/`, então é
-     recursivo); senão **nega** a ação com mensagem, via
-     `hookSpecificOutput.permissionDecision: "deny"` — a forma que a doc manda
-     usar em PreToolUse. O `{"decision":"block"}` de topo ainda funciona
-     (verificado em 2.1.220), mas é desaconselhado, e este é o único bloqueio
-     do modo learn: não se apoia em forma tolerada. Piso de suporte: **Claude
-     Code 2.x**. É o único hook do conjunto que nega: os quatro guards de
-     aviso — `guard-add`, `guard-plans`, `guard-vocab` e `guard-handoff` —
-     emitem `systemMessage` e saem **0**, sem exceção. Três deles rodam em
-     `PreToolUse`, onde o aviso ainda dá tempo de redirecionar; `guard-handoff`
-     é `PostToolUse` porque precisa do tamanho final do arquivo no disco, que
-     `Edit`/`MultiEdit` não carregam no payload (ver `docs/features.md`). O
-     `guard-vocab` varre o texto que a
-     chamada carrega (`content`, `new_string`, `edits[].new_string`), e não o
-     arquivo no disco: varrer o arquivo inteiro acusava o autor de uma edição
-     por linha que ele não escreveu, a cada edição. O preço, aceito, é que
-     vocabulário já presente num arquivo fica fora do alcance dele.
-     A negação é montada com `jq`, não com aspas
-     escapadas: caminho com `"` produziria JSON inválido, e JSON inválido num
-     hook que nega falha **aberto**. `mode_test.go` trava as duas coisas. Sem
-     `jq`, nega tudo — hook que bloqueia falha fechado. É um **freio de
-     reflexo, não um sandbox**: guarda `Edit`/`Write`/`MultiEdit` e não guarda
-     `Bash`, então um `bash -c 'cat > x.go'` passa. O limite é deliberado —
-     fechar exigiria guardar `Bash`, superfície grande e cheia de falso
-     positivo.
-  2. **Regra** `.claude/rules/learn.md`.
-  3. **Prompt de ensino** `.claude/rules/learn-teaching.md`: contrato negociado
-     na primeira sessão, escada de 4 degraus, e a regra de que fatos são
-     respondidos direto.
-  4. **Diário** `.claude/rules/learning-journal.md` — o diário é da IA e vive
-     em `.claude/.local/`; o `ray` só escreve o progresso de marcos.
-  5. Viés de agentes p/ review/exploração.
+`scaffold.HookSettings()` devolve o bloco `hooks` p/ mesclar no
+`settings.json`: `SessionStart` (sempre, injeta o handoff) + `PreToolUse` (os
+três guards de aviso) + `PostToolUse` (`guard-handoff`). Mecânica dos quatro
+guards, e por que `guard-handoff` é o único `PostToolUse`: `docs/features.md`.
 
-Contrato dos arquivos de `.claude/.local/` (I6a/I6b — nenhum é vendorizado):
-
-| Arquivo | Escrito por | Lido por |
-|---|---|---|
-| `learning-journal.md` | só a IA | `session-start.sh` (injeta) |
-| `milestones-progress.md` | só o `ray` (`ray learn check`) | `session-start.sh` (injeta) |
-| `milestones.yaml` | a IA (marcos negociados na sessão) | o `ray` (`LoadMilestones`); ganha da receita quando existe |
-| `milestones-passed.yaml` | o `ray` | o `ray` — estado de máquina, não é injetado |
-
-`scaffold.HookSettings(mode)` devolve o bloco `hooks` p/ mesclar no
-`settings.json`: `SessionStart` (sempre, injeta o handoff) + `PreToolUse` (só no
-learn). As escritas no vault passam por **ferramenta MCP**, não por `Edit/Write`,
-então o guard **não** as bloqueia — em `learn` a IA ainda anota aprendizados.
+**Removido: modo learn.** Existiu como overlay opt-in (`--mode build|learn`) —
+mentora/revisora, hook de bloqueio duro (`guard-code.sh`), escada de ensino de
+4 degraus, diário e marcos verificáveis em `.claude/.local/`. O usuário decidiu
+usar o `ray` só para desenvolvimento; aprendizado é combinado por fora, sem o
+`ray` no meio. `internal/learn`, `internal/cmd/learn.go`, os 4 templates de
+`.claude/rules/*`, `guard-code.sh.tmpl`, `profile.Milestone` e a flag `--mode`
+saíram inteiros — não há mais overlay ortogonal ao perfil.
 
 ### Handoff entre sessões
 `.claude/handoff.md` (estado vivo) + `.claude/rules/handoff.md` (diretiva: antes
@@ -395,7 +324,7 @@ de encerrar/limpar, sobrescrever o handoff) + `session-start.sh` (no
 
 ## 8. Fluxo do `ray init ai` (passos exatos — `initai.Run`)
 
-1. Validar `--mode`; resolver `target = Abs(path)`; `ensureWritableDir` (MkdirAll
+1. Resolver `target = Abs(path)`; `ensureWritableDir` (MkdirAll
    + escreve/remove um probe `.ray-write-test`).
 2. Resolver `~/.ray` (profiles, templates, store); `profile.EnsureDir` +
    `scaffold.EnsureTemplates`.
@@ -412,8 +341,8 @@ de encerrar/limpar, sobrescrever o handoff) + `session-start.sh` (no
 7b. **Componentes por-projeto**: cada `c.Dir = target`, roda e acumula (falha
     isolada **não** aborta).
 8. `mcp.WriteServers(target, plan.Servers, dryRun, out)` — merge idempotente.
-9. `claudecfg.MergeSettings(target, merge(prof.Settings, HookSettings(mode)), …)`.
-10. `scaffold.WriteFiles(dedup(prof.Files + SystemFiles(mode)), …)` →
+9. `claudecfg.MergeSettings(target, merge(prof.Settings, HookSettings()), …)`.
+10. `scaffold.WriteFiles(dedup(prof.Files + SystemFiles()), …)` →
     acumula `Created`/`Skipped`.
 
 **Resumo final + exit code:** `Summary{Installed, Failed, Created, Skipped,
@@ -538,20 +467,20 @@ flutter-build-responsive-layout}`, `firebase/agent-skills@firebase-security-rule
 
 A fronteira `runner` torna tudo testável sem rede. Por pacote:
 - **runner:** `FakeRunner` grava chamadas; um único teste real roda `echo`.
-- **profile:** load válido/inválido (via desconhecido, campo faltando); `EnsureDir`
-  só grava faltantes; list/add/remove.
-- **installer:** cada linha da tabela §6 → comando exato (incl. `-g`); globais e
+- **profile:** load válido/inválido (`name`/`dest` faltando no componente,
+  campo faltando); `EnsureDir` só grava faltantes; list/add/remove.
+- **installer:** cada linha da tabela §6 → comando exato; globais e
   servers corretos.
 - **mcp/claudecfg:** merge cria válido, preserva, não duplica em 2ª aplicação.
-- **scaffold:** cria o conjunto build; não-sobrescrita; `--force` regenera mas
-  nunca o handoff; overlay learn adiciona regra+guard; teste do `guard-code.sh`
-  (libera `docs/x.md`, bloqueia `lib/main.dart`).
+- **scaffold:** cria o conjunto de sistema; não-sobrescrita; `--force` regenera
+  mas nunca o handoff; `guard-handoff.sh` silencioso sob o orçamento e avisando
+  acima dele.
 - **vault:** `Verify` aceita vault existente e recusa caminho que não é uma;
   `Stat` conta `.md`. Não há teste de criação porque não há criação.
 - **preflight/doctor:** com `Looker` mockado, aborta sem `npx`; sem `python` só
   se needPython; tabela formatada.
-- **initai (fumaça):** ponta-a-ponta com `FakeRunner` em `t.TempDir()`, build e
-  learn, respeita `--dry-run`, exit ≠ 0 quando componente falha.
+- **initai (fumaça):** ponta-a-ponta com `FakeRunner` em `t.TempDir()`,
+  respeita `--dry-run`, exit ≠ 0 quando componente falha.
 - **runfile:** precedência projeto>global, `findProjectFile` sobe a árvore.
 
 ---

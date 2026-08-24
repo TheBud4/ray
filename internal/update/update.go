@@ -1,7 +1,7 @@
 // Package update implementa `ray update` (I3): atualiza ferramentas (latest)
-// e re-adquire conteúdo pelo Acquirer de cada componente, protegendo edições
-// por conteúdo (não por git-status) via o hash pristino gravado pelo
-// internal/initai em internal/store.
+// e recopia cada componente de internal/raypaths.ComponentsDir (nunca da
+// rede), protegendo edições por conteúdo (não por git-status) via o hash
+// pristino gravado pelo internal/initai em internal/store.
 package update
 
 import (
@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/TheBud4/ray/internal/acquire"
 	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/runner"
 	"github.com/TheBud4/ray/internal/store"
@@ -21,8 +20,9 @@ import (
 // Home reúne os caminhos de ~/.ray que Run precisa, resolvidos pelo chamador
 // (internal/raypaths) — mesmo padrão de initai.Home.
 type Home struct {
-	ProfilesDir string
-	StoreDir    string
+	ProfilesDir   string
+	StoreDir      string
+	ComponentsDir string
 }
 
 // Options são os parâmetros de `ray update`.
@@ -97,122 +97,58 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 		}
 	}
 
-	// 4. conteúdo — re-aquisição por ref, protegida por fork (por componente).
+	// 4. conteúdo — recópia local (nunca rede), protegida por fork (por
+	// componente).
 	st := store.New(home.StoreDir)
 	for _, c := range prof.Components {
-		acq, ok := acquire.For(c, r)
-		if !ok {
-			// Inalcançável por receita carregada desde a recusa de `type: mcp`
-			// em profile.Validate. Fica como defesa: se o invariante quebrar, o
-			// componente aparece no resumo em vez de sumir — que era o defeito
-			// original.
-			//
-			// O identificador sai dos campos do componente: acq é nil aqui, e
-			// acq.Key(c) — a forma usada nos outros skips — seria panic.
-			sum.Skipped = append(sum.Skipped, describeUnacquirable(c))
+		srcDir := filepath.Join(home.ComponentsDir, c.Name)
+		if info, statErr := os.Stat(srcDir); statErr != nil || !info.IsDir() {
+			sum.Skipped = append(sum.Skipped, fmt.Sprintf("%s: not found at %s", c.Name, srcDir))
 			continue
 		}
-		coord := acq.Key(c)
-		leaf, lerr := acquire.LeafName(c)
-		if lerr != nil {
-			return Summary{}, lerr
-		}
-		destRel, derr := acquire.DestRel(c)
-		if derr != nil {
-			return Summary{}, derr
-		}
-		onDisk := filepath.Join(target, destRel, leaf)
+		onDisk := filepath.Join(target, c.Dest, c.Name)
 
-		if c.Via == profile.ViaGit && c.Ref != "" && c.Ref != "main" {
-			sum.Skipped = append(sum.Skipped, coord+" (pinned ref, no-op)")
-			continue
-		}
-
-		if opts.DryRun {
-			// O dry-run decide o que dá para decidir sem rede. Com linha-base
-			// gravada o veredito sai de dois hashes locais e é exato — é o
-			// caso normal depois do init ai, e é o que impede a simulação de
-			// anunciar que vai sobrescrever o que a execução real preserva.
-			//
-			// Sem linha-base, o ramo de DecideOverwrite que decidiria precisa
-			// do upstream, e buscá-lo aqui quebraria o "dry-run não busca
-			// nada". Afirmar sem buscar seria inventar: vira aviso.
-			onDiskHash, onDiskErr := store.HashTree(onDisk)
-			pristineHash, hasPristine := st.PristineHash(target, coord)
-
-			if hasPristine && onDiskErr == nil {
-				// freshHash vazio de propósito: com hasPristine, o
-				// DecideOverwrite não o consulta. É o que torna a decisão
-				// offline, e não descuido.
-				overwrite, reason := decideOverwrite(opts.Force, true, onDiskHash, "", pristineHash, true)
-				if !overwrite {
-					fmt.Fprintf(out, "+ preserve %s (edited locally)\n", coord)
-					sum.Skipped = append(sum.Skipped, coord)
-					sum.Warnings = append(sum.Warnings, fmt.Sprintf("%s: %s", coord, reason))
-					continue
-				}
-			} else if onDiskErr == nil {
-				sum.Warnings = append(sum.Warnings, fmt.Sprintf(
-					"%s: no pristine baseline — whether this is a local edit needs the upstream, which a dry-run does not fetch", coord))
-			}
-
-			fmt.Fprintf(out, "+ re-acquire %s -> %s\n", coord, destRel)
-			sum.Updated = append(sum.Updated, coord)
-			continue
-		}
-
-		res, aerr := acq.Acquire(context.Background(), c)
-		if aerr != nil {
-			sum.Failed = append(sum.Failed, coord)
-			continue
-		}
-		freshDir := filepath.Join(res.Dir, leaf)
-		freshHash, herr := store.HashTree(freshDir)
+		freshHash, herr := store.HashTree(srcDir)
 		if herr != nil {
 			return Summary{}, herr
 		}
-
 		onDiskHash, onDiskErr := store.HashTree(onDisk)
-		pristineHash, hasPristine := st.PristineHash(target, coord)
-
+		pristineHash, hasPristine := st.PristineHash(target, c.Name)
 		overwrite, reason := decideOverwrite(opts.Force, onDiskErr == nil, onDiskHash, freshHash, pristineHash, hasPristine)
+
+		if opts.DryRun {
+			if !overwrite {
+				fmt.Fprintf(out, "+ preserve %s (edited locally)\n", c.Name)
+				sum.Skipped = append(sum.Skipped, c.Name)
+				sum.Warnings = append(sum.Warnings, fmt.Sprintf("%s: %s", c.Name, reason))
+				continue
+			}
+			fmt.Fprintf(out, "+ re-copy %s -> %s\n", c.Name, onDisk)
+			sum.Updated = append(sum.Updated, c.Name)
+			continue
+		}
+
 		if !overwrite {
-			sum.Skipped = append(sum.Skipped, coord)
-			sum.Warnings = append(sum.Warnings, fmt.Sprintf("%s: %s", coord, reason))
+			sum.Skipped = append(sum.Skipped, c.Name)
+			sum.Warnings = append(sum.Warnings, fmt.Sprintf("%s: %s", c.Name, reason))
 			continue
 		}
 
 		if err := os.RemoveAll(onDisk); err != nil && !os.IsNotExist(err) {
 			return Summary{}, err
 		}
-		if err := store.CopyTree(freshDir, onDisk); err != nil {
-			sum.Failed = append(sum.Failed, coord)
+		if err := store.CopyTree(srcDir, onDisk); err != nil {
+			sum.Failed = append(sum.Failed, c.Name)
 			continue
 		}
-		if _, err := st.Put(coord, freshDir); err != nil {
+		if err := st.SetPristine(target, c.Name, freshHash); err != nil {
 			return Summary{}, err
 		}
-		if err := st.SetPristine(target, coord, freshHash); err != nil {
-			return Summary{}, err
-		}
-		sum.Updated = append(sum.Updated, coord)
+		sum.Updated = append(sum.Updated, c.Name)
 	}
 
 	sum.HadFailure = len(sum.Failed) > 0
 	return sum, nil
-}
-
-// describeUnacquirable nomeia um componente que nenhum adquiridor atende. Não
-// usa acquire.Key porque não há adquiridor — é essa a condição.
-func describeUnacquirable(c profile.Component) string {
-	desc := fmt.Sprintf("no acquirer for via=%s", c.Via)
-	if c.Type != "" {
-		desc += fmt.Sprintf(" type=%s", c.Type)
-	}
-	if c.Ref != "" {
-		desc += fmt.Sprintf(" (%s)", c.Ref)
-	}
-	return desc
 }
 
 // decideOverwrite delega para store.DecideOverwrite. A política mora no

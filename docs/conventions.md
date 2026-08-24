@@ -80,4 +80,4 @@ lista que impede o repo de acumular arquivo gerado defasado:
   `internal/scaffold/templates/`.
 - Mudança na árvore que o scaffold escreve → a árvore documentada em
   `docs/ray-build-guide.md`.
-- `internal/scaffold/templates/claude/hooks/*.sh.tmpl` → as cópias que o próprio ray usa em `.claude/hooks/` (regeneradas do template, nunca editadas à mão). **Este par tem gate:** `TestRayOwnHooksMatchTemplates` compara byte-a-byte e confere o modo executável; `TestRayOwnHooksHaveNoStrays` recusa `.sh` órfão no diretório. Os dois derivam de `SystemFiles(ModeBuild)`, então um hook novo entra no gate sozinho.
+- `internal/scaffold/templates/claude/hooks/*.sh.tmpl` → as cópias que o próprio ray usa em `.claude/hooks/` (regeneradas do template, nunca editadas à mão). **Este par tem gate:** `TestRayOwnHooksMatchTemplates` compara byte-a-byte e confere o modo executável; `TestRayOwnHooksHaveNoStrays` recusa `.sh` órfão no diretório. Os dois derivam de `SystemFiles()`, então um hook novo entra no gate sozinho.

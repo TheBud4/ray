@@ -163,19 +163,21 @@ ignorado na máquina de quem clonar.
 
 ## `ray update` e a proteção de edição local
 
-O `update` re-adquire o conteúdo declarado na receita e **protege edição local
-por hash de conteúdo**, não por estado do git. É a decisão que sustenta a
-promessa do vendoring: você pode editar uma skill vendorizada, commitar, e o
-`update` seguinte preserva sua edição — porque compara contra a linha-base
-pristina guardada no `store`, e o commit não muda o conteúdo do arquivo.
+O `update` recopia o conteúdo declarado na receita a partir de
+`~/.ray/components/` — nunca da rede — e **protege edição local por hash de
+conteúdo**, não por estado do git. É a decisão que sustenta a promessa do
+vendoring: você pode editar uma skill vendorizada, commitar, e o `update`
+seguinte preserva sua edição — porque compara contra a linha-base pristina
+guardada no `store`, e o commit não muda o conteúdo do arquivo.
 
 **O que tem de valer:**
 
 - **Edição local nunca é sobrescrita em silêncio.** Componente divergente entra
   no resumo como preservado, com o motivo.
-- **O modo de simulação roda a mesma decisão da execução real** quando ela é
-  decidível offline, e avisa quando não é. Simulação que anuncia sobrescrever o
-  que a execução real preservaria é pior que simulação nenhuma.
+- **O modo de simulação decide exatamente como a execução real decidiria**,
+  com ou sem linha-base gravada. Sem rede envolvida, ler o "upstream" (a pasta
+  local) é grátis mesmo em dry-run — não há mais um caso que só a execução real
+  conseguiria resolver.
 - **A guarda de árvore limpa não vale para a simulação** — simular não suja nada,
   e barrar a simulação empurra a pessoa para forçar a execução, que é o oposto do
   que a guarda quer.
@@ -194,35 +196,19 @@ passo global bem-sucedido não entra em nenhuma das listas. Por isso a frase diz
 que não há componentes a atualizar, e não que não há nada a fazer — a segunda
 contradiria a saída dos passos globais impressa logo acima.
 
-**Um caso é de classe diferente e mais grave:** componente que nenhum adquirente
-sabe tratar era descartado em silêncio — a receita o declarava, o `update` não o
-tocava, e o comando saía 0. Os outros omitem ruído; esse escondia informação.
-Hoje entra no resumo com o motivo. O comando continua saindo 0: receita com
-componente inatingível é situação a relatar, não receita quebrada.
+**Um caso é de classe diferente e mais grave:** componente sem pasta
+correspondente em `~/.ray/components/` era o tipo de coisa fácil de descartar
+em silêncio. Não é: entra no resumo (`Failed` no `init ai`, `Skipped` no
+`update`) nomeando o caminho que faltou — receita com componente inexistente é
+situação a relatar, não erro a engolir.
 
-## MCP não é componente de receita
+## Componente não é integração
 
-Um servidor MCP se declara em `integrations`, nunca como componente. A receita
-recusa `type: mcp` na validação, com mensagem que aponta a rota que funciona —
-quem escreveu `type: mcp` acreditou numa rota anunciada, e merece a rota certa,
-não só a recusa.
-
-A razão é honestidade de formato: **o que a receita aceita é o que o `ray` faz**.
-A rota de componente para MCP não existe — o servidor nunca era adquirido nem
-registrado — e construí-la depende de um comando de terceiro que hoje falha
-reportando sucesso, o que produziria código verde sem efeito e sem caminho para
-detectar a falha.
-
-**O que tem de valer:**
-
-- Os dois consumidores de receita passam pela validação, então a recusa vale nos
-  dois.
-- `via: aitmpl` com `type: agent` e `type: command` continuam válidos.
-- **A porta não está fechada.** No dia em que o comando de terceiro funcionar, a
-  recusa é uma linha para reverter.
-- A guarda equivalente no laço do `update` **fica**, mesmo tendo se tornado
-  inalcançável por receita carregada. Cinto e suspensório é coerente com o resto
-  do tratamento de descarte silencioso.
+Um servidor MCP (`headroom`, `brain`, `code_graph`) se declara em
+`integrations`, nunca em `components`. São conceitos disjuntos por
+construção: `Component` só tem `name` e `dest` — não há campo para dizer "isto
+é um servidor", então não existe forma de confundir os dois no formato da
+receita.
 
 ---
 
@@ -231,58 +217,6 @@ detectar a falha.
 O conteúdo desta parte é gerado a partir dos templates em
 `internal/scaffold/templates/`. Não é o ambiente **deste** repositório: é o que
 o `ray` instala no repositório de quem o usa.
-
-## Modo learn
-
-Um modo opt-in em que a IA ensina em vez de entregar. A espinha é o **contrato**
-— um acordo explícito entre aluno e IA sobre como a ajuda é dosada, negociado na
-primeira sessão e guardado no diário local. Ele organiza os demais mecanismos
-porque existe sempre, independente de projeto, stack ou receita.
-
-### A escada
-
-Quatro degraus, do menos ao mais entregue: pergunta reflexiva → ponteiro
-conceitual → estratégia ou localização → solução com explicação.
-
-São quatro e não seis porque seis exigiriam que a IA rastreasse em que degrau
-está ao longo da conversa — estado que modelo nenhum mantém com confiabilidade —
-e cobrariam do aluno até seis pedidos para chegar na resposta.
-
-**A regra que decide se o modo é usável ou insuportável:** a escada vale para
-problemas que o aluno está tentando resolver, **não para fatos**. Qual o comando
-de rodar os testes, como se chama tal decorator, o que significa tal erro — vem
-direto. Fazer socratismo com consulta de fato é a maneira mais rápida de alguém
-desligar o modo para sempre.
-
-**Quem move:** o aluno puxa; a IA sobe sozinha só com evidência (duas tentativas
-sem avanço, ou o aluno dizendo que travou), nunca por impaciência. **O degrau
-reseta a cada problema novo** — sem isso a escada trava no topo e a primeira
-dificuldade da sessão definiria o tom de todas as outras.
-
-**O portão do último degrau** não é "tem certeza?", que vira clique automático na
-segunda vez: é *"me conta o que você já tentou"*. Exige esforço real, é onde a
-ficha costuma cair, e produz exatamente o material que o diário quer registrar.
-
-### O piso mecânico, e o que ele não é
-
-Um hook bloqueia a IA de editar código do projeto no modo learn. Demonstração que
-precisa rodar vai para o rascunho local, que já é ignorado pelo versionamento.
-
-**É freio de reflexo, não sandbox, e isso está documentado de propósito.** O hook
-guarda as ferramentas de edição e **não** guarda execução de shell — um comando
-que escreve arquivo por outro caminho passa direto. Fechar exigiria guardar a
-superfície inteira de shell, cheia de falso positivo. Prometer sandbox e não
-entregar é pior que declarar o limite.
-
-**Um hook que bloqueia tem de falhar fechado.** Sem a dependência que ele usa
-para ler o payload, ele nega a edição com mensagem apontando o `ray doctor` — em
-vez de morrer antes de decidir, o que devolveria à IA a liberdade de escrever
-código sem ninguém perceber.
-
-**A checagem de compreensão nunca bloqueia.** O marco fica verde porque o comando
-passou, ponto. O `ray` não finge medir entendimento — entendimento não é
-verificável por comando. Ele o transforma em ritual e deixa registro que um
-humano relê.
 
 ## Os quatro hooks de aviso
 
@@ -294,9 +228,6 @@ do repo), `guard-vocab` (contra vocabulário de processo em artefato entregue) e
 hook desligado. Com aviso, o custo de um falso positivo é uma linha ignorada; com
 bloqueio, é uma sessão travada — e na segunda vez, alguém remove o hook. A força
 que se perde é real e está aceita: **a IA pode ignorar o aviso.**
-
-O hook do modo learn é outra coisa e continua bloqueando: é pedagógico, opt-in, e
-a regra dele não tem falso positivo.
 
 **Três dos quatro rodam antes da escrita** (`guard-add`, `guard-plans`,
 `guard-vocab`) — aviso que chega depois não redireciona nada, e os três leem só o

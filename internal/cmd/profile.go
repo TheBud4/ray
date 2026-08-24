@@ -10,7 +10,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/TheBud4/ray/internal/acquire"
 	"github.com/TheBud4/ray/internal/installer"
 	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/rayconfig"
@@ -95,13 +94,9 @@ func runProfileShow(dir, name, brainPath string, out io.Writer) error {
 	fmt.Fprintf(out, "%s — %s\n", p.Name, p.Description)
 
 	if len(p.Components) > 0 {
-		fmt.Fprintln(out, "\nComponents:")
+		fmt.Fprintln(out, "\nComponents (copied from local components dir, never downloaded):")
 		for _, c := range p.Components {
-			cmd, err := acquire.PreviewCommand(c)
-			if err != nil {
-				return err
-			}
-			fmt.Fprintf(out, "  %s\n", cmd.String())
+			fmt.Fprintf(out, "  %s -> %s\n", c.Name, filepath.Join(c.Dest, c.Name))
 		}
 	}
 	if len(plan.Globals) > 0 {

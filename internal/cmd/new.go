@@ -16,7 +16,6 @@ import (
 	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/raypaths"
 	"github.com/TheBud4/ray/internal/runner"
-	"github.com/TheBud4/ray/internal/scaffold"
 )
 
 var flagNoGit bool
@@ -52,8 +51,6 @@ func newNewCmd() *cobra.Command {
 			return nil
 		},
 	}
-	c.Flags().StringVar(&flagMode, "mode", scaffold.ModeBuild, "build|learn")
-	c.Flags().BoolVarP(&flagGlobal, "global", "g", false, "install content-producing skills globally instead of project-local")
 	c.Flags().BoolVar(&flagForce, "force", false, "regenerate scaffold files that already exist (never touches .claude/handoff.md)")
 	c.Flags().BoolVar(&flagNoGlobal, "no-global", false, "skip all install-once global steps")
 	c.Flags().BoolVar(&flagReinstallGlobal, "reinstall-global", false, "ignore state.yaml and reinstall global steps")

@@ -18,12 +18,12 @@
 monta, com um comando, um ambiente de desenvolvimento com IA (Claude Code)
 econômico em tokens e rico em ferramentas.
 
-A feature âncora é `ray init ai`, que instala num diretório: skills, agentes,
-comandos e servers MCP curados por stack, regras que guiam a IA, e docs base.
-O `ray` **não embute conteúdo de componentes** — ele orquestra installers
-externos (`npx skills`, `npx claude-code-templates`, `uv tool install`)
-conforme uma receita (`~/.ray/profiles/<nome>.yaml`), editável e agnóstica ao
-binário.
+A feature âncora é `ray init ai`, que instala num diretório: skills, agentes e
+comandos copiados de uma pasta local (`~/.ray/components/`, nunca baixados),
+servers MCP curados por stack, regras que guiam a IA, e docs base. O `ray`
+**não baixa nem embute conteúdo de terceiros** — cada skill/agente é conteúdo
+que você mesmo colocou em `~/.ray/components/<nome>/`, conforme uma receita
+(`~/.ray/profiles/<nome>.yaml`), editável e agnóstica ao binário.
 
 ## Instalação
 
@@ -70,7 +70,7 @@ ignorasse.
 
 **Nunca commitado** — runtime, segredo e material pessoal:
 
-`.claude/.local/` (diário de aprendizado e marcos do modo learn) ·
+`.claude/.local/` (escrita local reservada, sem produtor hoje) ·
 `.claude/.ray-metrics/` · `.claude/handoff.md` · `graphify-out/` · `.env` ·
 `*.local`
 
@@ -87,10 +87,9 @@ execução criou.
 | `ray profile list\|show\|add\|edit\|remove\|path` | Gerencia as receitas em `~/.ray/profiles`. |
 | `ray brain set\|status\|open\|path` | Aponta o ray para a sua vault Obsidian e a expõe ao agente por MCP. Valida o caminho; nunca cria nem reorganiza. |
 | `ray doctor [--fix]` | Checa/instala dependências externas. |
-| `ray update [path]` | Re-adquire ferramentas e conteúdo; protege edições suas por hash de conteúdo (exige `--force` para sobrescrever). `--no-global` deixa as ferramentas da máquina onde estão e atualiza só o projeto. |
+| `ray update [path]` | Recopia componentes do overlay local (`~/.ray/components/`) e atualiza ferramentas; protege edições suas por hash de conteúdo (exige `--force` para sobrescrever). `--no-global` deixa as ferramentas da máquina onde estão e atualiza só o projeto. |
 | `ray stats [path]` | Agrega as métricas-proxy de economia de token registradas em `.claude/.ray-metrics/`. |
 | `ray status [path]` | Diagnostica o ambiente vendorizado: o que o `ray update` faria com cada componente, se o `.claude/` está versionado, se o bloco do `.gitignore` segue intacto e se os servidores MCP resolvem. Ambiente são imprime duas linhas. |
-| `ray learn check [path]` | Roda o `verify` do marco corrente e registra a passagem. |
 
 Flags globais: `--verbose` (`-v`), `--dry-run` (imprime o que seria feito, sem
 executar nem escrever nada) e `--version`, que não tem forma curta — o `-v` é da
@@ -108,21 +107,6 @@ ray --version
 # ray version devel (f905791, 2026-08-01T00:41:58Z, dirty)
 ```
 
-### `--mode build\|learn`
-
-Todo `ray init ai`/`ray new` aceita `--mode` (default `build`):
-
-- **`build`**: a IA implementa normalmente, sem restrições.
-- **`learn`**: a IA vira mentora/revisora. Um hook `PreToolUse` bloqueia
-  `Edit`/`Write`/`MultiEdit` fora de uma allowlist de documentação
-  (`*.md` e tudo sob `docs/` e `.claude/`) — a IA explica e revisa, mas não
-  escreve código diretamente.
-
-Em modo learn a IA negocia um contrato com você na primeira sessão — o quanto
-você quer que ela entregue de cada vez, o que você quer conseguir fazer
-sozinho, e o que vai contar como pronto. O combinado e o seu progresso vivem
-em `.claude/.local/`, que é gitignorado: compartilhar o repo não expõe o seu
-aprendizado.
 
 Peça "mais" quando uma dica não bastar. A resposta completa está sempre
 disponível, mas ela te pergunta antes o que você já tentou.

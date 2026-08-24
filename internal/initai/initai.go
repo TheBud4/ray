@@ -3,7 +3,6 @@
 package initai
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"os"
@@ -11,7 +10,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/TheBud4/ray/internal/acquire"
 	"github.com/TheBud4/ray/internal/claudecfg"
 	"github.com/TheBud4/ray/internal/installer"
 	"github.com/TheBud4/ray/internal/mcp"
@@ -28,19 +26,18 @@ import (
 // (via internal/raypaths) para manter este pacote livre de os.Getenv e
 // testável só com t.TempDir().
 type Home struct {
-	ProfilesDir  string
-	TemplatesDir string
-	ConfigPath   string
-	StatePath    string
-	StoreDir     string
+	ProfilesDir   string
+	TemplatesDir  string
+	ConfigPath    string
+	StatePath     string
+	StoreDir      string
+	ComponentsDir string
 }
 
 // Options são os parâmetros de `ray init ai` (build guide §5, §8).
 type Options struct {
 	Profile         string
 	Target          string
-	Mode            string
-	Global          bool
 	Force           bool
 	NoGlobal        bool
 	ReinstallGlobal bool
@@ -135,10 +132,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		out = io.Discard
 	}
 
-	// 1. modo + target + writability.
-	if opts.Mode != scaffold.ModeBuild && opts.Mode != scaffold.ModeLearn {
-		return Summary{}, fmt.Errorf("invalid --mode %q (want %q or %q)", opts.Mode, scaffold.ModeBuild, scaffold.ModeLearn)
-	}
+	// 1. target + writability.
 	target, err := filepath.Abs(opts.Target)
 	if err != nil {
 		return Summary{}, err
@@ -213,7 +207,6 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		}
 	}
 	plan, err := installer.Resolve(prof, installer.Options{
-		Global:    opts.Global,
 		BrainPath: brainPath,
 	})
 	if err != nil {
@@ -252,81 +245,39 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		}
 	}
 
-	// 7b. componentes de conteúdo (I2) — cache-first sobre internal/store:
-	// já cacheado restaura sem rede; senão adquire (git/CLI) e popula o
-	// cache. Falha isolada não aborta o loop. `--global` só se aplica a
-	// `via: skills` (I1 §3.3): instala pessoal/cross-project, não passa
-	// pelo store nem é vendorizado no projeto. Roda ANTES de 7c: o
-	// `graphify update .` (integração code_graph) precisa achar conteúdo
-	// real em `.claude/` para ter o que indexar.
+	// 7b. componentes locais (skills/agents) — copiados de
+	// home.ComponentsDir, nunca baixados: o usuário mantém o conteúdo lá, o
+	// ray só copia e grava o hash pristino (para `ray update` decidir depois
+	// se preserva edição local). Falha isolada não aborta o loop. Roda ANTES
+	// de 7c: o `graphify update .` (integração code_graph) precisa achar
+	// conteúdo real em `.claude/` para ter o que indexar.
 	for _, c := range prof.Components {
-		if opts.Global && c.Via == profile.ViaSkills {
-			cmd, err := acquire.GlobalInstallCommand(c)
-			if err != nil {
-				return Summary{}, err
-			}
-			cmd.Dir = target
-			if opts.DryRun {
-				fmt.Fprintf(out, "+ %s\n", cmd.String())
-				sum.Installed = append(sum.Installed, cmd.String())
-				continue
-			}
-			if runOne(r, cmd) {
-				sum.Installed = append(sum.Installed, cmd.String())
-			} else {
-				sum.Failed = append(sum.Failed, cmd.String())
-			}
+		srcDir := filepath.Join(home.ComponentsDir, c.Name)
+		if info, statErr := os.Stat(srcDir); statErr != nil || !info.IsDir() {
+			sum.Failed = append(sum.Failed, c.Name)
+			sum.Warnings = append(sum.Warnings, fmt.Sprintf("component %q not found at %s", c.Name, srcDir))
 			continue
 		}
 
-		acq, ok := acquire.For(c, r)
-		if !ok {
-			continue
-		}
-		coord := acq.Key(c)
-		destRel, err := acquire.DestRel(c)
-		if err != nil {
-			return Summary{}, err
-		}
-
+		destDir := filepath.Join(target, c.Dest, c.Name)
 		if opts.DryRun {
-			fmt.Fprintf(out, "+ acquire %s -> %s\n", coord, destRel)
-			sum.Installed = append(sum.Installed, coord)
+			fmt.Fprintf(out, "+ copy %s -> %s\n", c.Name, destDir)
+			sum.Installed = append(sum.Installed, c.Name)
 			continue
 		}
 
-		srcDir, hit := st.Get(coord)
-		if !hit {
-			res, acqErr := acq.Acquire(context.Background(), c)
-			if acqErr != nil {
-				sum.Failed = append(sum.Failed, coord)
-				continue
-			}
-			if !res.HasLicense {
-				sum.Warnings = append(sum.Warnings, fmt.Sprintf("%s: no LICENSE detected at the source", coord))
-			}
-			if _, putErr := st.Put(coord, res.Dir); putErr != nil {
-				return Summary{}, putErr
-			}
-			srcDir = res.Dir
-		}
-
-		if err := store.CopyTree(srcDir, filepath.Join(target, destRel)); err != nil {
-			sum.Failed = append(sum.Failed, coord)
+		if err := store.CopyTree(srcDir, destDir); err != nil {
+			sum.Failed = append(sum.Failed, c.Name)
 			continue
 		}
-		leaf, err := acquire.LeafName(c)
+		leafHash, err := store.HashTree(destDir)
 		if err != nil {
 			return Summary{}, err
 		}
-		leafHash, err := store.HashTree(filepath.Join(target, destRel, leaf))
-		if err != nil {
+		if err := st.SetPristine(target, c.Name, leafHash); err != nil {
 			return Summary{}, err
 		}
-		if err := st.SetPristine(target, coord, leafHash); err != nil {
-			return Summary{}, err
-		}
-		sum.Installed = append(sum.Installed, coord)
+		sum.Installed = append(sum.Installed, c.Name)
 	}
 
 	// 7c. comandos por-projeto das integrações (ex. `graphify update .`) —
@@ -352,13 +303,13 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	}
 
 	// 9. settings.json.
-	settings := mergeMaps(prof.Scaffold.Settings, scaffold.HookSettings(opts.Mode))
+	settings := mergeMaps(prof.Scaffold.Settings, scaffold.HookSettings())
 	if err := claudecfg.MergeSettings(target, settings, opts.DryRun, out); err != nil {
 		return Summary{}, err
 	}
 
 	// 10. scaffold (orientação + arquivos de sistema).
-	files := dedupScaffoldFiles(prof.Scaffold.Files, scaffold.SystemFiles(opts.Mode))
+	files := dedupScaffoldFiles(prof.Scaffold.Files, scaffold.SystemFiles())
 	res, err := scaffold.WriteFiles(files, scaffold.Options{
 		Target:       target,
 		Data:         scaffold.Data{ProjectName: filepath.Base(target), Stack: prof.Name},

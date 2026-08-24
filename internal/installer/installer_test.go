@@ -10,9 +10,8 @@ import (
 	"github.com/TheBud4/ray/internal/runner"
 )
 
-// componentCommand/aitmplFlag moved to internal/acquire.CliAcquirer in I2
-// (component installs are no longer part of installer.Plan.Commands — see
-// internal/acquire/acquire_test.go for their coverage).
+// Componentes (`p.Components`) nunca passam por installer.Plan — são cópia
+// local pura, resolvida direto em internal/initai e internal/update.
 
 func cmdStrings(cs []runner.Command) []string {
 	out := make([]string, len(cs))
@@ -29,11 +28,11 @@ func TestResolveAllIntegrations(t *testing.T) {
 			Headroom: true, Brain: true, CodeGraph: true,
 		},
 		Components: []profile.Component{
-			{Via: profile.ViaSkills, Skill: "prompt-engineer", Source: "jeffallan/claude-skills"},
-			{Via: profile.ViaAitmpl, Type: profile.TypeAgent, Ref: "development-tools/code-reviewer"},
+			{Name: "prompt-engineer", Dest: ".claude/skills"},
+			{Name: "code-reviewer", Dest: ".claude/agents"},
 		},
 	}
-	opts := Options{Global: true, BrainPath: "/home/u/www/MegaBrain"}
+	opts := Options{BrainPath: "/home/u/www/MegaBrain"}
 
 	plan, err := Resolve(p, opts)
 	if err != nil {
@@ -81,7 +80,7 @@ func TestResolveNoIntegrations(t *testing.T) {
 	p := &profile.Profile{
 		Name: "bare",
 		Components: []profile.Component{
-			{Via: profile.ViaSkills, Skill: "s", Source: "o/r"},
+			{Name: "s", Dest: ".claude/skills"},
 		},
 	}
 	plan, err := Resolve(p, Options{})
@@ -89,7 +88,7 @@ func TestResolveNoIntegrations(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(plan.Commands) != 0 {
-		t.Fatalf("Commands = %v, want none: components are acquired via internal/acquire, not installer.Plan", cmdStrings(plan.Commands))
+		t.Fatalf("Commands = %v, want none: components are copied directly by internal/initai and internal/update, not through installer.Plan", cmdStrings(plan.Commands))
 	}
 	if len(plan.Globals) != 0 || len(plan.Servers) != 0 {
 		t.Fatalf("want no globals/servers, got %d/%d", len(plan.Globals), len(plan.Servers))

@@ -24,10 +24,10 @@ estrito de spec-driven development e TDD.
 - Usuário-alvo: o autor. É uma ferramenta pessoal, não um produto com base de
   usuários — mas o que ela scaffolda vai para projetos de terceiros.
 - Estágio: código em uso, em evolução por incrementos.
-- Fora de escopo (não tocar): o conteúdo de terceiros que o ray instala. O ray
-  orquestra installers externos; a curadoria vive nas receitas, não no binário.
-  Se um trabalho exigir editar conteúdo de um componente instalado, pare e
-  reporte.
+- Fora de escopo (não tocar): o conteúdo dos componentes que o usuário mantém
+  em `~/.ray/components/`. O ray só copia; a curadoria e o conteúdo em si são
+  do usuário, não do binário. Se um trabalho exigir editar o conteúdo de um
+  componente, pare e reporte.
 </context>
 
 <stack>
@@ -78,9 +78,12 @@ Estrutura, módulos e fronteiras: `docs/architecture.md`. O que cada feature faz
 e os invariantes dela: `docs/features.md`. Não repita aqui o que está lá.
 
 - Decisões arquiteturais travadas (NÃO reabrir sem perguntar):
-  - **O ray não embute conteúdo de componentes.** Ele orquestra installers
-    externos; a curadoria vive nas receitas (`~/.ray/profiles/*.yaml`), não no
-    binário.
+  - **O ray não baixa conteúdo.** Componentes (skill, agent, comando) vêm de
+    `~/.ray/components/<Name>`, uma pasta que o usuário mantém à mão — nunca
+    da rede. `ray init ai` copia de lá pro projeto pela mesma política de
+    "o usuário editou isto?" que já protege os arquivos de scaffold
+    (`store.DecideOverwrite`). Sem rede, sem `npx`/`git` para buscar conteúdo,
+    sem cache de aquisição.
   - **O ray não autora conteúdo.** Geração de texto é da IA in-session; o ray
     entrega o prompt scaffoldado e para aí.
   - **`runner` é a única fronteira para processo externo.** Todo o resto recebe

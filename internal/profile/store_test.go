@@ -168,9 +168,9 @@ func TestList(t *testing.T) {
 
 	t.Run("flags a profile that parses but does not validate", func(t *testing.T) {
 		dir := t.TempDir()
-		// `type: mcp` parseia como componente e é recusado pelo Validate —
-		// MCP se declara em `integrations`, não como componente.
-		const bad = "name: badsemantic\ndescription: parses fine\ncomponents:\n  - name: ctx7\n    type: mcp\n    via: aitmpl\n    ref: context7\n"
+		// Componente sem `dest` parseia como YAML válido e é recusado pelo
+		// Validate — todo componente precisa dizer onde é copiado.
+		const bad = "name: badsemantic\ndescription: parses fine\ncomponents:\n  - name: ctx7\n"
 		if err := os.WriteFile(filepath.Join(dir, "badsemantic.yaml"), []byte(bad), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -189,8 +189,8 @@ func TestList(t *testing.T) {
 		if e.Problem == "" {
 			t.Fatal("Problem is empty; an invalid profile must not list as healthy")
 		}
-		if !strings.Contains(e.Problem, "mcp") {
-			t.Errorf("Problem = %q, want it to name the offending type", e.Problem)
+		if !strings.Contains(e.Problem, "dest is required") {
+			t.Errorf("Problem = %q, want it to name the offending reason", e.Problem)
 		}
 	})
 

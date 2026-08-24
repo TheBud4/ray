@@ -1,6 +1,7 @@
-// Package store implementa o cache content-addressed de conteúdo de IA
-// adquirido (I2): só filesystem, sem rede, agnóstico ao adquiridor
-// (internal/acquire) — só sabe guardar e devolver bytes por coordenada.
+// Package store guarda linha-base pristina (hash) de arquivo/árvore por
+// coordenada — usado pelo scaffold (templates), initai/update (componentes
+// locais) e status (detecção de fork) para decidir se algo foi editado à
+// mão. Só filesystem, sem rede.
 package store
 
 import (
@@ -253,8 +254,8 @@ func (s *Store) savePristine(index map[string]map[string]string) error {
 }
 
 // CopyTree copia src (arquivo ou diretório, com estrutura + permissões) para
-// dst. Exportada para reuso por internal/acquire (montagem do conteúdo
-// adquirido) e internal/initai (restauração do store para o projeto).
+// dst. Exportada para reuso por internal/initai e internal/update (cópia de
+// componente local pro projeto) e internal/scaffold (overlay de templates).
 func CopyTree(src, dst string) error {
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {

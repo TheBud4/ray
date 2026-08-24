@@ -12,18 +12,17 @@ import (
 	"github.com/TheBud4/ray/internal/initai"
 	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/runner"
-	"github.com/TheBud4/ray/internal/scaffold"
 )
 
 func resetInitAIFlags(t *testing.T) {
 	t.Helper()
-	prevProfile, prevMode := flagProfile, flagMode
-	prevGlobal, prevForce := flagGlobal, flagForce
+	prevProfile := flagProfile
+	prevForce := flagForce
 	prevNoGlobal, prevReinstall := flagNoGlobal, flagReinstallGlobal
 	prevDryRun := flagDryRun
 	t.Cleanup(func() {
-		flagProfile, flagMode = prevProfile, prevMode
-		flagGlobal, flagForce = prevGlobal, prevForce
+		flagProfile = prevProfile
+		flagForce = prevForce
 		flagNoGlobal, flagReinstallGlobal = prevNoGlobal, prevReinstall
 		flagDryRun = prevDryRun
 	})
@@ -32,8 +31,6 @@ func resetInitAIFlags(t *testing.T) {
 func TestBuildInitAIOptionsMapsFlags(t *testing.T) {
 	resetInitAIFlags(t)
 	flagProfile = "go"
-	flagMode = scaffold.ModeLearn
-	flagGlobal = true
 	flagForce = true
 	flagNoGlobal = true
 	flagReinstallGlobal = true
@@ -41,21 +38,21 @@ func TestBuildInitAIOptionsMapsFlags(t *testing.T) {
 
 	opts := buildInitAIOptions("/tmp/project", &bytes.Buffer{})
 
-	if opts.Profile != "go" || opts.Mode != scaffold.ModeLearn || opts.Target != "/tmp/project" {
-		t.Fatalf("opts = %+v, want Profile=go Mode=learn Target=/tmp/project", opts)
+	if opts.Profile != "go" || opts.Target != "/tmp/project" {
+		t.Fatalf("opts = %+v, want Profile=go Target=/tmp/project", opts)
 	}
-	if !opts.Global || !opts.Force || !opts.NoGlobal || !opts.ReinstallGlobal || !opts.DryRun {
+	if !opts.Force || !opts.NoGlobal || !opts.ReinstallGlobal || !opts.DryRun {
 		t.Fatalf("opts = %+v, want all bool flags true", opts)
 	}
 }
 
 func TestInitAiRejectsRemovedLevelFlag(t *testing.T) {
-	// O nível passou a ser combinado na primeira sessão (ver o redesenho do
-	// modo learn). Aceitar a flag calada faria o ray prometer de novo um
-	// comportamento que ele não tem.
+	// Flag de uma versão anterior do modo learn, já removida antes do modo
+	// learn inteiro sair. Aceitar a flag calada faria o ray prometer de novo
+	// um comportamento que ele não tem.
 	// Atenção ao nome: o construtor é newInitAICmd, com AI maiúsculo.
 	c := newInitAICmd()
-	c.SetArgs([]string{"--mode", "learn", "--level", "beginner", t.TempDir()})
+	c.SetArgs([]string{"--level", "beginner", t.TempDir()})
 	// bytes.Buffer e não io.Discard: o pacote de teste já importa bytes e não
 	// importa io.
 	c.SetOut(&bytes.Buffer{})
@@ -78,7 +75,7 @@ func TestRunInitAIPrintsSummaryAndErrorsOnFailure(t *testing.T) {
 	}
 	prof := &profile.Profile{
 		Name:       "test",
-		Components: []profile.Component{{Via: profile.ViaSkills, Skill: "s", Source: "o/r"}},
+		Components: []profile.Component{{Name: "s", Dest: ".claude/skills"}},
 		Scaffold:   profile.Scaffold{Files: []profile.ScaffoldFile{{Path: "CLAUDE.md"}}},
 	}
 	data, err := yaml.Marshal(prof)
@@ -95,15 +92,15 @@ func TestRunInitAIPrintsSummaryAndErrorsOnFailure(t *testing.T) {
 		ConfigPath:   filepath.Join(base, "config.yaml"),
 		StatePath:    filepath.Join(base, "state.yaml"),
 		StoreDir:     filepath.Join(base, "store"),
+		// ComponentsDir sem "s": é assim que o componente falha agora, sem rede.
+		ComponentsDir: filepath.Join(base, "components"),
 	}
 	target := t.TempDir()
 
 	l := stubLooker{"npx": true, "node": true}
-	fr := &runner.FakeRunner{Results: map[string]runner.Result{
-		"npx skills add o/r --skill s -a claude-code -y": {ExitCode: 1},
-	}}
+	fr := &runner.FakeRunner{}
 	var out bytes.Buffer
-	opts := initai.Options{Profile: "test", Target: target, Mode: scaffold.ModeBuild, Out: &out}
+	opts := initai.Options{Profile: "test", Target: target, Out: &out}
 
 	err = runInitAI(fr, l, opts, home, &out)
 	if err == nil {

@@ -2,9 +2,9 @@
 // (*profile.Profile) num Plan: dados puros (comandos por-projeto, globais,
 // servers) que uma fase posterior executa. Não toca rede, não executa
 // processos, não sabe de CLI. Componentes de conteúdo (`p.Components`) não
-// passam mais por aqui — I2 move a aquisição deles para internal/acquire
-// (cache-first, sobre internal/store); este pacote só resolve o que a tabela
-// §6 do build guide chama de integrações (headroom, brain, code_graph).
+// passam por aqui — são cópia local pura, resolvida direto em
+// internal/initai/internal/update; este pacote só resolve o que a tabela §6
+// do build guide chama de integrações (headroom, brain, code_graph).
 package installer
 
 import (
@@ -31,17 +31,13 @@ type GlobalStep struct {
 
 // Options carrega decisões que o chamador já resolveu antes de Resolve.
 // BrainPath é um caminho já resolvido; vazio significa "não configurado".
-// Global não afeta mais Resolve (as integrações não têm noção de
-// pessoal/projeto); ele segue existindo em internal/acquire, que é quem hoje
-// decide `-g` para componentes `via: skills` (I1 design §3.3).
 type Options struct {
-	Global    bool
 	BrainPath string
 }
 
-// Resolve monta o Plan a partir das integrações de p. Não falha mais por via
-// desconhecida em p.Components — essa validação é responsabilidade de
-// profile.Validate (no Load) e da seleção de Acquirer em internal/acquire.
+// Resolve monta o Plan a partir das integrações de p. p.Components nunca
+// entra aqui — é cópia local pura, resolvida direto em internal/initai e
+// internal/update.
 func Resolve(p *profile.Profile, opts Options) (Plan, error) {
 	var plan Plan
 	resolveIntegrations(p.Integrations, opts, &plan)

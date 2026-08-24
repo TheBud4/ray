@@ -2,33 +2,18 @@ package scaffold
 
 import "github.com/TheBud4/ray/internal/profile"
 
-// Modos suportados por `ray init ai --mode`.
-const (
-	ModeBuild = "build"
-	ModeLearn = "learn"
-)
-
 // SystemFiles são os arquivos "de sistema" que o ray sempre escreve, fora da
 // receita — garante que todo hook referenciado em settings.json exista no
 // disco. No initai (Fase 8), estes se somam a prof.Files (dedup por path,
 // receita ganha).
-func SystemFiles(mode string) []profile.ScaffoldFile {
-	files := []profile.ScaffoldFile{
+func SystemFiles() []profile.ScaffoldFile {
+	return []profile.ScaffoldFile{
 		{Path: ".claude/hooks/session-start.sh"},
 		{Path: ".claude/hooks/guard-add.sh"},
 		{Path: ".claude/hooks/guard-vocab.sh"},
 		{Path: ".claude/hooks/guard-plans.sh"},
 		{Path: ".claude/hooks/guard-handoff.sh"},
 	}
-	if mode == ModeLearn {
-		files = append(files,
-			profile.ScaffoldFile{Path: ".claude/rules/learn.md"},
-			profile.ScaffoldFile{Path: ".claude/hooks/guard-code.sh"},
-			profile.ScaffoldFile{Path: ".claude/rules/learning-journal.md"},
-			profile.ScaffoldFile{Path: ".claude/rules/learn-teaching.md"},
-		)
-	}
-	return files
 }
 
 // HookSettings devolve o bloco "hooks" a mesclar em settings.json (via
@@ -39,10 +24,8 @@ func SystemFiles(mode string) []profile.ScaffoldFile {
 // entregue). Todos avisam antes da escrita, quando ainda dá para redirecionar.
 // PostToolUse sempre traz guard-handoff (avisa quando .claude/handoff.md
 // passa do dobro do orçamento) — depois da escrita, porque é o tamanho do
-// arquivo no disco que importa, não o trecho que uma chamada carregou. learn
-// soma ao PreToolUse o guard-code, que bloqueia edição de código fora da
-// allowlist.
-func HookSettings(mode string) map[string]any {
+// arquivo no disco que importa, não o trecho que uma chamada carregou.
+func HookSettings() map[string]any {
 	hooks := map[string]any{
 		"SessionStart": []any{
 			map[string]any{
@@ -79,15 +62,6 @@ func HookSettings(mode string) map[string]any {
 				},
 			},
 		},
-	}
-	if mode == ModeLearn {
-		pre, _ := hooks["PreToolUse"].([]any)
-		hooks["PreToolUse"] = append(pre, map[string]any{
-			"matcher": "Edit|Write|MultiEdit",
-			"hooks": []any{
-				map[string]any{"type": "command", "command": "bash .claude/hooks/guard-code.sh"},
-			},
-		})
 	}
 	return map[string]any{"hooks": hooks}
 }

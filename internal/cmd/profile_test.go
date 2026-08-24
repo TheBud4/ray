@@ -70,7 +70,7 @@ func TestRunProfileShowPrintsComponentsAndServers(t *testing.T) {
 		Name:         "test",
 		Description:  "a test profile",
 		Integrations: profile.Integrations{Brain: true},
-		Components:   []profile.Component{{Via: profile.ViaSkills, Skill: "s", Source: "o/r"}},
+		Components:   []profile.Component{{Name: "s", Dest: ".claude/skills"}},
 	}
 	if err := profile.WriteNew(dir, p); err != nil {
 		t.Fatal(err)
@@ -82,8 +82,8 @@ func TestRunProfileShowPrintsComponentsAndServers(t *testing.T) {
 	}
 
 	got := out.String()
-	if !strings.Contains(got, "npx skills add o/r --skill s -a claude-code -y --copy") {
-		t.Errorf("output = %q, want the component command (I2: preview forces --copy)", got)
+	if !strings.Contains(got, "s -> .claude/skills/s") {
+		t.Errorf("output = %q, want the component's local name and dest, never a download command", got)
 	}
 	if !strings.Contains(got, "brain") {
 		t.Errorf("output = %q, want the brain MCP server", got)

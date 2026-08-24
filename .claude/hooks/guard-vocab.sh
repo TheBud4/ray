@@ -15,9 +15,8 @@
 # escrita, e aí ainda dá para redirecionar. Ler o payload é o que torna isso
 # possível: antes da escrita não há arquivo para abrir.
 #
-# O aviso sai por `systemMessage` e o hook sai 0, como o guard-add e o
-# guard-plans. O guard-code é o único da família com direito de bloquear, e ele
-# é explícito sobre isso.
+# O aviso sai por `systemMessage` e o hook sai 0, como todos os outros guards
+# — nenhum hook deste conjunto bloqueia.
 set -euo pipefail
 
 if ! command -v jq >/dev/null 2>&1; then

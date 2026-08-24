@@ -5,9 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/TheBud4/ray/internal/acquire"
 	"github.com/TheBud4/ray/internal/profile"
-	"github.com/TheBud4/ray/internal/runner"
 	"github.com/TheBud4/ray/internal/store"
 )
 
@@ -22,7 +20,7 @@ import (
 //
 // O terceiro retorno são problemas para o Report, não erros: falhar o comando
 // por causa de uma receita ilegível contradiria o exit code 0 do status.
-func checkForks(check runner.Runner, target string, home Home) (string, []ComponentState, []string, error) {
+func checkForks(target string, home Home) (string, []ComponentState, []string, error) {
 	// Sem registro de perfil não há o que comparar, e isso é normal: um
 	// .claude/ pode ter sido copiado à mão. Com o registro presente, porém, o
 	// ray montou este ambiente — aí uma receita que não carrega é achado, não
@@ -44,20 +42,7 @@ func checkForks(check runner.Runner, target string, home Home) (string, []Compon
 	var out []ComponentState
 
 	for _, c := range prof.Components {
-		acq, ok := acquire.For(c, check)
-		if !ok {
-			continue
-		}
-		coord := acq.Key(c)
-		destRel, err := acquire.DestRel(c)
-		if err != nil {
-			return "", nil, nil, err
-		}
-		leaf, err := acquire.LeafName(c)
-		if err != nil {
-			return "", nil, nil, err
-		}
-		path := filepath.Join(target, destRel, leaf)
+		path := filepath.Join(target, c.Dest, c.Name)
 
 		if _, err := os.Stat(path); err != nil {
 			if os.IsNotExist(err) {
@@ -66,9 +51,9 @@ func checkForks(check runner.Runner, target string, home Home) (string, []Compon
 			return "", nil, nil, err
 		}
 
-		pristine, hasPristine := st.PristineHash(target, coord)
+		pristine, hasPristine := st.PristineHash(target, c.Name)
 		if !hasPristine {
-			out = append(out, ComponentState{Coord: coord, State: ForkUnknown})
+			out = append(out, ComponentState{Coord: c.Name, State: ForkUnknown})
 			continue
 		}
 		onDisk, err := store.HashTree(path)
@@ -79,7 +64,7 @@ func checkForks(check runner.Runner, target string, home Home) (string, []Compon
 		if onDisk == pristine {
 			state = ForkPristine
 		}
-		out = append(out, ComponentState{Coord: coord, State: state})
+		out = append(out, ComponentState{Coord: c.Name, State: state})
 	}
 	return prof.Name, out, nil, nil
 }
