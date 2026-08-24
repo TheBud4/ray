@@ -87,7 +87,6 @@ func runBrainStatus(configPath string, out io.Writer) error {
 	fmt.Fprintf(out, "path: %s\n", st.Path)
 	fmt.Fprintf(out, "exists: %s\n", yesNo(st.Exists))
 	fmt.Fprintf(out, "markdown files: %d\n", st.MarkdownCount)
-	fmt.Fprintln(out, "reminder: the brain MCP server points here when the brain integration is enabled.")
 	return nil
 }
 

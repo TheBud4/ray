@@ -4,7 +4,7 @@
 // processos, não sabe de CLI. Componentes de conteúdo (`p.Components`) não
 // passam por aqui — são cópia local pura, resolvida direto em
 // internal/initai/internal/update; este pacote só resolve o que a tabela §6
-// do build guide chama de integrações (headroom, brain, code_graph).
+// do build guide chama de integrações (headroom, code_graph).
 package installer
 
 import (
@@ -29,17 +29,11 @@ type GlobalStep struct {
 	Commands []runner.Command
 }
 
-// Options carrega decisões que o chamador já resolveu antes de Resolve.
-// BrainPath é um caminho já resolvido; vazio significa "não configurado".
-type Options struct {
-	BrainPath string
-}
-
 // Resolve monta o Plan a partir das integrações de p. p.Components nunca
 // entra aqui — é cópia local pura, resolvida direto em internal/initai e
 // internal/update.
-func Resolve(p *profile.Profile, opts Options) (Plan, error) {
+func Resolve(p *profile.Profile) (Plan, error) {
 	var plan Plan
-	resolveIntegrations(p.Integrations, opts, &plan)
+	resolveIntegrations(p.Integrations, &plan)
 	return plan, nil
 }

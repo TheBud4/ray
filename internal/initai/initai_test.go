@@ -33,7 +33,7 @@ var allFound = stubLooker{
 func testProfile() *profile.Profile {
 	return &profile.Profile{
 		Name:         "test",
-		Integrations: profile.Integrations{Headroom: true, Brain: true, CodeGraph: true},
+		Integrations: profile.Integrations{Headroom: true, CodeGraph: true},
 		Components:   []profile.Component{{Name: "s", Dest: ".claude/skills"}},
 		Scaffold: profile.Scaffold{
 			Files:    []profile.ScaffoldFile{{Path: "CLAUDE.md"}},
@@ -467,83 +467,10 @@ func mcpServerNames(t *testing.T, target string) []string {
 	return names
 }
 
-func TestRunWarnsWhenBrainUnconfigured(t *testing.T) {
-	t.Setenv("RAY_BRAIN", "")
-	home := newHome(t)
-	seedComponent(t, home, "s")
-	writeProfile(t, home.ProfilesDir, testProfile())
-	target := t.TempDir()
-
-	sum, err := Run(&runner.FakeRunner{}, allFound, Options{
-		Profile: "test", Target: target, Out: &bytes.Buffer{},
-	}, home)
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
-	if !hasWarning(sum, "brain integration is on but no brain is configured") {
-		t.Errorf("Warnings = %v, want one about the unconfigured brain", sum.Warnings)
-	}
-	if slices.Contains(mcpServerNames(t, target), "brain") {
-		t.Error("registered a brain MCP server with no path configured")
-	}
-}
-
-// Caminho configurado mas inexistente vira aviso e NÃO registra o server:
-// um MCP apontando para o vazio quebra em runtime, o que é pior que ausente.
-func TestRunWarnsAndSkipsServerWhenBrainPathMissing(t *testing.T) {
-	home := newHome(t)
-	seedComponent(t, home, "s")
-	writeProfile(t, home.ProfilesDir, testProfile())
-	target := t.TempDir()
-
-	ghost := filepath.Join(t.TempDir(), "nao-existe")
-	t.Setenv("RAY_BRAIN", ghost)
-
-	sum, err := Run(&runner.FakeRunner{}, allFound, Options{
-		Profile: "test", Target: target, Out: &bytes.Buffer{},
-	}, home)
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
-	if !hasWarning(sum, "does not exist") {
-		t.Errorf("Warnings = %v, want one about the missing brain path", sum.Warnings)
-	}
-	if slices.Contains(mcpServerNames(t, target), "brain") {
-		t.Error("registered a brain MCP server pointing at a nonexistent path")
-	}
-	// E o ray não pode ter criado o caminho para "consertar" a situação.
-	if _, err := os.Stat(ghost); !os.IsNotExist(err) {
-		t.Errorf("Run() created %s; ray is a consumer of the brain, not its owner", ghost)
-	}
-}
-
-func TestRunRegistersBrainServerWhenPathValid(t *testing.T) {
-	home := newHome(t)
-	seedComponent(t, home, "s")
-	writeProfile(t, home.ProfilesDir, testProfile())
-	target := t.TempDir()
-
-	brain := t.TempDir()
-	t.Setenv("RAY_BRAIN", brain)
-
-	sum, err := Run(&runner.FakeRunner{}, allFound, Options{
-		Profile: "test", Target: target, Out: &bytes.Buffer{},
-	}, home)
-	if err != nil {
-		t.Fatalf("Run() error = %v", err)
-	}
-	if hasWarning(sum, "brain") {
-		t.Errorf("Warnings = %v, want none for a valid brain path", sum.Warnings)
-	}
-	if !slices.Contains(mcpServerNames(t, target), "brain") {
-		t.Errorf("MCP servers = %v, want a brain entry", mcpServerNames(t, target))
-	}
-}
-
 func TestRunRecordsMCPJSONInCreated(t *testing.T) {
 	home, target := newHome(t), t.TempDir()
 	seedComponent(t, home, "s")
-	// testProfile() já liga Headroom/Brain/CodeGraph, então installer.Resolve
+	// testProfile() já liga Headroom/CodeGraph, então installer.Resolve
 	// devolve servidores e mcp.WriteServers escreve o .mcp.json.
 	writeProfile(t, home.ProfilesDir, testProfile())
 

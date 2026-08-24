@@ -64,29 +64,25 @@ func TestRunProfileListMarksBrokenProfiles(t *testing.T) {
 	}
 }
 
-func TestRunProfileShowPrintsComponentsAndServers(t *testing.T) {
+func TestRunProfileShowPrintsComponents(t *testing.T) {
 	dir := t.TempDir()
 	p := &profile.Profile{
-		Name:         "test",
-		Description:  "a test profile",
-		Integrations: profile.Integrations{Brain: true},
-		Components:   []profile.Component{{Name: "s", Dest: ".claude/skills"}},
+		Name:        "test",
+		Description: "a test profile",
+		Components:  []profile.Component{{Name: "s", Dest: ".claude/skills"}},
 	}
 	if err := profile.WriteNew(dir, p); err != nil {
 		t.Fatal(err)
 	}
 
 	var out bytes.Buffer
-	if err := runProfileShow(dir, "test", "/home/u/www/MegaBrain", &out); err != nil {
+	if err := runProfileShow(dir, "test", &out); err != nil {
 		t.Fatalf("runProfileShow() error = %v", err)
 	}
 
 	got := out.String()
 	if !strings.Contains(got, "s -> .claude/skills/s") {
 		t.Errorf("output = %q, want the component's local name and dest, never a download command", got)
-	}
-	if !strings.Contains(got, "brain") {
-		t.Errorf("output = %q, want the brain MCP server", got)
 	}
 }
 
@@ -105,7 +101,7 @@ func TestRunProfileShowLeavesNoTrailingSpaceOnAServerWithoutArgs(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := runProfileShow(dir, "test", "", &out); err != nil {
+	if err := runProfileShow(dir, "test", &out); err != nil {
 		t.Fatalf("runProfileShow() error = %v", err)
 	}
 

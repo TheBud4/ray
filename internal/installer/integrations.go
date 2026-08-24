@@ -2,7 +2,6 @@ package installer
 
 import (
 	"github.com/TheBud4/ray/internal/economy"
-	"github.com/TheBud4/ray/internal/mcp"
 	"github.com/TheBud4/ray/internal/profile"
 )
 
@@ -11,12 +10,9 @@ import (
 // Token Economy (I4, design §8.1) — a implementação concreta vive em
 // internal/economy; aqui só se decide *se* cada um entra, preservando a
 // posição de cada branch (plan.Servers é comparado por ordem nos testes).
-func resolveIntegrations(in profile.Integrations, opts Options, plan *Plan) {
+func resolveIntegrations(in profile.Integrations, plan *Plan) {
 	if in.Headroom {
 		applyMechanism(plan, economy.Headroom())
-	}
-	if in.Brain {
-		addBrain(opts, plan)
 	}
 	if in.CodeGraph {
 		applyMechanism(plan, economy.CodeGraph())
@@ -34,23 +30,5 @@ func applyMechanism(plan *Plan, m economy.Mechanism) {
 	plan.Commands = append(plan.Commands, m.Commands...)
 	if m.Server != nil {
 		plan.Servers = append(plan.Servers, *m.Server)
-	}
-}
-
-// addBrain expõe o cérebro do usuário por MCP filesystem. Condicional: sem
-// path configurado não há server — o aviso é responsabilidade do initai.
-func addBrain(opts Options, plan *Plan) {
-	if opts.BrainPath == "" {
-		return
-	}
-	plan.Servers = append(plan.Servers, filesystemServer("brain", opts.BrainPath))
-}
-
-// filesystemServer monta um server @modelcontextprotocol/server-filesystem apontado a path.
-func filesystemServer(name, path string) mcp.Server {
-	return mcp.Server{
-		Name:    name,
-		Command: "npx",
-		Args:    []string{"-y", "@modelcontextprotocol/server-filesystem", path},
 	}
 }

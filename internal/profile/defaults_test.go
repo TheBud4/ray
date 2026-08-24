@@ -32,7 +32,7 @@ func TestDefaultsIntegrationsAndSettings(t *testing.T) {
 		p := p
 		t.Run(p.Name, func(t *testing.T) {
 			i := p.Integrations
-			if !(i.Headroom && i.Brain && i.CodeGraph) {
+			if !(i.Headroom && i.CodeGraph) {
 				t.Errorf("Integrations = %+v, want all true", i)
 			}
 			if p.Scaffold.Settings["model"] != "opus" {

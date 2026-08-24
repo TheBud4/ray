@@ -653,9 +653,10 @@ func TestBrainCommandsGuardMissingBrain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Os dois comandos leem a spec pelo MCP brain. Num projeto sem cérebro
-	// configurado, sem esta guarda eles falham no meio da leitura, sem dizer
-	// o que fazer. A guarda é a única saída acionável que o usuário tem.
+	// Os dois comandos leem a spec direto do cérebro, por filesystem. Num
+	// projeto sem cérebro configurado, sem esta guarda eles falham no meio da
+	// leitura, sem dizer o que fazer. A guarda é a única saída acionável que o
+	// usuário tem.
 	for _, p := range []string{".claude/commands/destilar.md", ".claude/commands/revisar.md"} {
 		body, err := os.ReadFile(filepath.Join(target, filepath.FromSlash(p)))
 		if err != nil {
@@ -663,7 +664,7 @@ func TestBrainCommandsGuardMissingBrain(t *testing.T) {
 		}
 		txt := string(body)
 		for _, want := range []string{
-			"não estiver disponível",
+			"não estiver configurado",
 			"ray brain set",
 		} {
 			if !strings.Contains(txt, want) {

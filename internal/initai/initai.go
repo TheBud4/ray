@@ -19,7 +19,6 @@ import (
 	"github.com/TheBud4/ray/internal/runner"
 	"github.com/TheBud4/ray/internal/scaffold"
 	"github.com/TheBud4/ray/internal/store"
-	"github.com/TheBud4/ray/internal/vault"
 )
 
 // Home reúne os caminhos de ~/.ray usados por Run, resolvidos pelo chamador
@@ -190,25 +189,8 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		}
 	}
 
-	// 5. cérebro do usuário + resolve o plano de instalação. O ray é
-	// consumidor, não dono: valida o caminho, nunca o cria. Caminho inválido
-	// vira aviso e não registra o server — MCP quebrado é pior que ausente.
-	cfg, err := rayconfig.Load(home.ConfigPath)
-	if err != nil {
-		return Summary{}, err
-	}
-	brainPath := cfg.BrainPath()
-	if prof.Integrations.Brain {
-		if brainPath == "" {
-			sum.Warnings = append(sum.Warnings, "brain integration is on but no brain is configured (run `ray brain set <path>`)")
-		} else if verr := vault.Verify(brainPath); verr != nil {
-			sum.Warnings = append(sum.Warnings, verr.Error())
-			brainPath = ""
-		}
-	}
-	plan, err := installer.Resolve(prof, installer.Options{
-		BrainPath: brainPath,
-	})
+	// 5. resolve o plano de instalação.
+	plan, err := installer.Resolve(prof)
 	if err != nil {
 		return Summary{}, err
 	}

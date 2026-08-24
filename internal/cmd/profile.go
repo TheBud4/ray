@@ -12,7 +12,6 @@ import (
 
 	"github.com/TheBud4/ray/internal/installer"
 	"github.com/TheBud4/ray/internal/profile"
-	"github.com/TheBud4/ray/internal/rayconfig"
 	"github.com/TheBud4/ray/internal/raypaths"
 )
 
@@ -68,25 +67,17 @@ func newProfileShowCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			configPath, err := raypaths.ConfigPath()
-			if err != nil {
-				return err
-			}
-			cfg, err := rayconfig.Load(configPath)
-			if err != nil {
-				return err
-			}
-			return runProfileShow(dir, args[0], cfg.BrainPath(), cmd.OutOrStdout())
+			return runProfileShow(dir, args[0], cmd.OutOrStdout())
 		},
 	}
 }
 
-func runProfileShow(dir, name, brainPath string, out io.Writer) error {
+func runProfileShow(dir, name string, out io.Writer) error {
 	p, err := profile.LoadByName(dir, name)
 	if err != nil {
 		return err
 	}
-	plan, err := installer.Resolve(p, installer.Options{BrainPath: brainPath})
+	plan, err := installer.Resolve(p)
 	if err != nil {
 		return err
 	}

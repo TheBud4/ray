@@ -25,16 +25,15 @@ func TestResolveAllIntegrations(t *testing.T) {
 	p := &profile.Profile{
 		Name: "go",
 		Integrations: profile.Integrations{
-			Headroom: true, Brain: true, CodeGraph: true,
+			Headroom: true, CodeGraph: true,
 		},
 		Components: []profile.Component{
 			{Name: "prompt-engineer", Dest: ".claude/skills"},
 			{Name: "code-reviewer", Dest: ".claude/agents"},
 		},
 	}
-	opts := Options{BrainPath: "/home/u/www/MegaBrain"}
 
-	plan, err := Resolve(p, opts)
+	plan, err := Resolve(p)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +67,6 @@ func TestResolveAllIntegrations(t *testing.T) {
 
 	wantServers := []mcp.Server{
 		{Name: "headroom", Command: "headroom", Args: []string{"mcp"}},
-		{Name: "brain", Command: "npx", Args: []string{"-y", "@modelcontextprotocol/server-filesystem", "/home/u/www/MegaBrain"}},
 		{Name: "graphify", Command: "graphify-mcp"},
 	}
 	if !reflect.DeepEqual(plan.Servers, wantServers) {
@@ -83,7 +81,7 @@ func TestResolveNoIntegrations(t *testing.T) {
 			{Name: "s", Dest: ".claude/skills"},
 		},
 	}
-	plan, err := Resolve(p, Options{})
+	plan, err := Resolve(p)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,19 +90,5 @@ func TestResolveNoIntegrations(t *testing.T) {
 	}
 	if len(plan.Globals) != 0 || len(plan.Servers) != 0 {
 		t.Fatalf("want no globals/servers, got %d/%d", len(plan.Globals), len(plan.Servers))
-	}
-}
-
-func TestResolveBrainUnset(t *testing.T) {
-	p := &profile.Profile{
-		Name:         "brain",
-		Integrations: profile.Integrations{Brain: true},
-	}
-	plan, err := Resolve(p, Options{BrainPath: ""})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(plan.Servers) != 0 {
-		t.Fatalf("Servers = %#v, want none", plan.Servers)
 	}
 }

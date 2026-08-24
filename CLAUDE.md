@@ -46,8 +46,8 @@ estrito de spec-driven development e TDD.
   como fazer deploy. Versionado, viaja com o código. `ray-build-guide.md` explica
   o porquê das decisões e é citado pelos docs de pacote; o design de ambientes
   reprodutíveis mora na pasta do projeto no cérebro.
-- O **cérebro** (vault Obsidian do usuário, em `~/www/MegaBrain`, exposta pelo
-  MCP `brain` quando configurada) — todo o resto: tarefa, exploração,
+- O **cérebro** (vault Obsidian do usuário, em `~/www/MegaBrain`, lida e
+  escrita direto no filesystem — sem MCP) — todo o resto: tarefa, exploração,
   aprendizado, decisão em disputa, spec ainda em aberto. A nota do projeto é
   `Projetos/Pessoal/ray/ray.md`.
 
@@ -89,9 +89,9 @@ e os invariantes dela: `docs/features.md`. Não repita aqui o que está lá.
   - **`runner` é a única fronteira para processo externo.** Todo o resto recebe
     um `Runner` e é testável só com memória.
   - **O ray é consumidor da vault, não dono.** `vault` valida; nunca cria nem
-    reorganiza. Caminho de cérebro inválido emite aviso e **não** registra o
-    server MCP — MCP apontando para o vazio quebra em runtime, o que é pior que
-    ausente.
+    reorganiza. `ray brain set/status/open/path` só gravam e conferem o path
+    em `config.yaml` — não há mais servidor MCP para o cérebro (nunca foi
+    usado na prática; o agente lê a vault por filesystem direto).
   - **`init ai` é cache-first** e funciona offline; atualizar para o latest é
     explícito, via `ray update`, que detecta edição local por hash de conteúdo.
   - **Métricas são proxies honestos.** Nunca imprimir tokens nem afirmar

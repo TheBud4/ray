@@ -85,7 +85,7 @@ execução criou.
 | `ray init ai --profile <n> [path]` | Monta o ambiente de IA numa pasta existente (default: diretório atual). |
 | `ray run [alias] [-- extra]` | Roda um alias de `ray.yaml` (projeto) ou `~/.ray/commands.yaml` (global); sem alias, lista os disponíveis. |
 | `ray profile list\|show\|add\|edit\|remove\|path` | Gerencia as receitas em `~/.ray/profiles`. |
-| `ray brain set\|status\|open\|path` | Aponta o ray para a sua vault Obsidian e a expõe ao agente por MCP. Valida o caminho; nunca cria nem reorganiza. |
+| `ray brain set\|status\|open\|path` | Grava/consulta o caminho da sua vault Obsidian em `~/.ray/config.yaml`. Valida o caminho; nunca cria nem reorganiza, e não expõe nada por MCP — o agente lê a vault por filesystem direto. |
 | `ray doctor [--fix]` | Checa/instala dependências externas. |
 | `ray update [path]` | Recopia componentes do overlay local (`~/.ray/components/`) e atualiza ferramentas; protege edições suas por hash de conteúdo (exige `--force` para sobrescrever). `--no-global` deixa as ferramentas da máquina onde estão e atualiza só o projeto. |
 | `ray stats [path]` | Agrega as métricas-proxy de economia de token registradas em `.claude/.ray-metrics/`. |

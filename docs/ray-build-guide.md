@@ -83,7 +83,6 @@ type Profile struct {
 }
 type Integrations struct { // YAML keys entre parênteses
     Headroom  bool // headroom
-    Brain     bool // brain
     CodeGraph bool // code_graph
 }
 type Component struct {
@@ -225,7 +224,6 @@ rastreados por `Key` em `state.yaml`), `Servers` (entradas de `.mcp.json`).
 |---|---|---|
 | `components: [{name, dest}]` | Cópia local | `store.CopyTree(<ComponentsDir>/<Name>, <projeto>/<Dest>/<Name>)` — sem rede, decide sobrescrever pela mesma política de hash dos arquivos de scaffold |
 | `headroom` | Global `headroom` + Server | install: `uv tool install headroom-ai[mcp]` · server `headroom` → `headroom mcp` |
-| `brain` | Server (condicional) | só se `ray brain set` configurou path válido: `brain` → `npx -y @modelcontextprotocol/server-filesystem <path>` |
 | `code_graph` | Global `code_graph` + Command + Server | global: `uv tool install graphifyy` **e** `graphify install --platform claude` · por-projeto: `graphify update .` (constrói o grafo, tree-sitter, sem LLM) · server `graphify` → `graphify-mcp` (stdio, lê `graphify-out/graph.json`) |
 
 **Histórico (v2, removido — não se aplica mais):** até a v2, `components:`
@@ -236,6 +234,15 @@ repositórios oficiais, pinado por `ref`, sem exposição a symlink/telemetria/
 flag-drift de terceiros — mas as notas sobre symlink do `skills add` e
 telemetria eram problemas **daquele** mecanismo, e não existem mais porque o
 mecanismo não existe mais.
+
+**Histórico: integração `brain` (server MCP), removida.** Ligava
+`integrations.brain: true` a um server `@modelcontextprotocol/server-filesystem`
+apontado pro cérebro do usuário, condicional a `ray brain set` ter um path
+válido. Nunca foi usada na prática nos projetos onde o cérebro é usado de
+verdade — o agente lê a vault por filesystem direto, path documentado no
+próprio `CLAUDE.md` do projeto, sem processo nem `.mcp.json` no meio. `ray
+brain set/status/open/path` continuam existindo: só gravam e conferem o path
+em `config.yaml`, nada de MCP.
 
 **Notas que ainda valem:**
 - O pacote PyPI é `graphifyy` (dois "y"); o binário é `graphify`.
@@ -255,7 +262,7 @@ mecanismo não existe mais.
 <alvo>/
 ├── CLAUDE.md                 # a base estável: 12 seções XML (ver abaixo)
 ├── SECURITY.md               # [MUST]/[SHOULD], regras p/ código gerado por IA, checklist de PR
-├── .mcp.json                 # headroom + brain? + graphify + componentes
+├── .mcp.json                 # headroom + graphify
 ├── docs/                     # o ESTADO ATUAL do projeto (versionado)
 │   ├── README.md             # os dois papéis + o laço spec-driven
 │   └── architecture.md  conventions.md
@@ -333,9 +340,7 @@ de encerrar/limpar, sobrescrever o handoff) + `session-start.sh` (no
    `preflight.MissingRequired` → `preflight.MissingRequiredError{From: FromGate}`,
    que renderiza cada dependência faltando com o conselho do `preflight.Advice`
    e fecha com um rodapé apontando `ray doctor`.
-5. Resolver o cérebro (warning se `brain` ligado mas não configurado ou com
-   caminho inválido — nesse caso o server **não** é registrado) e
-   `installer.Resolve(prof, Options{Global, BrainPath})`.
+5. `installer.Resolve(prof)`.
 7a. **Globais** (`runGlobals`): pula os já em `state.yaml` (salvo `--reinstall-global`);
     `--no-global` pula todos; grava `state` só em execução real.
 7b. **Componentes por-projeto**: cada `c.Dir = target`, roda e acumula (falha
@@ -357,7 +362,7 @@ classifica: `err` → Failed; `ExitCode≠0` → Failed; senão Installed.
 ~/.ray/
 ├── profiles/*.yaml      # receitas editáveis (defaults na 1ª run)
 ├── templates/*.tmpl     # overlay editável dos templates de scaffold
-├── store/               # cache content-addressed do conteúdo adquirido (I2)
+├── store/               # linha-base pristina (hash) — protege scaffold e componentes locais editados
 ├── config.yaml          # Config: brain
 ├── state.yaml           # State: installed_globals[]
 └── commands.yaml        # aliases globais do `ray run`
@@ -375,10 +380,12 @@ Obsidian que o usuário já mantém; `ray brain set <path>` só a valida e regis
 1. **`docs/` do projeto** — o **estado atual**: arquitetura, convenções, como
    rodar, como fazer deploy. Versionado, viaja com o código.
 2. **O cérebro** — todo o resto: tarefa, exploração, aprendizado, decisão em
-   disputa, spec em aberto. Wired via Filesystem MCP `brain` quando configurado.
+   disputa, spec em aberto. Path documentado em `<documentation_sources>` do
+   `CLAUDE.md` do projeto; o agente lê e escreve por filesystem direto —
+   nenhum processo, nenhum `.mcp.json` no meio (ver §6, histórico do `brain`).
 
 A pergunta que decide: *se alguém clonasse o repo amanhã, isto precisaria estar
-lá?* Roteamento por `.claude/rules/brain.md` + comando `/document`.
+lá?* Roteamento pela seção `<documentation_sources>` + comando `/document`.
 
 ---
 

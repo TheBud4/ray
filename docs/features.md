@@ -204,7 +204,7 @@ situação a relatar, não erro a engolir.
 
 ## Componente não é integração
 
-Um servidor MCP (`headroom`, `brain`, `code_graph`) se declara em
+Um servidor MCP (`headroom`, `code_graph`) se declara em
 `integrations`, nunca em `components`. São conceitos disjuntos por
 construção: `Component` só tem `name` e `dest` — não há campo para dizer "isto
 é um servidor", então não existe forma de confundir os dois no formato da

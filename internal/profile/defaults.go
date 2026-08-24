@@ -11,9 +11,9 @@ func Defaults() []Profile {
 	return []Profile{goProfile(), webProfile(), flutterProfile()}
 }
 
-// allIntegrations liga as três capacidades (postura default).
+// allIntegrations liga as capacidades (postura default).
 func allIntegrations() Integrations {
-	return Integrations{Headroom: true, Brain: true, CodeGraph: true}
+	return Integrations{Headroom: true, CodeGraph: true}
 }
 
 // defaultSettings é o bloco de settings compartilhado do .claude.
