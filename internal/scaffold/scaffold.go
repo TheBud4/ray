@@ -49,6 +49,7 @@ var templateFor = map[string]string{
 	".claude/rules/learning-journal.md": "claude/rules/learning-journal.md.tmpl",
 	".claude/hooks/guard-vocab.sh":      "claude/hooks/guard-vocab.sh.tmpl",
 	".claude/hooks/guard-plans.sh":      "claude/hooks/guard-plans.sh.tmpl",
+	".claude/hooks/guard-handoff.sh":    "claude/hooks/guard-handoff.sh.tmpl",
 	".claude/rules/learn-teaching.md":   "claude/rules/learn-teaching.md.tmpl",
 }
 

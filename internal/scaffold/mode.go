@@ -18,6 +18,7 @@ func SystemFiles(mode string) []profile.ScaffoldFile {
 		{Path: ".claude/hooks/guard-add.sh"},
 		{Path: ".claude/hooks/guard-vocab.sh"},
 		{Path: ".claude/hooks/guard-plans.sh"},
+		{Path: ".claude/hooks/guard-handoff.sh"},
 	}
 	if mode == ModeLearn {
 		files = append(files,
@@ -36,7 +37,10 @@ func SystemFiles(mode string) []profile.ScaffoldFile {
 // guard-plans (avisa em plano/design escrito dentro do repositório) e
 // guard-vocab (avisa em vocabulário de processo vazado para artefato
 // entregue). Todos avisam antes da escrita, quando ainda dá para redirecionar.
-// learn soma ao PreToolUse o guard-code, que bloqueia edição de código fora da
+// PostToolUse sempre traz guard-handoff (avisa quando .claude/handoff.md
+// passa do dobro do orçamento) — depois da escrita, porque é o tamanho do
+// arquivo no disco que importa, não o trecho que uma chamada carregou. learn
+// soma ao PreToolUse o guard-code, que bloqueia edição de código fora da
 // allowlist.
 func HookSettings(mode string) map[string]any {
 	hooks := map[string]any{
@@ -64,6 +68,14 @@ func HookSettings(mode string) map[string]any {
 				"matcher": "Edit|Write|MultiEdit",
 				"hooks": []any{
 					map[string]any{"type": "command", "command": "bash .claude/hooks/guard-vocab.sh"},
+				},
+			},
+		},
+		"PostToolUse": []any{
+			map[string]any{
+				"matcher": "Write|Edit|MultiEdit",
+				"hooks": []any{
+					map[string]any{"type": "command", "command": "bash .claude/hooks/guard-handoff.sh"},
 				},
 			},
 		},

@@ -327,8 +327,8 @@ Mapa `templateFor` liga cada path → arquivo `.tmpl`. Arquivos `.sh` saem `0755
 
 **Arquivos "de sistema" (sempre escritos pelo ray, fora da receita):**
 `scaffold.SystemFiles(mode)` garante `.claude/hooks/session-start.sh`,
-`guard-add.sh`, `guard-vocab.sh` e `guard-plans.sh` (e no `learn`:
-`rules/learn.md`, `rules/learn-teaching.md`, `rules/learning-journal.md` +
+`guard-add.sh`, `guard-vocab.sh`, `guard-plans.sh` e `guard-handoff.sh` (e no
+`learn`: `rules/learn.md`, `rules/learn-teaching.md`, `rules/learning-journal.md` +
 `hooks/guard-code.sh`). Isso garante que todo hook
 referenciado em `settings.json` exista no disco. No `initai`, os arquivos da
 receita + os de sistema são deduplicados por path (receita ganha).
@@ -345,10 +345,13 @@ receita + os de sistema são deduplicados por path (receita ganha).
      usar em PreToolUse. O `{"decision":"block"}` de topo ainda funciona
      (verificado em 2.1.220), mas é desaconselhado, e este é o único bloqueio
      do modo learn: não se apoia em forma tolerada. Piso de suporte: **Claude
-     Code 2.x**. É o único hook do conjunto que nega: os três guards de aviso
-     — `guard-add`, `guard-plans` e `guard-vocab` — emitem `systemMessage` e
-     saem **0**, sem exceção, e os três rodam em `PreToolUse`, onde o aviso
-     ainda dá tempo de redirecionar. O `guard-vocab` varre o texto que a
+     Code 2.x**. É o único hook do conjunto que nega: os quatro guards de
+     aviso — `guard-add`, `guard-plans`, `guard-vocab` e `guard-handoff` —
+     emitem `systemMessage` e saem **0**, sem exceção. Três deles rodam em
+     `PreToolUse`, onde o aviso ainda dá tempo de redirecionar; `guard-handoff`
+     é `PostToolUse` porque precisa do tamanho final do arquivo no disco, que
+     `Edit`/`MultiEdit` não carregam no payload (ver `docs/features.md`). O
+     `guard-vocab` varre o texto que a
      chamada carrega (`content`, `new_string`, `edits[].new_string`), e não o
      arquivo no disco: varrer o arquivo inteiro acusava o autor de uma edição
      por linha que ele não escreveu, a cada edição. O preço, aceito, é que

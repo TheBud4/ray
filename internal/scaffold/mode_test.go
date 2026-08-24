@@ -10,9 +10,9 @@ import (
 	"testing"
 )
 
-func TestSystemFilesBuildIsSessionStartGuardAddGuardVocabAndGuardPlans(t *testing.T) {
+func TestSystemFilesBuildIsSessionStartThreeWarningGuardsAndGuardHandoff(t *testing.T) {
 	files := SystemFiles(ModeBuild)
-	want := []string{".claude/hooks/session-start.sh", ".claude/hooks/guard-add.sh", ".claude/hooks/guard-vocab.sh", ".claude/hooks/guard-plans.sh"}
+	want := []string{".claude/hooks/session-start.sh", ".claude/hooks/guard-add.sh", ".claude/hooks/guard-vocab.sh", ".claude/hooks/guard-plans.sh", ".claude/hooks/guard-handoff.sh"}
 	if len(files) != len(want) {
 		t.Fatalf("SystemFiles(build) = %v, want %v", files, want)
 	}
@@ -30,6 +30,7 @@ func TestSystemFilesLearnAddsGuardAndRule(t *testing.T) {
 		".claude/hooks/guard-add.sh":        false,
 		".claude/hooks/guard-vocab.sh":      false,
 		".claude/hooks/guard-plans.sh":      false,
+		".claude/hooks/guard-handoff.sh":    false,
 		".claude/rules/learn.md":            false,
 		".claude/hooks/guard-code.sh":       false,
 		".claude/rules/learning-journal.md": false,
@@ -121,12 +122,19 @@ func TestHookSettingsBuildHasThreeWarningGuardsInPreToolUse(t *testing.T) {
 		t.Fatalf("PreToolUse[2] = %#v, want matcher \"Edit|Write|MultiEdit\" (guard-vocab.sh)", pre[2])
 	}
 
-	// guard-vocab lê o payload, não o disco: não há mais razão para rodar
-	// depois da escrita, e avisar depois não redireciona nada. Sem esta
-	// asserção, deixar o hook declarado nos dois eventos passaria verde — e o
-	// aviso sairia em dobro.
-	if _, ok := hooks["PostToolUse"]; ok {
-		t.Errorf("hooks still declare PostToolUse: %#v", hooks["PostToolUse"])
+	// guard-handoff é o único guard que precisa do arquivo já no disco — Edit e
+	// MultiEdit não carregam o conteúdo final no payload, só o trecho alterado
+	// — por isso ele é PostToolUse e os três de cima continuam PreToolUse.
+	post, ok := hooks["PostToolUse"].([]any)
+	if !ok {
+		t.Fatalf("hooks = %#v, want PostToolUse in build mode (guard-handoff is unconditional)", hooks)
+	}
+	if len(post) != 1 {
+		t.Fatalf("PostToolUse = %#v, want only guard-handoff in build mode", post)
+	}
+	postFirst, ok := post[0].(map[string]any)
+	if !ok || postFirst["matcher"] != "Write|Edit|MultiEdit" {
+		t.Fatalf("PostToolUse[0] = %#v, want matcher \"Write|Edit|MultiEdit\" (guard-handoff.sh)", post[0])
 	}
 }
 
@@ -160,6 +168,12 @@ func TestHookSettingsLearnHasPreToolUse(t *testing.T) {
 	fourth, ok := pre[3].(map[string]any)
 	if !ok || fourth["matcher"] != "Edit|Write|MultiEdit" {
 		t.Fatalf("PreToolUse[3] = %#v, want matcher \"Edit|Write|MultiEdit\" (guard-code.sh)", pre[3])
+	}
+
+	// guard-handoff é compartilhado pelos dois modos, como os três de cima.
+	post, ok := hooks["PostToolUse"].([]any)
+	if !ok || len(post) != 1 {
+		t.Fatalf("hooks = %#v, want one PostToolUse hook (guard-handoff) in learn mode too", hooks["PostToolUse"])
 	}
 }
 
@@ -515,5 +529,103 @@ func TestSessionStartWithoutHandoffRecordsNoMetric(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(target, ".claude/.ray-metrics")); !os.IsNotExist(err) {
 		t.Error(".ray-metrics/ should not exist: no handoff was injected, no activity to record")
+	}
+}
+
+// runGuardHandoff simula o PostToolUse: escreve n linhas em .claude/handoff.md
+// dentro de target e roda o hook com o payload que o Claude Code manda depois
+// de um Write real (file_path absoluto).
+func runGuardHandoff(t *testing.T, scriptPath, target string, lines int) string {
+	t.Helper()
+	handoffPath := filepath.Join(target, ".claude/handoff.md")
+	content := strings.Repeat("linha\n", lines)
+	if err := os.WriteFile(handoffPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(map[string]any{
+		"tool_input": map[string]any{"file_path": handoffPath},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Stdin = bytes.NewReader(payload)
+	cmd.Dir = target
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("guard-handoff.sh failed: %v\noutput: %s", err, out.String())
+	}
+	return out.String()
+}
+
+func TestGuardHandoffSilentUnderBudget(t *testing.T) {
+	requireBashAndJQ(t)
+
+	target := t.TempDir()
+	if _, err := WriteFiles(SystemFiles(ModeBuild), Options{Target: target}); err != nil {
+		t.Fatal(err)
+	}
+	scriptPath := filepath.Join(target, ".claude/hooks/guard-handoff.sh")
+
+	out := runGuardHandoff(t, scriptPath, target, 40)
+	if strings.TrimSpace(out) != "" {
+		t.Errorf("guard-handoff.sh on a 40-line handoff = %q, want silent (on target)", out)
+	}
+}
+
+func TestGuardHandoffWarnsOverBudget(t *testing.T) {
+	requireBashAndJQ(t)
+
+	target := t.TempDir()
+	if _, err := WriteFiles(SystemFiles(ModeBuild), Options{Target: target}); err != nil {
+		t.Fatal(err)
+	}
+	scriptPath := filepath.Join(target, ".claude/hooks/guard-handoff.sh")
+
+	out := runGuardHandoff(t, scriptPath, target, 355)
+	if !strings.Contains(out, "355") {
+		t.Errorf("guard-handoff.sh on a 355-line handoff = %q, want the real line count in the message", out)
+	}
+	if !strings.Contains(out, "systemMessage") {
+		t.Errorf("guard-handoff.sh output = %q, want a systemMessage, never a block", out)
+	}
+}
+
+func TestGuardHandoffIgnoresOtherFiles(t *testing.T) {
+	requireBashAndJQ(t)
+
+	target := t.TempDir()
+	if _, err := WriteFiles(SystemFiles(ModeBuild), Options{Target: target}); err != nil {
+		t.Fatal(err)
+	}
+	scriptPath := filepath.Join(target, ".claude/hooks/guard-handoff.sh")
+
+	otherPath := filepath.Join(target, "docs/architecture.md")
+	if err := os.MkdirAll(filepath.Dir(otherPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := strings.Repeat("linha\n", 500)
+	if err := os.WriteFile(otherPath, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	payload, err := json.Marshal(map[string]any{
+		"tool_input": map[string]any{"file_path": otherPath},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Stdin = bytes.NewReader(payload)
+	cmd.Dir = target
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("guard-handoff.sh failed: %v\noutput: %s", err, out.String())
+	}
+	if strings.TrimSpace(out.String()) != "" {
+		t.Errorf("guard-handoff.sh on docs/architecture.md = %q, want silent (not the handoff file)", out.String())
 	}
 }

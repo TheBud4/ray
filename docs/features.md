@@ -284,10 +284,11 @@ passou, ponto. O `ray` não finge medir entendimento — entendimento não é
 verificável por comando. Ele o transforma em ritual e deixa registro que um
 humano relê.
 
-## Os três hooks de aviso
+## Os quatro hooks de aviso
 
 `guard-add` (contra `git add` cego), `guard-plans` (contra escrever plano dentro
-do repo) e `guard-vocab` (contra vocabulário de processo em artefato entregue).
+do repo), `guard-vocab` (contra vocabulário de processo em artefato entregue) e
+`guard-handoff` (contra `.claude/handoff.md` passar do dobro do orçamento).
 
 **Decisão central: avisam, não bloqueiam.** Hook que trava trabalho legítimo vira
 hook desligado. Com aviso, o custo de um falso positivo é uma linha ignorada; com
@@ -297,7 +298,11 @@ que se perde é real e está aceita: **a IA pode ignorar o aviso.**
 O hook do modo learn é outra coisa e continua bloqueando: é pedagógico, opt-in, e
 a regra dele não tem falso positivo.
 
-**Os três rodam antes da escrita.** Aviso que chega depois não redireciona nada.
+**Três dos quatro rodam antes da escrita** (`guard-add`, `guard-plans`,
+`guard-vocab`) — aviso que chega depois não redireciona nada, e os três leem só o
+que a chamada carrega. `guard-handoff` é a exceção: precisa do tamanho final do
+arquivo no disco, que Edit e MultiEdit não carregam no payload (só o trecho
+alterado) — ver a seção dedicada abaixo.
 
 **Nenhum concede permissão.** Um hook de aviso não tem o direito de decidir
 permissão em nome do usuário; ele injeta a mensagem e deixa o fluxo normal
@@ -322,6 +327,28 @@ varredura separada, não devolver o hook ao disco.
 que o projeto scaffoldado pode não ser; e falha em silêncio — se a mudança já foi
 commitada entre uma edição e outra, o diff vem vazio e o hook cala, que é um
 falso negativo pior que o ruído que se queria remover.
+
+### Por que `guard-handoff` roda depois, e por que o orçamento é o dobro
+
+Nasceu de um caso real: o próprio `.claude/handoff.md` do `ray` chegou a 355
+linhas — quase 9x o alvo de ~40 que `/handoff` declara — sem nenhum aviso, porque
+nada verificava. `/handoff` manda "fique enxuto"; o verbo é confiança, e
+confiança sem checagem é exatamente o que essa família de hooks existe para não
+depender.
+
+Ele é `PostToolUse`, ao contrário dos outros três: `guard-vocab` e `guard-plans`
+leem `content`/`new_string` do payload, que é o texto que a chamada está
+escrevendo. Isso funciona para "tem vocabulário de processo aqui?", mas não para
+"quantas linhas tem o arquivo?" — um `Edit` carrega só o trecho alterado, não o
+arquivo inteiro, e contar linhas do trecho não diz o tamanho final. Só o arquivo
+no disco, depois da escrita, responde isso.
+
+**O orçamento do aviso é o dobro do alvo (80, não 40).** `/handoff` já declara
+~40 como alvo; repetir o mesmo número aqui dispararia o aviso em toda sessão só
+por variação normal — e é exatamente esse ruído que faz um hook de aviso parar de
+ser lido (mesmo racional do escopo do `guard-vocab`, acima). O gate dispara só
+quando o handoff dobrou o alvo, que é o sinal de que virou narrativa em vez de
+estado derivado.
 
 **O aviso não numera linhas.** Varrendo um trecho solto, o número seria relativo
 ao trecho e não corresponderia a nada que se possa abrir. Número errado é pior
