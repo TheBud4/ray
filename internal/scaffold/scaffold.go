@@ -24,7 +24,7 @@ var embedded embed.FS
 
 const templatesRoot = "templates"
 
-// handoffPath é o único arquivo de scaffold imune a --force (§2 do build guide).
+// handoffPath é o único arquivo de scaffold imune a --force (docs/conventions.md).
 const handoffPath = ".claude/handoff.md"
 
 // executableSuffix marca quais arquivos saem 0755 em vez de 0644.

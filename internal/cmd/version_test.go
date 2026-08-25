@@ -65,7 +65,7 @@ func TestFormatVersion(t *testing.T) {
 
 // O achado que originou isto: `ray --version` respondia "unknown flag". O
 // Cobra só registra a flag se o comando raiz preencher Version — não vem de
-// graça, ao contrário do que o build guide afirmava.
+// graça.
 func TestRootVersionFlagIsRegistered(t *testing.T) {
 	var out bytes.Buffer
 	root := newRootCmd()

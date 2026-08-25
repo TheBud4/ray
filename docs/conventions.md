@@ -14,8 +14,9 @@ defasou.
   de `internal/` seguem isso, sem exceção; um pacote novo sem doc destoa.
 - O comentário explica **decisão, invariante ou risco** — nunca repete o que a
   linha ao lado já diz.
-- Referência a seção de doc de design (`design §8.1`, `build guide §7`) é o
-  padrão em doc de pacote, e ajuda a achar o porquê.
+- Referência a um doc do repositório (`docs/features.md`) ou de design no
+  cérebro (`design §8.1`) é o padrão em doc de pacote, e ajuda a achar o
+  porquê.
 
 ## Testes
 
@@ -65,10 +66,37 @@ com a correção ao lado, para virar item de revisão em vez de prosa:
   revisão — um aviso só é visto quando o caminho que o emite roda. A exceção
   é **conteúdo scaffoldado** (templates, bloco do `.gitignore`): aquilo é
   material do projeto gerado, que é pt-BR por inteiro, não mensagem do CLI.
+- ❌ Assumir que `--dry-run` cobre um caminho só por ele passar pelo
+  `runner.ExecRunner` → ✅ todo caminho que toca o disco **fora** do runner
+  (`os.MkdirAll`, `os.WriteFile`) tem de perguntar por `--dry-run` à mão. Foi
+  assim que `ray new --dry-run` e `ray init ai --dry-run` passaram a criar o
+  diretório-alvo sem que nenhum teste percebesse — o que existia usava
+  `t.TempDir()`, um diretório que já existe, onde o `MkdirAll` é no-op.
 
 Esta lista cresce por acúmulo: um item entra quando o mesmo erro aparece pela
 segunda vez, não na primeira. Se um item aqui for verificável por lint ou teste,
 a regra pertence ao gate, não a esta lista.
+
+## Invariantes que já custaram caro (não reaprender)
+
+Fatos pontuais, sem correção ao lado por não serem erro de padrão — mas caros o
+bastante pra valer registrar em vez de deixar pra descobrir de novo:
+
+- `.claude/handoff.md` é o único arquivo de scaffold intocável por `--force`.
+- Hook referenciado em `settings.json` precisa existir no disco → por isso
+  `scaffold.SystemFiles()` os escreve sempre, fora da receita.
+- Um global só entra em `state.yaml` se **todos** os comandos do step derem 0.
+- Servers MCP são por-projeto e sempre re-registrados, mesmo com o global já
+  instalado antes.
+- Um nome de perfil errado não pode deixar rastro no disco: `profile.LoadByName`
+  roda **antes** do `os.MkdirAll` em `ray new` — um alvo criado e depois
+  abandonado por perfil inválido já foi bug (corrigido, ver `internal/cmd/new.go`).
+- **Sem hash pristino, não se afirma "intocado".** `store.DecideOverwrite`
+  precisa do hash *upstream* para decidir sem linha-base, e obtê-lo exigiria
+  rede. Um diagnóstico offline que chamasse a função com o upstream vazio
+  receberia "não é fork" — errado, e errado na direção que faz o usuário
+  confiar que a edição dele sobrevive. Por isso `ray status` reporta
+  *procedência desconhecida* nesse caso, em vez de palpitar.
 
 ## Artefatos que andam juntos
 
@@ -78,6 +106,6 @@ lista que impede o repo de acumular arquivo gerado defasado:
 - `internal/scaffold/scaffold.go` (`templateFor`) → `internal/profile/defaults.go`
   (`baseScaffoldFiles`) → os testes de espelho dos dois → o template em
   `internal/scaffold/templates/`.
-- Mudança na árvore que o scaffold escreve → a árvore documentada em
-  `docs/ray-build-guide.md`.
+- Mudança na árvore que o scaffold escreve → a árvore documentada na Parte 2
+  de `docs/features.md`.
 - `internal/scaffold/templates/claude/hooks/*.sh.tmpl` → as cópias que o próprio ray usa em `.claude/hooks/` (regeneradas do template, nunca editadas à mão). **Este par tem gate:** `TestRayOwnHooksMatchTemplates` compara byte-a-byte e confere o modo executável; `TestRayOwnHooksHaveNoStrays` recusa `.sh` órfão no diretório. Os dois derivam de `SystemFiles()`, então um hook novo entra no gate sozinho.

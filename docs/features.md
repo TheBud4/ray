@@ -11,7 +11,6 @@ Fronteira com os outros documentos, para nada ser dito duas vezes:
 |---|---|
 | `architecture.md` | como o sistema é montado — pacotes, fronteiras, regras de dependência |
 | `conventions.md` | como se escreve código aqui |
-| `ray-build-guide.md` | por que as decisões de construção foram tomadas |
 | **este arquivo** | o que cada feature faz e o que precisa continuar verdade |
 | `README.md` | como usar |
 
@@ -109,6 +108,28 @@ servidor MCP tem comando, argumentos e ambiente, e nada ali é tipado como
 caminho — varrer argumentos procurando o que "parece caminho" seria chute, ainda
 mais num arquivo onde o usuário também põe servidores próprios.
 
+**O escopo de vigilância é derivado das negações do bloco do `.gitignore`** —
+hoje `.claude/` e `.mcp.json` — menos um denylist onde mora o `docs/`, que é do
+usuário. Derivado, e não fixo, porque lista fixa dessincroniza em silêncio: a
+whitelist ganha entrada e o `status` para de vigiar parte do ambiente sem nada
+falhar. **O `git add` do rodapé é outra pergunta** e usa três fontes unidas,
+filtradas por existir em disco: a whitelist inteira, os arquivos que a receita
+escreve na raiz, e o `.gitignore` — que entra sempre, porque o `ray` sempre o
+escreve, mesmo com receita ilegível. Commitar e vigiar são perguntas
+diferentes; antes dessa separação o `ray status` mandava commitar **menos** que
+o `ray new` para o mesmo projeto.
+
+**A linha de fatos conta conteúdo, não entradas de topo**: uma skill é um
+`SKILL.md`, um agente e um comando são um `.md`, e a contagem desce em
+subdiretório. Contar entradas de diretório fazia um README solto em `skills/`
+valer uma skill, e um grupo de comandos com namespace valer um comando só.
+
+Sem `.claude/.ray-profile`, a checagem de fork inteira cala — não há receita a
+comparar, e `.claude/` copiado à mão é caso normal. Com o registro presente e a
+receita ilegível é o oposto: vira problema, com o erro junto. Os dois casos
+saíam iguais, e o segundo deixava o usuário sem `profile:` na saída e sem pista
+do porquê.
+
 **O que tem de valer:**
 
 - **Exit code é sempre 0**, exceto falha real de leitura. Problema detectado não
@@ -202,13 +223,31 @@ em silêncio. Não é: entra no resumo (`Failed` no `init ai`, `Skipped` no
 `update`) nomeando o caminho que faltou — receita com componente inexistente é
 situação a relatar, não erro a engolir.
 
-## Componente não é integração
+## Integrações
 
-Um servidor MCP (`headroom`, `code_graph`) se declara em
-`integrations`, nunca em `components`. São conceitos disjuntos por
-construção: `Component` só tem `name` e `dest` — não há campo para dizer "isto
-é um servidor", então não existe forma de confundir os dois no formato da
-receita.
+Um servidor MCP (`headroom`, `code_graph`) se declara em `integrations`, nunca
+em `components`. São conceitos disjuntos por construção: `Component` só tem
+`name` e `dest` — não há campo para dizer "isto é um servidor", então não
+existe forma de confundir os dois no formato da receita.
+
+`installer.Resolve` traduz as integrações ligadas num `Plan` com três listas:
+`Commands` (por-projeto, sempre rodam), `Globals` (install-once, rastreados por
+`Key` em `state.yaml`), `Servers` (entradas de `.mcp.json`).
+
+| Integração | Tipo | Comando / Server gerado |
+|---|---|---|
+| `headroom` | Global + Server | install: `uv tool install headroom-ai[mcp]` · server `headroom` → `headroom mcp` |
+| `code_graph` | Global + Command + Server | global: `uv tool install graphifyy` **e** `graphify install --platform claude` · por-projeto: `graphify update .` (constrói o grafo, tree-sitter, sem LLM) · server `graphify` → `graphify-mcp` (stdio, lê `graphify-out/graph.json`) |
+
+**O que tem de valer:**
+
+- O pacote PyPI do grafo é `graphifyy` (dois "y"); o binário é `graphify`.
+- `headroom-ai[mcp]` precisa do extra `[mcp]` pra expor `headroom mcp`.
+- Um global só vira `state.AddGlobal(key)` se **todos** os comandos do step
+  saírem 0; `--no-global` pula todos; `--reinstall-global` ignora o state.
+- Servers são **sempre** registrados por-projeto, mesmo que o global já tenha
+  sido instalado antes — um `.mcp.json` novo não pode ficar sem a entrada só
+  porque outro projeto já passou pelo global.
 
 ---
 
@@ -217,6 +256,52 @@ receita.
 O conteúdo desta parte é gerado a partir dos templates em
 `internal/scaffold/templates/`. Não é o ambiente **deste** repositório: é o que
 o `ray` instala no repositório de quem o usa.
+
+A árvore que `ray init ai` produz na pasta-alvo:
+
+```text
+<alvo>/
+├── CLAUDE.md                 # a base estável: 12 seções XML (ver abaixo)
+├── SECURITY.md                # [MUST]/[SHOULD], regras p/ código gerado por IA
+├── .mcp.json                  # headroom + graphify, se ligados na receita
+├── docs/                      # o ESTADO ATUAL do projeto (versionado)
+│   ├── README.md              # os dois papéis + o laço spec-driven
+│   └── architecture.md  conventions.md
+└── .claude/
+    ├── settings.json          # model, effortLevel, hooks
+    ├── handoff.md              # estado vivo (gerido pela IA; NUNCA tocado por --force)
+    ├── commands/{destilar,document,handoff,revisar}.md
+    ├── hooks/{session-start,guard-add,guard-vocab,guard-plans,guard-handoff}.sh
+    └── agents/  skills/        # populados pela cópia local de componentes
+```
+
+## `CLAUDE.md` — a base estável
+
+Todo perfil default escreve, entre outros, um `CLAUDE.md` em 12 seções XML,
+**nesta ordem**, que é load-bearing e travada por teste:
+
+```
+<role> <context> <stack> <documentation_sources> <architecture> <test_strategy>
+<conventions> <quality_gates> <workflow> <agent_behavior> <output_format> <edge_cases>
+```
+
+`<workflow>` fica perto do fim de propósito — instrução de processo no topo é
+atropelada pelo volume da spec colada no turno. `<edge_cases>` fecha o
+documento: é a cláusula que impede invenção quando a premissa falha. A regra
+que sustenta o conjunto: **o que está no `CLAUDE.md` nunca se repete no
+documento por feature.**
+
+## Arquivos de sistema e os hooks em `settings.json`
+
+`scaffold.SystemFiles()` garante que `.claude/hooks/session-start.sh` e os
+quatro guards abaixo existam no disco de todo projeto, **fora da receita** —
+isso garante que todo hook referenciado em `settings.json` tenha o script que
+ele nomeia. No `init ai`, os arquivos da receita e os de sistema são
+deduplicados por path (receita ganha).
+
+`scaffold.HookSettings()` devolve o bloco `hooks` mesclado em `settings.json`:
+`SessionStart` (sempre, injeta o handoff) + `PreToolUse` (os três guards de
+aviso) + `PostToolUse` (`guard-handoff`).
 
 ## Os quatro hooks de aviso
 

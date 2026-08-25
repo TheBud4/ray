@@ -45,7 +45,7 @@ func runOne(r runner.Runner, c runner.Command) bool {
 }
 
 // dedupScaffoldFiles mantém base inteiro e acrescenta de extra só os paths
-// ausentes em base — a receita "ganha" (build guide §8).
+// ausentes em base — a receita "ganha".
 func dedupScaffoldFiles(base, extra []profile.ScaffoldFile) []profile.ScaffoldFile {
 	seen := make(map[string]bool, len(base))
 	out := make([]profile.ScaffoldFile, len(base))

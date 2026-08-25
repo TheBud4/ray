@@ -10,7 +10,7 @@ import (
 )
 
 // Open abre path no app default, rodando o comando através de r — a mesma
-// fronteira de processos usada em todo o ray (§3 do build guide).
+// fronteira de processos usada em todo o ray (docs/architecture.md).
 func Open(r runner.Runner, path string) error {
 	name := "xdg-open"
 	if runtime.GOOS == "darwin" {

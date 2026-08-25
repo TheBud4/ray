@@ -20,7 +20,7 @@ const lookTimeout = 3 * time.Second
 
 // RunnerLooker é a implementação real de Looker: verifica cada dependência
 // rodando "<nome> --version" através de runner.Runner — a única fronteira de
-// processos externos do ray (§3 do build guide). Um binário ausente faz
+// processos externos do ray (docs/architecture.md). Um binário ausente faz
 // Runner.Run devolver err != nil (o ExecRunner distingue "não achou o
 // executável" de "rodou e falhou"), o que aqui vira Look = false.
 type RunnerLooker struct {

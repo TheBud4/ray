@@ -97,6 +97,63 @@ o código sozinho não conta:
 - `vault` **valida** o cérebro, nunca o cria. O `ray` é consumidor da vault do
   usuário, não dono dela.
 
+## Modelo de dados
+
+### Receita (`internal/profile`)
+
+```go
+type Profile struct {
+    Name         string
+    Description  string
+    Integrations Integrations       // headroom, code_graph
+    Components   []Component
+    Scaffold     Scaffold
+    Create       []string           // templates p/ `ray new`, rodados no novo dir; {{.Name}}
+}
+type Component struct {
+    Name string // subpasta em <ComponentsDir>/<Name>, e nome dentro de Dest no projeto
+    Dest string // diretório-contêiner relativo ao projeto (".claude/skills", ".claude/agents")
+}
+type Scaffold struct {
+    Files    []ScaffoldFile     // {Path, Template?}
+    Settings map[string]any     // model, effortLevel, ...
+}
+```
+
+`Validate` exige `Name`; em cada `Component`, `Name` e `Dest`; em cada
+`ScaffoldFile`, `Path` não-vazio. Um servidor MCP (`headroom`, `code_graph`) se
+declara em `Integrations`, nunca em `Components` — são conceitos disjuntos por
+construção, e `Component` não tem campo para dizer "isto é um servidor".
+
+Um `Component` é só um nome que aponta para `<ComponentsDir>/<Name>` — uma
+pasta que o **usuário** mantém à mão, nunca o `ray`. `init ai`/`update` copiam
+de lá para `<projeto>/<Dest>/<Name>` pela mesma política de sobrescrita
+(`store.DecideOverwrite`) que protege os arquivos de scaffold.
+
+### Config e State (`internal/rayconfig`)
+
+- **Config** (`~/.ray/config.yaml`): `brain: <path>`, override por `$RAY_BRAIN`.
+- **State** (`~/.ray/state.yaml`): `installed_globals: [keys]` — globais
+  install-once já instalados.
+
+### Layout de `~/.ray` (override por `$RAY_HOME`)
+
+```text
+~/.ray/
+├── profiles/*.yaml      # receitas editáveis (defaults escritos na 1ª leitura)
+├── templates/*.tmpl     # overlay editável dos templates de scaffold
+├── components/<Name>/   # skills/agents/comandos que o usuário mantém à mão
+├── store/                # linha-base pristina (hash) — decide "foi editado?"
+├── config.yaml           # brain
+├── state.yaml            # installed_globals[]
+└── commands.yaml         # aliases globais do `ray run`
+```
+
+`store/` é a linha-base pristina: é contra ela que `ray update` decide entre
+atualizar e preservar, e que `ray status` diz se um componente foi editado
+localmente. Apagá-lo não quebra nada, mas os dois passam a dizer *procedência
+desconhecida* em vez de responder.
+
 ## Onde entra código novo
 
 - Comando novo do CLI → `internal/cmd/<verbo>.go`, montado na árvore Cobra.

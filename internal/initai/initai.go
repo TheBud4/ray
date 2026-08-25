@@ -1,5 +1,5 @@
-// Package initai orquestra os 10 passos de `ray init ai` (build guide §8),
-// ligando profile, installer, mcp, claudecfg, vault, scaffold e preflight.
+// Package initai orquestra os 10 passos de `ray init ai` (ver Run), ligando
+// profile, installer, mcp, claudecfg, vault, scaffold e preflight.
 package initai
 
 import (
@@ -33,7 +33,7 @@ type Home struct {
 	ComponentsDir string
 }
 
-// Options são os parâmetros de `ray init ai` (build guide §5, §8).
+// Options são os parâmetros de `ray init ai`.
 type Options struct {
 	Profile         string
 	Target          string
@@ -44,7 +44,7 @@ type Options struct {
 	Out             io.Writer
 }
 
-// Summary é o resultado final de Run (build guide §8).
+// Summary é o resultado final de Run.
 type Summary struct {
 	Installed  []string
 	Failed     []string

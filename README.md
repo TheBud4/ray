@@ -40,6 +40,19 @@ ray doctor          # checa npx, python3.10+, uv, headroom, graphify
 ray doctor --fix    # instala o que o ray consegue instalar sozinho
 ```
 
+| Dependência | Obrigatória | `--fix` instala |
+|---|---|---|
+| `npx` | sim | — (instale Node.js) |
+| `node` | não | — |
+| `python3.10+` | sim, se `headroom`/`code_graph` ligados | — |
+| `uv` | sim, se `headroom`/`code_graph` ligados | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| `headroom` | não | `uv tool install headroom-ai[mcp]` |
+| `graphify` | não | `uv tool install graphifyy` |
+
+`ray new`/`ray init ai` com um perfil default (`go`/`web`/`flutter`) liga
+`headroom` e `code_graph` — por isso rodar `ray doctor --fix` antes é o que
+evita a primeira execução falhar por dependência ausente.
+
 ## Quick start
 
 ```sh
@@ -139,6 +152,8 @@ make fmt-check   # falha se algo precisar de gofmt
 make ci          # fmt-check + vet + test (o que o CI roda)
 ```
 
+CI: GitHub Actions roda `make ci` em todo push/PR.
+
 Documentação de projeto, em `docs/`:
 
 | Arquivo | Responde |
@@ -146,7 +161,6 @@ Documentação de projeto, em `docs/`:
 | [`features.md`](docs/features.md) | o que cada feature faz e o que precisa continuar verdade |
 | [`architecture.md`](docs/architecture.md) | como o sistema é montado: pacotes, fronteiras, regras de dependência |
 | [`conventions.md`](docs/conventions.md) | como se escreve código aqui |
-| [`ray-build-guide.md`](docs/ray-build-guide.md) | por que as decisões de construção foram tomadas |
 
 ## Licença
 

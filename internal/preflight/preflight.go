@@ -20,7 +20,7 @@ type Check struct {
 
 const uvInstallScript = `curl -LsSf https://astral.sh/uv/install.sh | sh`
 
-// Run monta a tabela de checagens (build guide §10) e resolve Found via l.
+// Run monta a tabela de checagens (README.md) e resolve Found via l.
 // needPython liga o requisito de python3.10+/uv (usado por headroom/code_graph).
 func Run(l Looker, needPython bool) []Check {
 	checks := []Check{

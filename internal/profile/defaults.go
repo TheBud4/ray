@@ -21,7 +21,7 @@ func defaultSettings() map[string]any {
 	return map[string]any{"model": "opus", "effortLevel": "high"}
 }
 
-// baseScaffoldFiles é o conjunto de orientação (§7 do build guide) que todo
+// baseScaffoldFiles é o conjunto de orientação (docs/features.md) que todo
 // perfil default escreve: CLAUDE.md, SECURITY.md, docs/, regras e o
 // comando /document. Os templates que renderizam cada path vivem em
 // internal/scaffold.

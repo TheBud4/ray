@@ -3,8 +3,8 @@
 // servers) que uma fase posterior executa. Não toca rede, não executa
 // processos, não sabe de CLI. Componentes de conteúdo (`p.Components`) não
 // passam por aqui — são cópia local pura, resolvida direto em
-// internal/initai/internal/update; este pacote só resolve o que a tabela §6
-// do build guide chama de integrações (headroom, code_graph).
+// internal/initai/internal/update; este pacote só resolve o que
+// docs/features.md chama de integrações (headroom, code_graph).
 package installer
 
 import (

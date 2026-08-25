@@ -60,8 +60,7 @@ func newNewCmd() *cobra.Command {
 
 // runNew cria o projeto (create + git init) e então monta a IA nele via
 // initai.Run. Falha num passo de create ou no git init aborta antes de
-// montar IA sobre um projeto meio-criado (build guide, "Erros, segurança,
-// exit codes").
+// montar IA sobre um projeto meio-criado.
 func runNew(r runner.Runner, l preflight.Looker, profilesDir, profileName, projectName string, noGit, dryRun bool, initOpts initai.Options, home initai.Home) (initai.Summary, error) {
 	target := projectName
 
