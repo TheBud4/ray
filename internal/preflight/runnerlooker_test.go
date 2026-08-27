@@ -100,3 +100,45 @@ func TestRunnerLookerPythonMissing(t *testing.T) {
 		t.Error("Look(python3.10+) = true, want false when python3 is missing")
 	}
 }
+
+// keyedErrRunner permite programar erro para um comando específico e
+// resultado para outro — o FakeRunner só tem um Err global, insuficiente
+// para simular "python3 ausente, python presente".
+type keyedErrRunner struct {
+	err map[string]error
+	res map[string]runner.Result
+}
+
+func (r keyedErrRunner) Run(_ context.Context, c runner.Command) (runner.Result, error) {
+	if err, ok := r.err[c.String()]; ok {
+		return runner.Result{}, err
+	}
+	return r.res[c.String()], nil
+}
+
+// No Windows o instalador oficial expõe "python", não "python3". O
+// runtime.GOOS de quem roda o teste é fixo (Linux), então o fallback é
+// verificado direto na função interna parametrizada por goos.
+func TestRunnerLookerPythonWindowsFallback(t *testing.T) {
+	fr := keyedErrRunner{
+		err: map[string]error{"python3 --version": errors.New("exec: \"python3\": executable file not found in $PATH")},
+		res: map[string]runner.Result{"python --version": {ExitCode: 0, Stdout: "Python 3.11.4\n"}},
+	}
+	l := RunnerLooker{Runner: fr}
+
+	if !l.lookGOOS("python3.10+", "windows") {
+		t.Error("lookGOOS(python3.10+, windows) = false, want true — falls back to python when python3 is missing")
+	}
+}
+
+func TestRunnerLookerPythonNoFallbackOutsideWindows(t *testing.T) {
+	fr := keyedErrRunner{
+		err: map[string]error{"python3 --version": errors.New("exec: \"python3\": executable file not found in $PATH")},
+		res: map[string]runner.Result{"python --version": {ExitCode: 0, Stdout: "Python 3.11.4\n"}},
+	}
+	l := RunnerLooker{Runner: fr}
+
+	if l.lookGOOS("python3.10+", "linux") {
+		t.Error("lookGOOS(python3.10+, linux) = true, want false — no fallback to python outside windows")
+	}
+}

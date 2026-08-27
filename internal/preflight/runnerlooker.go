@@ -2,6 +2,7 @@ package preflight
 
 import (
 	"context"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -28,26 +29,37 @@ type RunnerLooker struct {
 }
 
 // Look reporta se name está disponível. python3.10+ é o único caso especial:
-// roda `python3 --version` e exige major.minor >= 3.10.
+// roda `<candidato> --version` (python3, e no Windows também python como
+// fallback — ver pythonCandidates) e exige major.minor >= 3.10.
 func (l RunnerLooker) Look(name string) bool {
-	bin, args := "", []string{"--version"}
-	if name == "python3.10+" {
-		bin = "python3"
-	} else {
-		bin = name
-	}
+	return l.lookGOOS(name, runtime.GOOS)
+}
 
+// lookGOOS isola a checagem do runtime.GOOS real da máquina, para que o
+// fallback do Windows seja testável sem rodar em cada SO.
+func (l RunnerLooker) lookGOOS(name, goos string) bool {
+	if name != "python3.10+" {
+		return l.checkVersion(name, false)
+	}
+	for _, bin := range pythonCandidates(goos) {
+		if l.checkVersion(bin, true) {
+			return true
+		}
+	}
+	return false
+}
+
+// checkVersion roda "<bin> --version" e reporta sucesso; quando isPython,
+// além do exit code exige major.minor >= 3.10 no stdout.
+func (l RunnerLooker) checkVersion(bin string, isPython bool) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), lookTimeout)
 	defer cancel()
 
-	res, err := l.Runner.Run(ctx, runner.Command{Name: bin, Args: args})
-	if err != nil {
+	res, err := l.Runner.Run(ctx, runner.Command{Name: bin, Args: []string{"--version"}})
+	if err != nil || res.ExitCode != 0 {
 		return false
 	}
-	if res.ExitCode != 0 {
-		return false
-	}
-	if name == "python3.10+" {
+	if isPython {
 		return pythonVersionAtLeast(res.Stdout, pythonWantMajor, pythonWantMinor)
 	}
 	return true

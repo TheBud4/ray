@@ -57,3 +57,26 @@ func TestPathLookerPythonAlias(t *testing.T) {
 		t.Error("Look(python3.10+) = false, want true — it resolves to python3")
 	}
 }
+
+// No Windows o instalador oficial expõe "python", não "python3" — o
+// runtime.GOOS de quem roda o teste é fixo (Linux), então o fallback é
+// verificado direto na função interna parametrizada por goos.
+func TestPathLookerPythonWindowsFallback(t *testing.T) {
+	dir := t.TempDir()
+	writeExecutable(t, dir, "python")
+	t.Setenv("PATH", dir)
+
+	if !lookPath("python3.10+", "windows") {
+		t.Error("lookPath(python3.10+, windows) = false, want true — falls back to python when python3 is absent")
+	}
+}
+
+func TestPathLookerPythonNoFallbackOutsideWindows(t *testing.T) {
+	dir := t.TempDir()
+	writeExecutable(t, dir, "python")
+	t.Setenv("PATH", dir)
+
+	if lookPath("python3.10+", "linux") {
+		t.Error("lookPath(python3.10+, linux) = true, want false — no fallback to python outside windows")
+	}
+}

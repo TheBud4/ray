@@ -1,6 +1,9 @@
 package preflight
 
-import "os/exec"
+import (
+	"os/exec"
+	"runtime"
+)
 
 // PathLooker responde a mesma pergunta do RunnerLooker — "esta dependência
 // está disponível?" — sem executar nada: exec.LookPath resolve o nome contra o
@@ -16,15 +19,24 @@ import "os/exec"
 // sendo o certo.
 type PathLooker struct{}
 
-// Look reporta se name está no PATH. "python3.10+" resolve para python3:
-// presença é tudo que este Looker consegue afirmar, e responder false por não
-// achar um executável chamado "python3.10+" seria pior que responder pela
-// presença.
+// Look reporta se name está no PATH. "python3.10+" resolve para python3 (ou,
+// no Windows, cai para python — ver pythonCandidates); presença é tudo que
+// este Looker consegue afirmar.
 func (PathLooker) Look(name string) bool {
-	bin := name
-	if name == "python3.10+" {
-		bin = "python3"
+	return lookPath(name, runtime.GOOS)
+}
+
+// lookPath isola a checagem do runtime.GOOS real da máquina, para que o
+// fallback do Windows seja testável sem rodar em cada SO.
+func lookPath(name, goos string) bool {
+	if name != "python3.10+" {
+		_, err := exec.LookPath(name)
+		return err == nil
 	}
-	_, err := exec.LookPath(bin)
-	return err == nil
+	for _, bin := range pythonCandidates(goos) {
+		if _, err := exec.LookPath(bin); err == nil {
+			return true
+		}
+	}
+	return false
 }
