@@ -74,9 +74,13 @@ type Result struct {
 // WriteFiles resolve cada f.Template (ou templateFor[f.Path]), renderiza com
 // opts.Data e grava em opts.Target/f.Path. Não sobrescreve arquivos existentes
 // a menos que opts.Force — exceto .claude/handoff.md, que Force nunca toca.
+//
+// A resolução de template de toda a lista é validada antes de escrever
+// qualquer arquivo (RF-04): um path sem template no meio da lista não pode
+// deixar os arquivos anteriores já gravados no disco.
 func WriteFiles(files []profile.ScaffoldFile, opts Options) (Result, error) {
-	var res Result
-	for _, f := range files {
+	tmplNames := make([]string, len(files))
+	for i, f := range files {
 		tmplName := f.Template
 		if tmplName == "" {
 			var ok bool
@@ -85,6 +89,12 @@ func WriteFiles(files []profile.ScaffoldFile, opts Options) (Result, error) {
 				return Result{}, fmt.Errorf("scaffold: no template for path %q", f.Path)
 			}
 		}
+		tmplNames[i] = tmplName
+	}
+
+	var res Result
+	for i, f := range files {
+		tmplName := tmplNames[i]
 
 		targetPath := filepath.Join(opts.Target, f.Path)
 		exists := false
@@ -146,6 +156,10 @@ func render(tmplName, templatesDir string, data Data) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// readTemplate prefere o overlay e cai para o embed. Um nome ausente dos dois
+// nomeia o overlay esperado no erro (RF-05) — sem isso, um template
+// customizado nunca criado vazava o erro cru do embed.FS, sem indicar que o
+// arquivo precisa existir em templatesDir.
 func readTemplate(tmplName, templatesDir string) ([]byte, error) {
 	if templatesDir != "" {
 		overlay := filepath.Join(templatesDir, tmplName)
@@ -157,7 +171,14 @@ func readTemplate(tmplName, templatesDir string) ([]byte, error) {
 			return nil, err
 		}
 	}
-	return embedded.ReadFile(templatesRoot + "/" + tmplName)
+	data, err := embedded.ReadFile(templatesRoot + "/" + tmplName)
+	if err != nil {
+		if templatesDir != "" {
+			return nil, fmt.Errorf("template %q not found in %s nor embedded in the binary", tmplName, templatesDir)
+		}
+		return nil, fmt.Errorf("template %q not found embedded in the binary", tmplName)
+	}
+	return data, nil
 }
 
 const (

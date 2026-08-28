@@ -62,7 +62,7 @@ func build(name, desc string, create []string, gitignoreStack []string) Profile 
 
 func goProfile() Profile {
 	return build("go", "Go backend stack",
-		[]string{"go mod init {{.Name}}"},
+		[]string{"go mod init {{.ProjectName}}"},
 		[]string{"/{{.ProjectName}}"})
 }
 

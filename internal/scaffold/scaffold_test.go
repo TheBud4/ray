@@ -196,6 +196,42 @@ func TestWriteFilesUnknownPathErrors(t *testing.T) {
 	}
 }
 
+// RF-04: um path inválido no meio da lista não pode deixar os arquivos
+// anteriores já gravados no disco — WriteFiles valida a resolução de
+// template da lista inteira antes de escrever qualquer arquivo.
+func TestWriteFilesInvalidPathLeavesNoFileBehind(t *testing.T) {
+	target := t.TempDir()
+	files := []profile.ScaffoldFile{
+		{Path: "CLAUDE.md"},
+		{Path: "nope.txt"},
+	}
+
+	if _, err := WriteFiles(files, Options{Target: target}); err == nil {
+		t.Fatal("WriteFiles() = nil error, want error for the unmapped path")
+	}
+
+	if _, statErr := os.Stat(filepath.Join(target, "CLAUDE.md")); !os.IsNotExist(statErr) {
+		t.Errorf("stat(CLAUDE.md) err = %v, want IsNotExist — a later invalid path must not leave earlier files behind", statErr)
+	}
+}
+
+// RF-05: um template customizado ausente (nome novo, nunca criado em nenhum
+// dos dois lugares) tem que apontar para o overlay esperado — não vazar o
+// erro cru do embed.FS.
+func TestWriteFilesMissingCustomTemplateNamesTheOverlay(t *testing.T) {
+	target := t.TempDir()
+	templatesDir := t.TempDir()
+	files := []profile.ScaffoldFile{{Path: "docs/setup.md", Template: "rust-setup.md.tmpl"}}
+
+	_, err := WriteFiles(files, Options{Target: target, TemplatesDir: templatesDir})
+	if err == nil {
+		t.Fatal("WriteFiles() = nil error, want error for a custom template that exists nowhere")
+	}
+	if !strings.Contains(err.Error(), templatesDir) {
+		t.Errorf("WriteFiles() error = %q, want it to name the overlay dir %q", err.Error(), templatesDir)
+	}
+}
+
 func TestEnsureTemplatesOverlayWinsOverEmbed(t *testing.T) {
 	overlayDir := t.TempDir()
 	if _, err := EnsureTemplates(overlayDir, EnsureOptions{}); err != nil {

@@ -16,6 +16,7 @@ import (
 	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/raypaths"
 	"github.com/TheBud4/ray/internal/runner"
+	"github.com/TheBud4/ray/internal/scaffold"
 )
 
 var flagNoGit bool
@@ -79,10 +80,22 @@ func runNew(r runner.Runner, l preflight.Looker, profilesDir, profileName, proje
 		return initai.Summary{}, err
 	}
 
+	// Renderizado (não executado) antes do MkdirAll: um create: com template
+	// inválido é erro cedo o bastante para não deixar rastro no disco — RF-02,
+	// mesmo raciocínio do f1520b1 aplicado a outro gatilho.
+	renderedSteps := make([]string, len(prof.Create))
+	for i, step := range prof.Create {
+		rendered, err := renderCreateStep(step, projectName)
+		if err != nil {
+			return initai.Summary{}, err
+		}
+		renderedSteps[i] = rendered
+	}
+
 	// O MkdirAll não passa pelo runner, então o --dry-run não o alcança
 	// sozinho: sem esta guarda, simular um `ray new` deixa a pasta para trás.
-	// Vem depois da validação do perfil: um nome errado não pode deixar
-	// rastro nenhum no disco.
+	// Vem depois da validação do perfil e do create: um nome errado ou um
+	// template inválido não pode deixar rastro nenhum no disco.
 	// Out normalizado como o initai.Run faz — chamador pode não ter passado um.
 	if dryRun {
 		out := initOpts.Out
@@ -94,12 +107,8 @@ func runNew(r runner.Runner, l preflight.Looker, profilesDir, profileName, proje
 		return initai.Summary{}, err
 	}
 
-	for _, step := range prof.Create {
-		rendered, err := renderCreateStep(step, projectName)
-		if err != nil {
-			return initai.Summary{}, err
-		}
-		fields := strings.Fields(rendered)
+	for i, step := range prof.Create {
+		fields := strings.Fields(renderedSteps[i])
 		if len(fields) == 0 {
 			continue
 		}
@@ -127,13 +136,18 @@ func runNew(r runner.Runner, l preflight.Looker, profilesDir, profileName, proje
 	return initai.Run(r, l, initOpts, home)
 }
 
+// renderCreateStep usa o mesmo vocabulário de template do resto da receita
+// (scaffold.Data, {{.ProjectName}}) — RF-01: um struct à parte com {{.Name}}
+// convivia, no mesmo perfil, com {{.ProjectName}} nos arquivos de scaffold e
+// no gitignore_stack, e ensinava a variável errada a quem copiava o padrão
+// mais comum do arquivo.
 func renderCreateStep(step, projectName string) (string, error) {
 	t, err := template.New("create").Parse(step)
 	if err != nil {
 		return "", err
 	}
 	var buf bytes.Buffer
-	if err := t.Execute(&buf, struct{ Name string }{Name: projectName}); err != nil {
+	if err := t.Execute(&buf, scaffold.Data{ProjectName: projectName}); err != nil {
 		return "", err
 	}
 	return buf.String(), nil

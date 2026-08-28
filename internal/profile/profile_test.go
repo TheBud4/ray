@@ -189,6 +189,26 @@ func TestLoadInvalid(t *testing.T) {
 			t.Errorf("Load() error = %q, want it to contain \"parsing\"", err.Error())
 		}
 	})
+
+	// RF-03: uma chave de topo errada ("scaffhold" em vez de "scaffold") não
+	// pode virar Scaffold{} vazia em silêncio — a receita "funcionava" e
+	// simplesmente não escrevia nenhum arquivo, sem nada avisando por quê.
+	t.Run("unknown top-level key", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "typo.yaml")
+		body := "name: typo\ndescription: test\nscaffhold:\n  files:\n    - path: CLAUDE.md\n"
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load() = nil, want error for an unknown top-level key")
+		}
+		if !strings.Contains(err.Error(), "scaffhold") {
+			t.Errorf("Load() error = %q, want it to name the unknown field", err.Error())
+		}
+	})
 }
 
 func writeTestProfile(t *testing.T, profilesDir, name string) {

@@ -102,7 +102,7 @@ func TestDefaultsGitignoreStack(t *testing.T) {
 
 func TestDefaultsCreateCommands(t *testing.T) {
 	want := map[string]string{
-		"go":      "go mod init {{.Name}}",
+		"go":      "go mod init {{.ProjectName}}",
 		"web":     "npx create-next-app@latest . --yes",
 		"flutter": "flutter create .",
 	}

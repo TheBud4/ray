@@ -60,7 +60,7 @@ func TestRunNewCreatesGitInitsAndRunsInitAI(t *testing.T) {
 	t.Chdir(sandbox)
 
 	home := newTestHome(t)
-	writeTestProfile(t, home.ProfilesDir, newTestProfile([]string{"echo {{.Name}}"}))
+	writeTestProfile(t, home.ProfilesDir, newTestProfile([]string{"echo {{.ProjectName}}"}))
 
 	fr := &runner.FakeRunner{}
 	initOpts := initai.Options{}
@@ -104,7 +104,7 @@ func TestRunNewDryRunCreatesNothing(t *testing.T) {
 	t.Chdir(sandbox)
 
 	home := newTestHome(t)
-	writeTestProfile(t, home.ProfilesDir, newTestProfile([]string{"echo {{.Name}}"}))
+	writeTestProfile(t, home.ProfilesDir, newTestProfile([]string{"echo {{.ProjectName}}"}))
 
 	fr := &runner.FakeRunner{}
 	initOpts := initai.Options{DryRun: true, Out: &bytes.Buffer{}}
@@ -116,6 +116,29 @@ func TestRunNewDryRunCreatesNothing(t *testing.T) {
 	if _, statErr := os.Stat(filepath.Join(sandbox, "myproj")); !os.IsNotExist(statErr) {
 		t.Errorf("stat(myproj) err = %v, want IsNotExist — dry-run must not create the project dir", statErr)
 	}
+}
+
+// O create: usa o mesmo vocabulário do resto da receita (scaffold.Data,
+// {{.ProjectName}}) — não um struct à parte com {{.Name}}. Ver RF-01: o
+// go.yaml de fábrica ensinava os dois lados dessa inconsistência.
+func TestRunNewCreateStepUsesProjectName(t *testing.T) {
+	sandbox := t.TempDir()
+	t.Chdir(sandbox)
+
+	home := newTestHome(t)
+	writeTestProfile(t, home.ProfilesDir, newTestProfile([]string{"echo {{.ProjectName}}"}))
+
+	fr := &runner.FakeRunner{}
+	if _, err := runNew(fr, allFound, home.ProfilesDir, "test", "myproj", false, false, initai.Options{}, home); err != nil {
+		t.Fatalf("runNew() error = %v", err)
+	}
+
+	for _, c := range fr.Calls {
+		if c.String() == "echo myproj" {
+			return
+		}
+	}
+	t.Errorf("Calls = %v, want the rendered create step to have run", fr.Calls)
 }
 
 func TestRunNewNoGitSkipsGitInit(t *testing.T) {
@@ -176,12 +199,31 @@ func TestRunNewUnknownProfileLeavesNoDirBehind(t *testing.T) {
 	}
 }
 
+// Um create: com template inválido é um erro cedo o bastante para não deixar
+// rastro — mesmo raciocínio do TestRunNewUnknownProfileLeavesNoDirBehind
+// (f1520b1), aplicado a outro gatilho: RF-02.
+func TestRunNewBadCreateTemplateLeavesNoDirBehind(t *testing.T) {
+	sandbox := t.TempDir()
+	t.Chdir(sandbox)
+
+	home := newTestHome(t)
+	writeTestProfile(t, home.ProfilesDir, newTestProfile([]string{"cargo init --name {{.Bogus}}"}))
+
+	_, err := runNew(&runner.FakeRunner{}, allFound, home.ProfilesDir, "test", "myproj", false, false, initai.Options{}, home)
+	if err == nil {
+		t.Fatal("runNew() = nil error, want error for a create step with an invalid template field")
+	}
+	if _, statErr := os.Stat(filepath.Join(sandbox, "myproj")); !os.IsNotExist(statErr) {
+		t.Errorf("stat(myproj) err = %v, want IsNotExist — a bad create: template must not leave the project dir behind", statErr)
+	}
+}
+
 func TestRunNewAbortsOnFailedCreateStepBeforeGitOrInitAI(t *testing.T) {
 	sandbox := t.TempDir()
 	t.Chdir(sandbox)
 
 	home := newTestHome(t)
-	writeTestProfile(t, home.ProfilesDir, newTestProfile([]string{"false-cmd {{.Name}}"}))
+	writeTestProfile(t, home.ProfilesDir, newTestProfile([]string{"false-cmd {{.ProjectName}}"}))
 
 	fr := &runner.FakeRunner{Results: map[string]runner.Result{
 		"false-cmd myproj": {ExitCode: 1},

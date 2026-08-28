@@ -99,14 +99,22 @@ func LoadByName(profilesDir, name string) (*Profile, error) {
 	return Load(path)
 }
 
-// Load lê e valida a receita em path.
+// Load lê e valida a receita em path. Decodificação estrita (RF-03): uma
+// chave de topo desconhecida — "scaffhold" por "scaffold", por exemplo — vira
+// erro em vez de silenciosamente virar uma seção vazia. Sem isso a receita
+// "funcionava" e simplesmente não escrevia nenhum arquivo, sem nada indicando
+// o motivo.
 func Load(path string) (*Profile, error) {
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
+	defer f.Close()
+
+	dec := yaml.NewDecoder(f)
+	dec.KnownFields(true)
 	var p Profile
-	if err := yaml.Unmarshal(data, &p); err != nil {
+	if err := dec.Decode(&p); err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", path, err)
 	}
 	if err := p.Validate(); err != nil {
