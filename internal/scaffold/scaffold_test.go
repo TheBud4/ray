@@ -215,6 +215,27 @@ func TestWriteFilesInvalidPathLeavesNoFileBehind(t *testing.T) {
 	}
 }
 
+// TestWriteFilesInvalidPathLeavesNoFileBehind só cobre um path sem entrada em
+// templateFor, que falha no primeiro loop. Um `template:` explícito que
+// aponta para um nome que não existe em lugar nenhum só era pego dentro do
+// segundo loop (em render), depois que arquivos anteriores já tinham sido
+// gravados — o mesmo problema que RF-04 dizia ter fechado.
+func TestWriteFilesUnresolvableCustomTemplateLeavesNoFileBehind(t *testing.T) {
+	target := t.TempDir()
+	files := []profile.ScaffoldFile{
+		{Path: "CLAUDE.md"},
+		{Path: "SECOND.md", Template: "does-not-exist.tmpl"},
+	}
+
+	if _, err := WriteFiles(files, Options{Target: target}); err == nil {
+		t.Fatal("WriteFiles() = nil error, want error for the unresolvable custom template")
+	}
+
+	if _, statErr := os.Stat(filepath.Join(target, "CLAUDE.md")); !os.IsNotExist(statErr) {
+		t.Errorf("stat(CLAUDE.md) err = %v, want IsNotExist — a later unresolvable template must not leave earlier files behind", statErr)
+	}
+}
+
 // RF-05: um template customizado ausente (nome novo, nunca criado em nenhum
 // dos dois lugares) tem que apontar para o overlay esperado — não vazar o
 // erro cru do embed.FS.

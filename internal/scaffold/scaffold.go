@@ -89,6 +89,12 @@ func WriteFiles(files []profile.ScaffoldFile, opts Options) (Result, error) {
 				return Result{}, fmt.Errorf("scaffold: no template for path %q", f.Path)
 			}
 		}
+		// Não basta ter um nome — precisa existir em disco (overlay ou
+		// embed), senão um `template:` customizado errado só falhava no
+		// loop de escrita abaixo, com os paths anteriores já gravados.
+		if _, err := readTemplate(tmplName, opts.TemplatesDir); err != nil {
+			return Result{}, err
+		}
 		tmplNames[i] = tmplName
 	}
 
