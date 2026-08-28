@@ -117,6 +117,11 @@ func (f flippingLooker) Look(name string) bool {
 	return m[name]
 }
 
+// Editado para RF-06: o teste original esperava que headroom/graphify
+// rodassem seus Fix na mesma passada em que uv acabou de ser instalado — mas
+// isso falha de verdade fora do fake, porque o PATH do processo não muda
+// depois do script curl|sh. O contrato novo é pular os dois nesta passada;
+// ver TestRunDoctorFixSkipsDependentsWhenUVWasJustInstalled.
 func TestRunDoctorFixInstallsAndRechecks(t *testing.T) {
 	fr := &runner.FakeRunner{}
 	l := flippingLooker{
@@ -131,19 +136,70 @@ func TestRunDoctorFixInstallsAndRechecks(t *testing.T) {
 		t.Fatalf("runDoctor() error = %v, want nil after fix", err)
 	}
 
-	wantFixed := map[string]bool{
-		"sh -c curl -LsSf https://astral.sh/uv/install.sh | sh": false,
-		"uv tool install headroom-ai[mcp]":                      false,
-		"uv tool install graphifyy":                             false,
-	}
+	wantCalled := "sh -c curl -LsSf https://astral.sh/uv/install.sh | sh"
+	found := false
 	for _, c := range fr.Calls {
-		if _, ok := wantFixed[c.String()]; ok {
-			wantFixed[c.String()] = true
+		if c.String() == wantCalled {
+			found = true
+		}
+		if c.Name == "uv" {
+			t.Errorf("Calls = %v, want no `uv tool install ...` call in the same pass uv was just installed", fr.Calls)
 		}
 	}
-	for cmdStr, called := range wantFixed {
+	if !found {
+		t.Errorf("expected fix command %q to run, but it did not (Calls = %v)", wantCalled, fr.Calls)
+	}
+}
+
+// Depois de instalar o uv, rodar `uv tool install ...` no mesmo processo
+// falharia com "executable file not found" — o PATH do processo Go não muda
+// por um script curl|sh ter rodado num subshell. runDoctor pula headroom e
+// graphify nesta passada e explica por quê, em vez de deixá-los falhar com
+// um erro de exec cru.
+func TestRunDoctorFixSkipsDependentsWhenUVWasJustInstalled(t *testing.T) {
+	l := stubLooker{"npx": true, "node": true} // uv, headroom, graphify ausentes
+	fr := &runner.FakeRunner{}
+	var out bytes.Buffer
+
+	_ = runDoctor(l, fr, true, &out)
+
+	for _, c := range fr.Calls {
+		if c.Name == "uv" {
+			t.Errorf("Calls = %v, want no `uv tool install ...` call in the same pass uv was just installed", fr.Calls)
+		}
+	}
+	got := out.String()
+	for _, name := range []string{"headroom", "graphify"} {
+		if !strings.Contains(got, "skip fix "+name) {
+			t.Errorf("output = %q, want a skip message naming %s", got, name)
+		}
+	}
+	if !strings.Contains(got, "ray doctor --fix") {
+		t.Errorf("output = %q, want it to tell the user to rerun `ray doctor --fix`", got)
+	}
+}
+
+// uv já presente (não corrigido nesta rodada) não tem o problema de PATH: o
+// Fix de headroom/graphify deve rodar normalmente.
+func TestRunDoctorFixRunsDependentsWhenUVWasAlreadyPresent(t *testing.T) {
+	l := stubLooker{"npx": true, "node": true, "python3.10+": true, "uv": true} // headroom, graphify ausentes
+	fr := &runner.FakeRunner{}
+	var out bytes.Buffer
+
+	_ = runDoctor(l, fr, true, &out)
+
+	wantCalled := map[string]bool{
+		"uv tool install headroom-ai[mcp]": false,
+		"uv tool install graphifyy":        false,
+	}
+	for _, c := range fr.Calls {
+		if _, ok := wantCalled[c.String()]; ok {
+			wantCalled[c.String()] = true
+		}
+	}
+	for cmdStr, called := range wantCalled {
 		if !called {
-			t.Errorf("expected fix command %q to run, but it did not (Calls = %v)", cmdStr, fr.Calls)
+			t.Errorf("expected fix command %q to run when uv was already present, but it did not (Calls = %v)", cmdStr, fr.Calls)
 		}
 	}
 }

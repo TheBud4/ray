@@ -44,6 +44,14 @@ func runDoctor(l preflight.Looker, fixRunner runner.Runner, fix bool, out io.Wri
 			}
 			if c.Name == "uv" {
 				uvWasMissing = true
+			} else if uvWasMissing && fixNeedsUV(c.Fix) {
+				// Rodar agora falharia: o script que acabou de instalar o uv
+				// roda num subshell e não muda o PATH deste processo Go —
+				// exec.CommandContext resolveria "uv" contra o PATH herdado
+				// no início do processo e não acharia o binário recém-posto
+				// em disco.
+				fmt.Fprintf(out, "⚠ skip fix %s: needs uv, which was just installed — reopen your shell and run `ray doctor --fix` again\n", c.Name)
+				continue
 			}
 			for _, cmd := range c.Fix {
 				if _, err := fixRunner.Run(context.Background(), cmd); err != nil {
@@ -68,6 +76,17 @@ func runDoctor(l preflight.Looker, fixRunner runner.Runner, fix bool, out io.Wri
 		from = preflight.FromDoctorFix
 	}
 	return &preflight.MissingRequiredError{Missing: missing, From: from}
+}
+
+// fixNeedsUV diz se o Fix de uma checagem invoca o binário uv — é o caso de
+// headroom e graphify, cujo Fix é `uv tool install ...`.
+func fixNeedsUV(fix []runner.Command) bool {
+	for _, cmd := range fix {
+		if cmd.Name == "uv" {
+			return true
+		}
+	}
+	return false
 }
 
 func printDoctorTable(out io.Writer, checks []preflight.Check) {
