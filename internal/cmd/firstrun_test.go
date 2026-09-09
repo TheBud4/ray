@@ -64,10 +64,9 @@ func TestFirstRunInsideAProjectWithoutARecordedProfile(t *testing.T) {
 	}
 }
 
-// RF-07: "ray init ai" sozinho nunca roda — --profile é obrigatório — então a
-// tela mais vista do CLI não pode recomendá-lo como está. Editado para exigir
-// "ray profile list" no meio (o passo que de fato roda e revela os nomes) e
-// "--profile" na sugestão de init ai.
+// Editado de novo — RF-07 seguiu além da mensagem: init ai passou a cair no
+// perfil `base` sem --profile, então o comando original volta a rodar de
+// verdade e a tela recomenda ele puro de novo, sem flag.
 func TestFirstRunOutsideAProjectSuggestsCreatingOne(t *testing.T) {
 	var out bytes.Buffer
 
@@ -76,10 +75,17 @@ func TestFirstRunOutsideAProjectSuggestsCreatingOne(t *testing.T) {
 	}
 	got := out.String()
 	for _, want := range []string{
-		"Next steps:", "ray new go my-app", "ray profile list", "ray init ai --profile", "`ray --help`",
+		"Next steps:", "ray new go my-app", "ray init ai", "`ray --help`",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("output = %q, want it to contain %q", got, want)
+		}
+	}
+	// init ai não exige mais --profile (RF-07): a sugestão não deve mais
+	// carregar a flag nem o desvio por `ray profile list`.
+	for _, unwanted := range []string{"ray init ai --profile", "ray profile list"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("output = %q, want no %q — init ai runs without a profile now", got, unwanted)
 		}
 	}
 }

@@ -8,7 +8,7 @@ package profile
 // internal/raypaths.ComponentsDir() e acrescenta a entrada `name`/`dest` na
 // receita à mão; o default não tem como adivinhar o que já existe lá.
 func Defaults() []Profile {
-	return []Profile{goProfile(), webProfile(), flutterProfile()}
+	return []Profile{goProfile(), webProfile(), flutterProfile(), baseProfile()}
 }
 
 // allIntegrations liga as capacidades (postura default).
@@ -74,4 +74,11 @@ func webProfile() Profile {
 func flutterProfile() Profile {
 	return build("flutter", "Flutter mobile stack", []string{"flutter create ."},
 		[]string{".dart_tool/", "build/"})
+}
+
+// baseProfile é o default de `ray init ai` quando --profile não é passado
+// (RF-07): o ambiente de IA por si só, sem scaffold de nenhuma stack — sem
+// create: (isso é trabalho de `ray new`) e sem linhas extras de gitignore.
+func baseProfile() Profile {
+	return build("base", "Base AI environment, no stack scaffolding", nil, nil)
 }

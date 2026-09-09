@@ -34,9 +34,8 @@ func runFirstRun(l preflight.Looker, target string, out io.Writer) error {
 		fmt.Fprintln(out, "  ray status            diagnose the environment")
 	} else {
 		fmt.Fprintln(out, "\nNext steps:")
-		fmt.Fprintln(out, "  ray new go my-app             new project, environment included")
-		fmt.Fprintln(out, "  ray profile list              see available profiles")
-		fmt.Fprintln(out, "  ray init ai --profile <name>  environment only, in this directory")
+		fmt.Fprintln(out, "  ray new go my-app     new project, environment included")
+		fmt.Fprintln(out, "  ray init ai           environment only, in this directory")
 	}
 
 	fmt.Fprintln(out, "\n`ray --help` lists every command")

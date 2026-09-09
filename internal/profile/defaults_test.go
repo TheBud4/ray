@@ -2,6 +2,23 @@ package profile
 
 import "testing"
 
+// RF-07: `ray init ai` deixou de exigir --profile e passou a cair no
+// perfil `base` quando nenhum é passado — este precisa existir de fábrica,
+// com o scaffold universal (mesmo build() dos outros) e nada específico de
+// stack.
+func TestDefaultsIncludesBaseProfile(t *testing.T) {
+	defs := Defaults()
+	if len(defs) != 4 {
+		t.Fatalf("len(Defaults()) = %d, want 4 (go, web, flutter, base)", len(defs))
+	}
+	for _, p := range defs {
+		if p.Name == "base" {
+			return
+		}
+	}
+	t.Errorf("Defaults() = %v, want one profile named %q", defs, "base")
+}
+
 func TestDefaultsValidate(t *testing.T) {
 	for _, p := range Defaults() {
 		p := p
@@ -74,11 +91,14 @@ func TestDefaultsScaffoldFiles(t *testing.T) {
 	}
 }
 
+// base (RF-07: init ai independente de profile) não tem stack — Create e
+// GitignoreStack vazios por design, não um esquecimento.
 func TestDefaultsGitignoreStack(t *testing.T) {
 	want := map[string][]string{
 		"go":      {"/{{.ProjectName}}"},
 		"web":     {"node_modules/", ".next/"},
 		"flutter": {".dart_tool/", "build/"},
+		"base":    {},
 	}
 
 	for _, p := range Defaults() {
@@ -100,17 +120,26 @@ func TestDefaultsGitignoreStack(t *testing.T) {
 	}
 }
 
+// base (RF-07) não roda create: nenhum — quem quer o scaffold de um projeto
+// de verdade usa `ray new <stack>`, não `init ai`.
 func TestDefaultsCreateCommands(t *testing.T) {
 	want := map[string]string{
 		"go":      "go mod init {{.ProjectName}}",
 		"web":     "npx create-next-app@latest . --yes",
 		"flutter": "flutter create .",
+		"base":    "",
 	}
 
 	for _, p := range Defaults() {
 		wantCmd, ok := want[p.Name]
 		if !ok {
 			t.Fatalf("unexpected default profile %q", p.Name)
+		}
+		if wantCmd == "" {
+			if len(p.Create) != 0 {
+				t.Errorf("profile %q Create = %v, want empty", p.Name, p.Create)
+			}
+			continue
 		}
 		if len(p.Create) != 1 || p.Create[0] != wantCmd {
 			t.Errorf("profile %q Create = %v, want [%q]", p.Name, p.Create, wantCmd)

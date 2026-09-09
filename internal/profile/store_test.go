@@ -55,8 +55,9 @@ func TestEnsureDirIdempotentNoOverwrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 3 {
-		t.Errorf("dir has %d entries, want 3 (go/web/flutter)", len(entries))
+	// RF-07 acrescentou o perfil `base` (init ai sem --profile) aos defaults.
+	if len(entries) != 4 {
+		t.Errorf("dir has %d entries, want 4 (go/web/flutter/base)", len(entries))
 	}
 }
 
@@ -113,11 +114,12 @@ func TestList(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(entries) != 3 {
-			t.Fatalf("List() returned %d entries, want 3", len(entries))
+		// RF-07 acrescentou o perfil `base` aos defaults.
+		if len(entries) != 4 {
+			t.Fatalf("List() returned %d entries, want 4", len(entries))
 		}
-		names := []string{entries[0].Name, entries[1].Name, entries[2].Name}
-		want := []string{"flutter", "go", "web"}
+		names := []string{entries[0].Name, entries[1].Name, entries[2].Name, entries[3].Name}
+		want := []string{"base", "flutter", "go", "web"}
 		for i, n := range names {
 			if n != want[i] {
 				t.Errorf("entries[%d].Name = %q, want %q (order: %v)", i, n, want[i], names)
@@ -146,8 +148,9 @@ func TestList(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(entries) != 4 {
-			t.Fatalf("List() returned %d entries, want 4 (broken.yaml included)", len(entries))
+		// RF-07 acrescentou o perfil `base` aos defaults.
+		if len(entries) != 5 {
+			t.Fatalf("List() returned %d entries, want 5 (broken.yaml included)", len(entries))
 		}
 
 		var broken *Entry
