@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/TheBud4/ray/internal/initai"
 	"github.com/TheBud4/ray/internal/preflight"
+	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/raypaths"
 	"github.com/TheBud4/ray/internal/runner"
 )
@@ -35,6 +37,9 @@ func newInitAICmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if flagProfile == "" {
+				return missingProfileError(home.ProfilesDir)
+			}
 
 			checkRunner := runner.ExecRunner{}
 			looker := preflight.RunnerLooker{Runner: checkRunner}
@@ -48,8 +53,32 @@ func newInitAICmd() *cobra.Command {
 	c.Flags().BoolVar(&flagForce, "force", false, "regenerate scaffold files that already exist (never touches .claude/handoff.md)")
 	c.Flags().BoolVar(&flagNoGlobal, "no-global", false, "skip all install-once global steps")
 	c.Flags().BoolVar(&flagReinstallGlobal, "reinstall-global", false, "ignore state.yaml and reinstall global steps")
-	_ = c.MarkFlagRequired("profile")
 	return c
+}
+
+// missingProfileError substitui o "required flag(s) not set" cru do Cobra: a
+// tela de `ray` sem subcomando recomenda `ray init ai` sem --profile, e o
+// erro anterior não dizia quais nomes existiam. Popula profilesDir com os
+// perfis de fábrica primeiro (mesma chamada que `ray profile list` já faz),
+// então lista o que há para escolher.
+func missingProfileError(profilesDir string) error {
+	if err := profile.EnsureDir(profilesDir); err != nil {
+		return fmt.Errorf("--profile is required, and listing the available ones failed: %w", err)
+	}
+	entries, err := profile.List(profilesDir)
+	if err != nil {
+		return fmt.Errorf("--profile is required, and listing the available ones failed: %w", err)
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "--profile is required. Available profiles in %s:\n", profilesDir)
+	for _, e := range entries {
+		if e.Unreadable {
+			continue
+		}
+		fmt.Fprintf(&b, "  %s — %s\n", e.Name, e.Description)
+	}
+	fmt.Fprint(&b, "Run `ray init ai --profile <name>`.")
+	return errors.New(b.String())
 }
 
 // buildInitAIOptions traduz os flags do comando em initai.Options.

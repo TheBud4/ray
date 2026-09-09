@@ -67,6 +67,35 @@ func TestInitAiRejectsRemovedLevelFlag(t *testing.T) {
 	}
 }
 
+// RF-07: a tela de abertura recomenda `ray init ai` sem --profile, e o
+// comando falhava com o "required flag(s)" cru do Cobra — sem dizer quais
+// nomes existem. --profile deixou de ser MarkFlagRequired; a falta dele agora
+// é checada em RunE, listando os perfis de ~/.ray/profiles (populando com os
+// de fábrica primeiro, como `ray profile list` já faz).
+func TestInitAiWithoutProfileListsAvailableProfiles(t *testing.T) {
+	resetInitAIFlags(t)
+	t.Setenv("RAY_HOME", t.TempDir())
+
+	c := newInitAICmd()
+	c.SetArgs([]string{t.TempDir()})
+	c.SetOut(&bytes.Buffer{})
+	c.SetErr(&bytes.Buffer{})
+
+	err := c.Execute()
+	if err == nil {
+		t.Fatal("Execute() error = nil, want error when --profile is missing")
+	}
+	got := err.Error()
+	if !strings.Contains(got, "--profile") {
+		t.Errorf("error = %q, want it to name --profile", got)
+	}
+	for _, name := range []string{"go", "web", "flutter"} {
+		if !strings.Contains(got, name) {
+			t.Errorf("error = %q, want it to list the default profile %q", got, name)
+		}
+	}
+}
+
 func TestRunInitAIPrintsSummaryAndErrorsOnFailure(t *testing.T) {
 	base := t.TempDir()
 	profilesDir := filepath.Join(base, "profiles")
