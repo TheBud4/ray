@@ -488,6 +488,165 @@ func TestRunKeepsEditedComponentInSkippedAfterScaffold(t *testing.T) {
 	}
 }
 
+// Regressão da política: componente intacto acompanha a fonte. Sem isto a
+// correção de preservar edição poderia virar "nunca atualiza".
+func TestRunTwiceRefreshesUneditedComponentFromUpdatedSource(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "s")
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+	opts := Options{Profile: "test", Target: target, Out: &bytes.Buffer{}}
+
+	if _, err := Run(&runner.FakeRunner{}, allFound, opts, home); err != nil {
+		t.Fatalf("first Run() error = %v", err)
+	}
+
+	srcDir := filepath.Join(home.ComponentsDir, "s")
+	const updated = "# updated upstream"
+	if err := os.WriteFile(filepath.Join(srcDir, "SKILL.md"), []byte(updated), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "NEW.md"), []byte("new"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Run(&runner.FakeRunner{}, allFound, opts, home); err != nil {
+		t.Fatalf("second Run() error = %v", err)
+	}
+
+	got, err := os.ReadFile(filepath.Join(target, ".claude", "skills", "s", "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != updated {
+		t.Errorf("SKILL.md = %q, want the updated source %q", got, updated)
+	}
+	if _, err := os.Stat(filepath.Join(target, ".claude", "skills", "s", "NEW.md")); err != nil {
+		t.Errorf("NEW.md missing after refresh: %v", err)
+	}
+	fresh, err := store.HashTree(srcDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pristine, _ := store.New(home.StoreDir).PristineHash(target, "s"); pristine != fresh {
+		t.Errorf("PristineHash() = %q, want the new source hash %q", pristine, fresh)
+	}
+}
+
+// Um arquivo removido da fonte não pode sobrar no destino de um componente
+// intacto: a cópia é limpa, e é isso que mantém disco == fonte.
+func TestRunTwiceDropsFileRemovedFromSourceOfUneditedComponent(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "s")
+	srcDir := filepath.Join(home.ComponentsDir, "s")
+	if err := os.WriteFile(filepath.Join(srcDir, "OLD.md"), []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+	opts := Options{Profile: "test", Target: target, Out: &bytes.Buffer{}}
+
+	if _, err := Run(&runner.FakeRunner{}, allFound, opts, home); err != nil {
+		t.Fatalf("first Run() error = %v", err)
+	}
+	if err := os.Remove(filepath.Join(srcDir, "OLD.md")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Run(&runner.FakeRunner{}, allFound, opts, home); err != nil {
+		t.Fatalf("second Run() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(target, ".claude", "skills", "s", "OLD.md")); !os.IsNotExist(err) {
+		t.Errorf("OLD.md still on disk after being removed from the source (err = %v)", err)
+	}
+}
+
+func TestRunForceOverwritesEditedComponentAndResetsPristine(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "s")
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+	opts := Options{Profile: "test", Target: target, Out: &bytes.Buffer{}}
+
+	if _, err := Run(&runner.FakeRunner{}, allFound, opts, home); err != nil {
+		t.Fatalf("first Run() error = %v", err)
+	}
+	skill := filepath.Join(target, ".claude", "skills", "s", "SKILL.md")
+	if err := os.WriteFile(skill, []byte("# edited by the user"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	opts.Force = true
+	if _, err := Run(&runner.FakeRunner{}, allFound, opts, home); err != nil {
+		t.Fatalf("forced Run() error = %v", err)
+	}
+
+	got, err := os.ReadFile(skill)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "# s" {
+		t.Errorf("SKILL.md = %q, want the source content %q after --force", got, "# s")
+	}
+	fresh, err := store.HashTree(filepath.Join(home.ComponentsDir, "s"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pristine, _ := store.New(home.StoreDir).PristineHash(target, "s"); pristine != fresh {
+		t.Errorf("PristineHash() = %q, want %q after --force", pristine, fresh)
+	}
+}
+
+// Alvo clonado: o destino existe mas não há linha-base (ela mora no store, que
+// não viaja com o repo). Igual à fonte → copia; diferente → ambíguo, preserva.
+func TestRunWithoutPristineKeepsDivergentComponentAndCopiesIdenticalOne(t *testing.T) {
+	cases := []struct {
+		name     string
+		onDisk   string
+		wantDisk string
+	}{
+		{"divergent is preserved", "# edited by the user", "# edited by the user"},
+		{"identical is refreshed", "# s", "# s"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			home := newHome(t)
+			seedComponent(t, home, "s")
+			writeProfile(t, home.ProfilesDir, testProfile())
+			target := t.TempDir()
+			dest := filepath.Join(target, ".claude", "skills", "s")
+			if err := os.MkdirAll(dest, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dest, "SKILL.md"), []byte(tc.onDisk), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			opts := Options{Profile: "test", Target: target, Out: &bytes.Buffer{}}
+			sum, err := Run(&runner.FakeRunner{}, allFound, opts, home)
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+
+			got, err := os.ReadFile(filepath.Join(dest, "SKILL.md"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != tc.wantDisk {
+				t.Errorf("SKILL.md = %q, want %q", got, tc.wantDisk)
+			}
+			_, hasPristine := store.New(home.StoreDir).PristineHash(target, "s")
+			preserved := slices.Contains(sum.Skipped, "s")
+			if tc.onDisk != "# s" {
+				if !preserved || hasPristine {
+					t.Errorf("preserved = %v, hasPristine = %v; want preserved and no baseline invented", preserved, hasPristine)
+				}
+			} else if preserved || !hasPristine {
+				t.Errorf("preserved = %v, hasPristine = %v; want refreshed with a baseline recorded", preserved, hasPristine)
+			}
+		})
+	}
+}
+
 // Um segundo componente, com Dest diferente (.claude/agents em vez de
 // .claude/skills), prova que a cópia local não está amarrada a um único
 // destino fixo.
