@@ -457,6 +457,37 @@ func TestRunTwicePreservesEditedComponentAndItsPristine(t *testing.T) {
 	}
 }
 
+// O componente preservado precisa aparecer em Skipped: o passo do scaffold
+// atribuía o próprio Skipped por cima e descartava o que o passo dos
+// componentes já tinha registrado.
+func TestRunKeepsEditedComponentInSkippedAfterScaffold(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "s")
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+	opts := Options{Profile: "test", Target: target, Out: &bytes.Buffer{}}
+
+	if _, err := Run(&runner.FakeRunner{}, allFound, opts, home); err != nil {
+		t.Fatalf("first Run() error = %v", err)
+	}
+	skill := filepath.Join(target, ".claude", "skills", "s", "SKILL.md")
+	if err := os.WriteFile(skill, []byte("# edited by the user"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sum, err := Run(&runner.FakeRunner{}, allFound, opts, home)
+	if err != nil {
+		t.Fatalf("second Run() error = %v", err)
+	}
+	if !slices.Contains(sum.Skipped, "s") {
+		t.Errorf("Skipped = %v, want it to list the preserved component %q", sum.Skipped, "s")
+	}
+	// O scaffold também pula o que já existe: os dois conjuntos se somam.
+	if !slices.Contains(sum.Skipped, "CLAUDE.md") {
+		t.Errorf("Skipped = %v, want the scaffold's own skip (CLAUDE.md) kept too", sum.Skipped)
+	}
+}
+
 // Um segundo componente, com Dest diferente (.claude/agents em vez de
 // .claude/skills), prova que a cópia local não está amarrada a um único
 // destino fixo.

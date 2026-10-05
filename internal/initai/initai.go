@@ -258,6 +258,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		pristineHash, hasPristine := st.PristineHash(target, c.Name)
 		overwrite, reason := store.DecideOverwrite(opts.Force, onDiskErr == nil, onDiskHash, freshHash, pristineHash, hasPristine)
 		if !overwrite {
+			sum.Skipped = append(sum.Skipped, c.Name)
 			sum.Warnings = append(sum.Warnings, fmt.Sprintf("%s: %s", c.Name, reason))
 			continue
 		}
@@ -322,9 +323,10 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		return Summary{}, err
 	}
 	// Acumula em vez de atribuir: o passo 8 já pode ter posto `.mcp.json` aqui,
-	// e atribuir o descartaria em silêncio. Os passos 11 e 12 já acumulavam.
+	// e o 7b já pode ter posto componentes preservados em Skipped; atribuir
+	// os descartaria em silêncio. Os passos 11 e 12 já acumulavam.
 	sum.Created = append(sum.Created, res.Created...)
-	sum.Skipped = res.Skipped
+	sum.Skipped = append(sum.Skipped, res.Skipped...)
 
 	// 11. .gitignore (I1) — regra-mãe: conteúdo de IA vendorizado é
 	// commitável, runtime/segredos nunca são.
