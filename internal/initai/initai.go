@@ -242,14 +242,10 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		}
 
 		destDir := filepath.Join(target, c.Dest, c.Name)
-		if opts.DryRun {
-			fmt.Fprintf(out, "+ copy %s -> %s\n", c.Name, destDir)
-			sum.Installed = append(sum.Installed, c.Name)
-			continue
-		}
 
 		// Edição local do usuário é preservada pela mesma política do
-		// `ray update`: só sobrescreve se o destino ainda é o pristino.
+		// `ray update`: só sobrescreve se o destino ainda é o pristino. A
+		// decisão é só leitura, então vale igual para o dry-run.
 		freshHash, err := store.HashTree(srcDir)
 		if err != nil {
 			return Summary{}, err
@@ -258,8 +254,17 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		pristineHash, hasPristine := st.PristineHash(target, c.Name)
 		overwrite, reason := store.DecideOverwrite(opts.Force, onDiskErr == nil, onDiskHash, freshHash, pristineHash, hasPristine)
 		if !overwrite {
+			if opts.DryRun {
+				fmt.Fprintf(out, "+ preserve %s (edited locally)\n", c.Name)
+			}
 			sum.Skipped = append(sum.Skipped, c.Name)
 			sum.Warnings = append(sum.Warnings, fmt.Sprintf("%s: %s", c.Name, reason))
+			continue
+		}
+
+		if opts.DryRun {
+			fmt.Fprintf(out, "+ copy %s -> %s\n", c.Name, destDir)
+			sum.Installed = append(sum.Installed, c.Name)
 			continue
 		}
 

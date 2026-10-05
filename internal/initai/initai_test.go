@@ -647,6 +647,67 @@ func TestRunWithoutPristineKeepsDivergentComponentAndCopiesIdenticalOne(t *testi
 	}
 }
 
+// O dry-run tem de contar a mesma história que a execução real: componente
+// editado aparece como preservado, não como cópia, e nada é gravado.
+func TestRunDryRunReportsPreserveForEditedComponentAndCopyForUneditedOne(t *testing.T) {
+	cases := []struct {
+		name       string
+		edit       bool
+		wantOut    string
+		notWantOut string
+		wantSkip   bool
+	}{
+		{"edited is preserved", true, "+ preserve s (edited locally)", "+ copy s", true},
+		{"unedited is copied", false, "+ copy s", "+ preserve s", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			home := newHome(t)
+			seedComponent(t, home, "s")
+			writeProfile(t, home.ProfilesDir, testProfile())
+			target := t.TempDir()
+			if _, err := Run(&runner.FakeRunner{}, allFound, Options{Profile: "test", Target: target, Out: &bytes.Buffer{}}, home); err != nil {
+				t.Fatalf("first Run() error = %v", err)
+			}
+			skill := filepath.Join(target, ".claude", "skills", "s", "SKILL.md")
+			wantDisk := "# s"
+			if tc.edit {
+				wantDisk = "# edited by the user"
+				if err := os.WriteFile(skill, []byte(wantDisk), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			// A fonte muda, para que "copiar" tivesse efeito visível se executasse.
+			if err := os.WriteFile(filepath.Join(home.ComponentsDir, "s", "SKILL.md"), []byte("# new upstream"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			pristineBefore, _ := store.New(home.StoreDir).PristineHash(target, "s")
+
+			var out bytes.Buffer
+			sum, err := Run(&runner.FakeRunner{}, allFound, Options{Profile: "test", Target: target, DryRun: true, Out: &out}, home)
+			if err != nil {
+				t.Fatalf("dry-run error = %v", err)
+			}
+
+			if !strings.Contains(out.String(), tc.wantOut) {
+				t.Errorf("output = %q, want it to contain %q", out.String(), tc.wantOut)
+			}
+			if strings.Contains(out.String(), tc.notWantOut) {
+				t.Errorf("output = %q, must not contain %q", out.String(), tc.notWantOut)
+			}
+			if got := slices.Contains(sum.Skipped, "s"); got != tc.wantSkip {
+				t.Errorf("Skipped = %v, want component skipped = %v", sum.Skipped, tc.wantSkip)
+			}
+			if got, _ := os.ReadFile(skill); string(got) != wantDisk {
+				t.Errorf("SKILL.md = %q, dry-run must not write (want %q)", got, wantDisk)
+			}
+			if after, _ := store.New(home.StoreDir).PristineHash(target, "s"); after != pristineBefore {
+				t.Errorf("PristineHash() changed under dry-run: %q -> %q", pristineBefore, after)
+			}
+		})
+	}
+}
+
 // Um segundo componente, com Dest diferente (.claude/agents em vez de
 // .claude/skills), prova que a cópia local não está amarrada a um único
 // destino fixo.
