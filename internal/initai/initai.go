@@ -248,6 +248,24 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 			continue
 		}
 
+		// Edição local do usuário é preservada pela mesma política do
+		// `ray update`: só sobrescreve se o destino ainda é o pristino.
+		freshHash, err := store.HashTree(srcDir)
+		if err != nil {
+			return Summary{}, err
+		}
+		onDiskHash, onDiskErr := store.HashTree(destDir)
+		pristineHash, hasPristine := st.PristineHash(target, c.Name)
+		overwrite, reason := store.DecideOverwrite(opts.Force, onDiskErr == nil, onDiskHash, freshHash, pristineHash, hasPristine)
+		if !overwrite {
+			sum.Warnings = append(sum.Warnings, fmt.Sprintf("%s: %s", c.Name, reason))
+			continue
+		}
+
+		// Cópia limpa: remove o destino antes, para não sobrar arquivo órfão.
+		if err := os.RemoveAll(destDir); err != nil && !os.IsNotExist(err) {
+			return Summary{}, err
+		}
 		if err := store.CopyTree(srcDir, destDir); err != nil {
 			sum.Failed = append(sum.Failed, c.Name)
 			continue

@@ -411,6 +411,52 @@ func TestRunWritesPristineHashForCopiedComponent(t *testing.T) {
 	}
 }
 
+// Rodar `init ai` de novo não pode destruir a edição local de um componente:
+// a decisão é a mesma do `ray update` (store.DecideOverwrite), e a linha-base
+// só se move quando o conteúdo é regravado — senão a prova da edição some.
+func TestRunTwicePreservesEditedComponentAndItsPristine(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "s")
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+	opts := Options{Profile: "test", Target: target, Out: &bytes.Buffer{}}
+
+	if _, err := Run(&runner.FakeRunner{}, allFound, opts, home); err != nil {
+		t.Fatalf("first Run() error = %v", err)
+	}
+	st := store.New(home.StoreDir)
+	pristineBefore, ok := st.PristineHash(target, "s")
+	if !ok {
+		t.Fatal("PristineHash() ok = false after first Run")
+	}
+
+	skill := filepath.Join(target, ".claude", "skills", "s", "SKILL.md")
+	const edited = "# edited by the user"
+	if err := os.WriteFile(skill, []byte(edited), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sum, err := Run(&runner.FakeRunner{}, allFound, opts, home)
+	if err != nil {
+		t.Fatalf("second Run() error = %v", err)
+	}
+
+	got, err := os.ReadFile(skill)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != edited {
+		t.Errorf("SKILL.md = %q, want the user's edit %q preserved", got, edited)
+	}
+	pristineAfter, _ := st.PristineHash(target, "s")
+	if pristineAfter != pristineBefore {
+		t.Errorf("PristineHash() = %q after second Run, want it unchanged (%q)", pristineAfter, pristineBefore)
+	}
+	if !slices.ContainsFunc(sum.Warnings, func(w string) bool { return strings.Contains(w, "edited locally") }) {
+		t.Errorf("Warnings = %v, want one explaining the component was edited locally", sum.Warnings)
+	}
+}
+
 // Um segundo componente, com Dest diferente (.claude/agents em vez de
 // .claude/skills), prova que a cópia local não está amarrada a um único
 // destino fixo.
