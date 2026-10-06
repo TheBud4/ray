@@ -76,6 +76,14 @@ func (p *Profile) Validate() error {
 		if strings.TrimSpace(f.Path) == "" {
 			return fmt.Errorf("scaffold file %d: path is required", i)
 		}
+		if err := checkRelativeBelowRoot(f.Path); err != nil {
+			return fmt.Errorf("scaffold file %d: path %w", i, err)
+		}
+		if f.Template != "" {
+			if err := checkRelativeBelowRoot(f.Template); err != nil {
+				return fmt.Errorf("scaffold file %d: template %w", i, err)
+			}
+		}
 	}
 	return nil
 }
@@ -90,6 +98,9 @@ func (c Component) validate() error {
 	if strings.TrimSpace(c.Dest) == "" {
 		return fmt.Errorf("dest is required")
 	}
+	if err := checkRelativeBelowRoot(c.Dest); err != nil {
+		return fmt.Errorf("dest %w", err)
+	}
 	return nil
 }
 
@@ -100,6 +111,21 @@ func (c Component) validate() error {
 func checkSingleSegment(v string) error {
 	if v == "." || v == ".." || strings.ContainsAny(v, `/\`) || strings.IndexFunc(v, unicode.IsControl) >= 0 {
 		return fmt.Errorf(`must be a single path element (no separators, ".", ".." or control characters)`)
+	}
+	return nil
+}
+
+// checkRelativeBelowRoot recusa um caminho que não fique estritamente abaixo
+// da raiz a que é relativo: absoluto, ou que, depois de limpo, é a própria
+// raiz (".") ou sobe dela (".." ou "../..."). Vale o valor limpo, então
+// "a/../b" é válido e "a/.." (que vira ".") não.
+func checkRelativeBelowRoot(v string) error {
+	if filepath.IsAbs(v) || strings.HasPrefix(v, "/") || strings.HasPrefix(v, `\`) {
+		return fmt.Errorf("must be a relative path below its root, not absolute")
+	}
+	c := filepath.ToSlash(filepath.Clean(v))
+	if c == "." || c == ".." || strings.HasPrefix(c, "../") {
+		return fmt.Errorf(`must be a relative path below its root (not ".", ".." or escaping it)`)
 	}
 	return nil
 }

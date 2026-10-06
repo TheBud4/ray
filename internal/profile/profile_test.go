@@ -126,6 +126,51 @@ func TestValidateRejectsNameThatIsNotASingleSegment(t *testing.T) {
 	}
 }
 
+// Dest, Path e Template também viram caminho. Têm de ser relativos e ficar
+// abaixo da raiz a que se referem (projeto ou overlay de templates): nada de
+// caminho absoluto, de `..` que sobe, nem de `.` que é a própria raiz.
+func TestValidateRejectsPathsThatEscapeTheirRoot(t *testing.T) {
+	bad := []string{"..", "../x", "a/../..", "a/../../x", ".", "./", "/abs", "/", "a/.."}
+	for _, v := range bad {
+		t.Run("dest "+v, func(t *testing.T) {
+			p := &Profile{Name: "ok", Components: []Component{{Name: "c", Dest: v}}}
+			err := p.Validate()
+			if err == nil || !strings.Contains(err.Error(), "component 0") || !strings.Contains(err.Error(), "dest") {
+				t.Errorf("Validate() = %v, want a component dest error", err)
+			}
+		})
+		t.Run("scaffold path "+v, func(t *testing.T) {
+			p := &Profile{Name: "ok", Scaffold: Scaffold{Files: []ScaffoldFile{{Path: v}}}}
+			err := p.Validate()
+			if err == nil || !strings.Contains(err.Error(), "scaffold file 0") || !strings.Contains(err.Error(), "path") {
+				t.Errorf("Validate() = %v, want a scaffold path error", err)
+			}
+		})
+		t.Run("scaffold template "+v, func(t *testing.T) {
+			p := &Profile{Name: "ok", Scaffold: Scaffold{Files: []ScaffoldFile{{Path: "CLAUDE.md", Template: v}}}}
+			err := p.Validate()
+			if err == nil || !strings.Contains(err.Error(), "scaffold file 0") || !strings.Contains(err.Error(), "template") {
+				t.Errorf("Validate() = %v, want a scaffold template error", err)
+			}
+		})
+	}
+}
+
+// Controle: caminhos aninhados e com `..` interno que não escapa continuam
+// válidos, e Template vazio significa "sem template" e é permitido.
+func TestValidateAcceptsRelativePathsBelowTheirRoot(t *testing.T) {
+	for _, v := range []string{".claude/skills", "docs/a/b.md", "a/../b", "CLAUDE.md", ".claude/.ray-profile"} {
+		p := &Profile{
+			Name:       "ok",
+			Components: []Component{{Name: "c", Dest: v}},
+			Scaffold:   Scaffold{Files: []ScaffoldFile{{Path: v, Template: v}, {Path: "x.md"}}},
+		}
+		if err := p.Validate(); err != nil {
+			t.Errorf("Validate() with %q = %v, want nil", v, err)
+		}
+	}
+}
+
 // Controle do teste acima: a regra recusa forma, não vocabulário. Nomes comuns
 // e os perfis de fábrica seguem válidos — inclusive com ponto, hífen e espaço.
 func TestValidateAcceptsOrdinaryNamesAndFactoryProfiles(t *testing.T) {
