@@ -45,6 +45,7 @@ type Options struct {
 type Summary struct {
 	Tools      []string
 	Updated    []string
+	Unchanged  []string
 	Skipped    []string
 	Failed     []string
 	Warnings   []string
@@ -116,6 +117,22 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 		}
 		onDiskHash, onDiskExists := store.LocalState(onDisk)
 		pristineHash, hasPristine := st.PristineHash(target, c.Name)
+
+		// Já é igual ao do upstream: não há o que recopiar. Só a linha-base
+		// pode estar defasada (clone novo, ou edição que coincidiu com o
+		// upstream) — e ela é o que o próximo update e o `ray status` leem.
+		if onDiskExists && onDiskHash != "" && onDiskHash == freshHash {
+			if opts.DryRun {
+				fmt.Fprintf(out, "+ unchanged %s\n", c.Name)
+			} else if !hasPristine || pristineHash != freshHash {
+				if err := st.SetPristine(target, c.Name, freshHash); err != nil {
+					return Summary{}, err
+				}
+			}
+			sum.Unchanged = append(sum.Unchanged, c.Name)
+			continue
+		}
+
 		overwrite, reason := decideOverwrite(opts.Force, onDiskExists, onDiskHash, freshHash, pristineHash, hasPristine)
 
 		if opts.DryRun {

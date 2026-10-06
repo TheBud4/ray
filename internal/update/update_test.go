@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -456,7 +457,7 @@ func TestRunForceOverwritesFork(t *testing.T) {
 	}
 }
 
-func TestRunNewCloneNoPristineMatchesUpstreamOverwrites(t *testing.T) {
+func TestRunNewCloneNoPristineMatchesUpstreamRecordsPristine(t *testing.T) {
 	home := newHome(t)
 	seedComponent(t, home, "# new upstream")
 	writeProfile(t, home.ProfilesDir, testProfile())
@@ -482,19 +483,65 @@ func TestRunNewCloneNoPristineMatchesUpstreamOverwrites(t *testing.T) {
 	if sum.HadFailure {
 		t.Fatalf("HadFailure = true, Failed = %v", sum.Failed)
 	}
-	found := false
-	for _, u := range sum.Updated {
-		if u == coordS {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("Updated = %v, want it to include %q (matches upstream, not a fork)", sum.Updated, coordS)
+	// O conteúdo já é o do upstream: não há o que recopiar, só o pristino a
+	// gravar. Dizer "Updated" aqui afirmaria uma mudança que não houve.
+	if !slices.Contains(sum.Unchanged, coordS) || slices.Contains(sum.Updated, coordS) {
+		t.Errorf("Unchanged = %v, Updated = %v, want %q only in Unchanged (matches upstream, not a fork)", sum.Unchanged, sum.Updated, coordS)
 	}
 
 	st := store.New(home.StoreDir)
 	if _, ok := st.PristineHash(target, coordS); !ok {
 		t.Error("PristineHash() ok = false, want it recorded now that we've confirmed it's not a fork")
+	}
+}
+
+// Componente que já é igual ao do upstream não é recopiado nem listado como
+// atualizado: re-rodar o `update` sem novidade imprimia "Updated" para tudo e
+// regravava os arquivos (mtime novo, watcher e build incremental acordados).
+func TestRunIdenticalComponentIsNeitherRecopiedNorReportedUpdated(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "# same")
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+	writeProfileRecord(t, target, "test")
+
+	skillDir := filepath.Join(target, ".claude", "skills", "s")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(skillDir, "SKILL.md")
+	if err := os.WriteFile(file, []byte("# same"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-48 * time.Hour).Truncate(time.Second)
+	if err := os.Chtimes(file, old, old); err != nil {
+		t.Fatal(err)
+	}
+	hash, err := store.HashTree(skillDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.New(home.StoreDir).SetPristine(target, coordS, hash); err != nil {
+		t.Fatal(err)
+	}
+
+	sum, err := Run(&runner.FakeRunner{}, cleanGitCheck(), Options{Target: target, NoGlobal: true}, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	if !slices.Contains(sum.Unchanged, coordS) {
+		t.Errorf("Unchanged = %v, want it to include %q", sum.Unchanged, coordS)
+	}
+	if slices.Contains(sum.Updated, coordS) {
+		t.Errorf("Updated = %v, want %q out of it: nothing changed", sum.Updated, coordS)
+	}
+	info, err := os.Stat(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.ModTime().Equal(old) {
+		t.Errorf("SKILL.md mtime = %v, want it untouched (%v): the identical component must not be rewritten", info.ModTime(), old)
 	}
 }
 

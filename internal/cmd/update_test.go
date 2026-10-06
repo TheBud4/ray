@@ -113,6 +113,7 @@ func TestPrintUpdateSummaryStaysQuietWhenSomethingHappened(t *testing.T) {
 		sum  update.Summary
 	}{
 		{"updated", update.Summary{Updated: []string{"skills:o/r#s"}}},
+		{"unchanged", update.Summary{Unchanged: []string{"skills:o/r#s"}}},
 		{"skipped", update.Summary{Skipped: []string{"skills:o/r#s"}}},
 		{"failed", update.Summary{Failed: []string{"skills:o/r#s"}}},
 		{"warnings", update.Summary{Warnings: []string{"skills:o/r#s: fork"}}},
