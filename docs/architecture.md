@@ -108,7 +108,7 @@ type Profile struct {
     Integrations Integrations       // headroom, code_graph
     Components   []Component
     Scaffold     Scaffold
-    Create       []string           // templates p/ `ray new`, rodados no novo dir; {{.Name}}
+    Create       []string           // templates p/ `ray new`, rodados no novo dir; {{.ProjectName}}
 }
 type Component struct {
     Name string // subpasta em <ComponentsDir>/<Name>, e nome dentro de Dest no projeto
