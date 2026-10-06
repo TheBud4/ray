@@ -5,14 +5,24 @@ package raypaths
 import (
 	"os"
 	"path/filepath"
+	"strings"
 )
 
-// Home devolve $RAY_HOME se definido, senão <home-do-usuário>/.ray.
+// Home devolve $RAY_HOME se definido, senão <home-do-usuário>/.ray. O
+// $RAY_HOME é normalizado: `~` inicial vira a home do usuário (o shell não o
+// expande dentro de aspas nem num arquivo de env) e um caminho relativo vira
+// absoluto, para o estado não mudar de pasta com o diretório corrente.
 func Home() (string, error) {
-	if h := os.Getenv("RAY_HOME"); h != "" {
-		return h, nil
-	}
 	home, err := os.UserHomeDir()
+	if h := os.Getenv("RAY_HOME"); h != "" {
+		if h == "~" || strings.HasPrefix(h, "~/") || strings.HasPrefix(h, "~"+string(filepath.Separator)) {
+			if err != nil {
+				return "", err
+			}
+			h = filepath.Join(home, h[1:])
+		}
+		return filepath.Abs(h)
+	}
 	if err != nil {
 		return "", err
 	}
