@@ -27,6 +27,12 @@ defasou.
   que se esperava.
 - Efeito em disco se testa com `t.TempDir()`, nunca em caminho real.
 - Processo externo se testa com `FakeRunner`, nunca chamando o binário.
+- **A suíte roda em Linux, macOS e Windows** (job `portability` do CI). Teste que
+  depende do sistema monta o esperado pela plataforma (`filepath.Join`,
+  `t.TempDir`, `runtime.GOOS`, executável com `.exe` no Windows); só pula, com a
+  razão no `t.Skip`, o que não existe lá (bit de execução, permissão de pasta).
+  Pular não é corrigir: cada pulo está listado em `docs/features.md`, "Limites
+  conhecidos no Windows".
 - **`CA-NN` não se aplica aqui.** É a convenção dos projetos que o `ray`
   scaffolda, onde o nome do teste liga o código à spec. O `ray` não trabalha por
   spec numerada; não force a convenção nos testes dele.
