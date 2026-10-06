@@ -54,6 +54,9 @@ type Summary struct {
 	Warnings   []string
 	HadFailure bool
 
+	// DryRun diz que nada foi escrito: as listas acima são o que seria feito.
+	DryRun bool
+
 	// VersionedPaths são os caminhos de topo a passar para `git add`;
 	// InGitRepo diz se faz sentido sugerir git. Ver o rodapé em
 	// internal/cmd/init_ai.go.
@@ -407,6 +410,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	}
 
 	sum.Target = target
+	sum.DryRun = opts.DryRun
 	sum.HadFailure = len(sum.Failed) > 0
 	sum.VersionedPaths = versionedPaths(target, sum.Created)
 	sum.InGitRepo = inGitRepo(target)

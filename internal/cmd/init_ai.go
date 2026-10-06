@@ -133,10 +133,15 @@ func printInitAISummary(out io.Writer, sum initai.Summary) {
 			fmt.Fprintf(out, "  - %s\n", it)
 		}
 	}
-	printList("Installed", sum.Installed)
+	// Em --dry-run nada foi feito: o passado afirmaria o contrário.
+	installed, created, skipped := "Installed", "Created", "Skipped"
+	if sum.DryRun {
+		installed, created, skipped = "Would install", "Would create", "Would skip"
+	}
+	printList(installed, sum.Installed)
 	printList("Failed", sum.Failed)
-	printList("Created", sum.Created)
-	printList("Skipped", sum.Skipped)
+	printList(created, sum.Created)
+	printList(skipped, sum.Skipped)
 	printList("Warnings", sum.Warnings)
 	printNextSteps(out, sum)
 }

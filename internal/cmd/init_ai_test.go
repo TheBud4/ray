@@ -257,3 +257,35 @@ func TestNextStepsHaveNoCdWithoutAKnownTarget(t *testing.T) {
 		t.Errorf("output = %q, want no cd when the target is unknown", out.String())
 	}
 }
+
+// Num --dry-run nada foi escrito, e "Created:" no passado afirmava o contrário.
+// As listas passam a dizer o que seria feito.
+func TestPrintInitAISummaryUsesTheConditionalInDryRun(t *testing.T) {
+	sum := initai.Summary{
+		Installed: []string{"s"},
+		Created:   []string{"CLAUDE.md"},
+		Skipped:   []string{"docs/README.md"},
+	}
+
+	var real bytes.Buffer
+	printInitAISummary(&real, sum)
+	for _, want := range []string{"Installed:", "Created:", "Skipped:"} {
+		if !strings.Contains(real.String(), want) {
+			t.Errorf("real run output = %q, want %q", real.String(), want)
+		}
+	}
+
+	sum.DryRun = true
+	var dry bytes.Buffer
+	printInitAISummary(&dry, sum)
+	for _, want := range []string{"Would install:", "Would create:", "Would skip:"} {
+		if !strings.Contains(dry.String(), want) {
+			t.Errorf("dry-run output = %q, want %q", dry.String(), want)
+		}
+	}
+	for _, bad := range []string{"Installed:", "Created:", "Skipped:"} {
+		if strings.Contains(dry.String(), bad) {
+			t.Errorf("dry-run output = %q, want no past-tense %q", dry.String(), bad)
+		}
+	}
+}
