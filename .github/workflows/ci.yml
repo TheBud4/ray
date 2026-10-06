@@ -14,3 +14,21 @@ jobs:
         with:
           go-version-file: go.mod
       - run: make ci
+
+  # O gate completo (`make ci`) roda no Linux. Aqui só a suíte, em Windows e
+  # macOS: o ray escreve em repositórios de terceiros, e caminho, symlink, modo
+  # de arquivo e fim de linha mudam de sistema para sistema. `fail-fast: false`
+  # para uma falha de um SO não esconder a do outro.
+  portability:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: go build ./...
+      - run: go test ./...
