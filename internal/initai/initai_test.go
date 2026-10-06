@@ -1498,3 +1498,35 @@ func TestRunKnowsTheBaselineAfterTheProjectIsCopiedElsewhere(t *testing.T) {
 		t.Errorf("Warnings = %q, want the decision made from the baseline that travelled, not the no-baseline fallback", reasons)
 	}
 }
+
+// Mesma recusa antecipada, agora para o arquivo que mora no projeto: com a
+// linha-base do projeto ilegível nada é instalado nem copiado, e o erro aponta o
+// arquivo do projeto (não o do store, que segue valendo para o overlay).
+func TestRunStopsBeforeAnyEffectWhenTheProjectBaselineIsUnreadable(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "s")
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+	path := filepath.Join(target, ".claude", ".ray-pristine.yaml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{{{ not yaml"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fr := &runner.FakeRunner{}
+	_, err := Run(fr, allFound, Options{Profile: "test", Target: target, Out: &bytes.Buffer{}}, home)
+	if err == nil {
+		t.Fatal("Run() = nil error, want the unreadable project baseline reported")
+	}
+	if !strings.Contains(err.Error(), path) {
+		t.Errorf("error = %q, want it to name the project's file %s", err, path)
+	}
+	if len(fr.Calls) != 0 {
+		t.Errorf("Calls = %v, want no install before the check", fr.Calls)
+	}
+	if _, err := os.Stat(filepath.Join(target, "CLAUDE.md")); !os.IsNotExist(err) {
+		t.Errorf("CLAUDE.md was written despite the error (stat err = %v)", err)
+	}
+}
