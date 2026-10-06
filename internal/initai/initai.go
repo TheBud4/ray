@@ -3,6 +3,7 @@
 package initai
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -323,12 +324,16 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	}
 
 	// 8. servers MCP.
-	if err := mcp.WriteServers(target, plan.Servers, opts.DryRun, out); err != nil {
+	// .mcp.json é vendorizado (está na whitelist do .gitignore) e, quando muda,
+	// precisa entrar no Created: é dele que sai o `git add` do rodapé de
+	// próximos passos.
+	changed, err := writeChanged(filepath.Join(target, ".mcp.json"), opts.DryRun, out, func(w io.Writer) error {
+		return mcp.WriteServers(target, plan.Servers, opts.DryRun, w)
+	})
+	if err != nil {
 		return Summary{}, err
 	}
-	// .mcp.json é vendorizado (está na whitelist do .gitignore) e precisa entrar
-	// no Created: é dele que sai o `git add` do rodapé de próximos passos.
-	if len(plan.Servers) > 0 {
+	if changed {
 		sum.Created = append(sum.Created, ".mcp.json")
 	}
 
@@ -355,17 +360,28 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	// hook que o scaffold grava: se o scaffold falha, não sobra um settings
 	// apontando para hooks inexistentes.
 	settings := mergeSettings(prof.Scaffold.Settings, scaffold.HookSettings())
-	if err := claudecfg.MergeSettings(target, settings, opts.Force, opts.DryRun, out); err != nil {
+	changed, err = writeChanged(filepath.Join(target, ".claude", "settings.json"), opts.DryRun, out, func(w io.Writer) error {
+		return claudecfg.MergeSettings(target, settings, opts.Force, opts.DryRun, w)
+	})
+	if err != nil {
 		return Summary{}, err
+	}
+	if changed {
+		sum.Created = append(sum.Created, ".claude/settings.json")
 	}
 
 	// 11. .gitignore (I1) — regra-mãe: conteúdo de IA vendorizado é
 	// commitável, runtime/segredos nunca são.
 	gitignoreData := scaffold.Data{ProjectName: filepath.Base(target), Stack: stackOf(prof)}
-	if err := scaffold.MergeGitignore(target, prof.Scaffold.GitignoreStack, gitignoreData, opts.DryRun, out); err != nil {
+	changed, err = writeChanged(filepath.Join(target, ".gitignore"), opts.DryRun, out, func(w io.Writer) error {
+		return scaffold.MergeGitignore(target, prof.Scaffold.GitignoreStack, gitignoreData, opts.DryRun, w)
+	})
+	if err != nil {
 		return Summary{}, err
 	}
-	sum.Created = append(sum.Created, ".gitignore")
+	if changed {
+		sum.Created = append(sum.Created, ".gitignore")
+	}
 	// Só leitura (vale no dry-run): se o usuário ignora .claude/ inteiro, a
 	// lista de exceções que o ray acabou de pôr não tem efeito.
 	if data, err := os.ReadFile(filepath.Join(target, ".gitignore")); err == nil && scaffold.GitignoreIgnoresClaudeDir(string(data)) {
@@ -375,17 +391,20 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	// 12. registro do perfil (I3) — permite a `ray update` descobrir qual
 	// receita re-adquirir sem exigir --profile num clone.
 	profileRecord := filepath.Join(target, ".claude", ".ray-profile")
-	if opts.DryRun {
-		fmt.Fprintf(out, "+ write %s (%s)\n", profileRecord, prof.Name)
-	} else {
-		if err := os.MkdirAll(filepath.Dir(profileRecord), 0o755); err != nil {
-			return Summary{}, err
+	wantRecord := []byte(prof.Name + "\n")
+	if cur, err := os.ReadFile(profileRecord); err != nil || !bytes.Equal(cur, wantRecord) {
+		if opts.DryRun {
+			fmt.Fprintf(out, "+ write %s (%s)\n", profileRecord, prof.Name)
+		} else {
+			if err := os.MkdirAll(filepath.Dir(profileRecord), 0o755); err != nil {
+				return Summary{}, err
+			}
+			if err := os.WriteFile(profileRecord, wantRecord, 0o644); err != nil {
+				return Summary{}, err
+			}
 		}
-		if err := os.WriteFile(profileRecord, []byte(prof.Name+"\n"), 0o644); err != nil {
-			return Summary{}, err
-		}
+		sum.Created = append(sum.Created, ".claude/.ray-profile")
 	}
-	sum.Created = append(sum.Created, ".claude/.ray-profile")
 
 	sum.Target = target
 	sum.HadFailure = len(sum.Failed) > 0
@@ -403,4 +422,30 @@ func stackOf(p *profile.Profile) string {
 		return ""
 	}
 	return p.Name
+}
+
+// writeChanged roda step — que grava path ou, em dry-run, imprime o que
+// gravaria — e diz se o conteúdo final de path difere do que havia. É o que
+// separa "o ray escreveu isto" de "o ray passou por isto": repetir o comando
+// não pode listar como criado o que ficou idêntico.
+func writeChanged(path string, dryRun bool, out io.Writer, step func(io.Writer) error) (bool, error) {
+	before, readErr := os.ReadFile(path)
+	existed := readErr == nil
+
+	if dryRun {
+		var printed bytes.Buffer
+		if err := step(io.MultiWriter(out, &printed)); err != nil {
+			return false, err
+		}
+		return printed.Len() > 0 && (!existed || !bytes.Equal(before, printed.Bytes())), nil
+	}
+
+	if err := step(out); err != nil {
+		return false, err
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		return false, nil
+	}
+	return !existed || !bytes.Equal(before, after), nil
 }

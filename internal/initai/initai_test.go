@@ -1399,3 +1399,40 @@ func TestRunClaudeMDOfBaseProfileDoesNotNameItAsStack(t *testing.T) {
 		})
 	}
 }
+
+// "Created" é o que a execução de fato escreveu. O settings.json ficava de
+// fora (o `git add` do rodapé dependia de outro arquivo para citar `.claude`),
+// e .gitignore, .mcp.json e o registro do perfil entravam sempre, mesmo com
+// conteúdo idêntico — repetir o comando listava como criado o que não mudou.
+func TestRunCreatedListsOnlyWhatChanged(t *testing.T) {
+	configFiles := []string{".claude/settings.json", ".gitignore", ".mcp.json", ".claude/.ray-profile"}
+
+	home := newHome(t)
+	seedComponent(t, home, "s")
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+
+	run := func(dry bool) Summary {
+		t.Helper()
+		sum, err := Run(&runner.FakeRunner{}, allFound, Options{Profile: "test", Target: target, DryRun: dry, Out: &bytes.Buffer{}}, home)
+		if err != nil {
+			t.Fatalf("Run(dry=%v) error = %v", dry, err)
+		}
+		return sum
+	}
+
+	first := run(false)
+	for _, f := range configFiles {
+		if !slices.Contains(first.Created, f) {
+			t.Errorf("first run: Created = %v, want it to include %q", first.Created, f)
+		}
+	}
+
+	for name, sum := range map[string]Summary{"second run": run(false), "dry-run over a complete environment": run(true)} {
+		for _, f := range configFiles {
+			if slices.Contains(sum.Created, f) {
+				t.Errorf("%s: Created = %v, want %q out of it: its content did not change", name, sum.Created, f)
+			}
+		}
+	}
+}
