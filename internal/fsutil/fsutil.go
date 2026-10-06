@@ -5,7 +5,43 @@ package fsutil
 import (
 	"os"
 	"path/filepath"
+	"time"
 )
+
+// Ganchos substituíveis em teste: o rename de verdade, a classificação de erro
+// transitório (específica de cada SO) e a espera entre tentativas.
+var (
+	renameFile          = os.Rename
+	isTransientRename   = isTransientRenameError
+	sleepBetweenRetries = time.Sleep
+)
+
+// Tentativas e espera inicial do rename no Windows. A espera dobra a cada
+// tentativa (1ms, 2ms, ... 64ms), somando cerca de meio segundo no pior caso.
+const (
+	renameAttempts   = 10
+	renameFirstDelay = time.Millisecond
+)
+
+// renameWithRetry renomeia from para to. No Windows o rename falha com "acesso
+// negado" enquanto um leitor concorrente (outro `ray` lendo o mesmo estado, um
+// antivírus) tem o destino aberto; essa janela é curta, então uma espera
+// limitada resolve. Fora do Windows nenhum erro é transitório e há uma única
+// tentativa, como antes.
+func renameWithRetry(from, to string) error {
+	delay := renameFirstDelay
+	var err error
+	for attempt := 1; attempt <= renameAttempts; attempt++ {
+		if err = renameFile(from, to); err == nil || !isTransientRename(err) {
+			return err
+		}
+		if attempt < renameAttempts {
+			sleepBetweenRetries(delay)
+			delay *= 2
+		}
+	}
+	return err
+}
 
 // WriteFileAtomic grava data em path de modo que quem lê o arquivo vê o
 // conteúdo antigo inteiro ou o novo inteiro, nunca o meio: escreve num
@@ -44,7 +80,7 @@ func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
 		cleanup()
 		return err
 	}
-	if err := os.Rename(tmpName, path); err != nil {
+	if err := renameWithRetry(tmpName, path); err != nil {
 		cleanup()
 		return err
 	}

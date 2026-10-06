@@ -1,10 +1,12 @@
 package fsutil
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 )
 
 func TestWriteFileAtomicCreatesAndReplaces(t *testing.T) {
@@ -88,5 +90,79 @@ func TestWriteFileAtomicAppliesTheRequestedMode(t *testing.T) {
 	}
 	if got := info.Mode().Perm(); got != 0o644 {
 		t.Errorf("mode = %o, want 644", got)
+	}
+}
+
+// No Windows o rename falha com "acesso negado" enquanto um leitor concorrente
+// tem o destino aberto. Um erro transitório é repetido até passar; o teste
+// troca o rename e a classificação por falsos para valer em qualquer SO.
+func TestWriteFileAtomicRetriesATransientRenameFailure(t *testing.T) {
+	errBusy := errors.New("destination busy")
+	calls := 0
+	var slept []time.Duration
+	origRename, origTransient, origSleep := renameFile, isTransientRename, sleepBetweenRetries
+	t.Cleanup(func() { renameFile, isTransientRename, sleepBetweenRetries = origRename, origTransient, origSleep })
+	renameFile = func(from, to string) error {
+		calls++
+		if calls <= 2 {
+			return errBusy
+		}
+		return os.Rename(from, to)
+	}
+	isTransientRename = func(err error) bool { return errors.Is(err, errBusy) }
+	sleepBetweenRetries = func(d time.Duration) { slept = append(slept, d) }
+
+	path := filepath.Join(t.TempDir(), "state.yaml")
+	if err := WriteFileAtomic(path, []byte("ok"), 0o644); err != nil {
+		t.Fatalf("WriteFileAtomic() error = %v, want the transient failures absorbed", err)
+	}
+	if got, _ := os.ReadFile(path); string(got) != "ok" {
+		t.Errorf("content = %q, want the written data", got)
+	}
+	if calls != 3 {
+		t.Errorf("rename calls = %d, want 3 (two failures, then success)", calls)
+	}
+	if len(slept) != 2 || slept[1] <= slept[0] {
+		t.Errorf("sleeps = %v, want two growing waits", slept)
+	}
+}
+
+// A espera é limitada: um destino que nunca libera falha com o último erro, sem
+// sobra de temporário, em vez de travar o comando.
+func TestWriteFileAtomicGivesUpOnAPersistentTransientFailure(t *testing.T) {
+	errBusy := errors.New("destination busy")
+	calls := 0
+	origRename, origTransient, origSleep := renameFile, isTransientRename, sleepBetweenRetries
+	t.Cleanup(func() { renameFile, isTransientRename, sleepBetweenRetries = origRename, origTransient, origSleep })
+	renameFile = func(string, string) error { calls++; return errBusy }
+	isTransientRename = func(err error) bool { return errors.Is(err, errBusy) }
+	sleepBetweenRetries = func(time.Duration) {}
+
+	dir := t.TempDir()
+	err := WriteFileAtomic(filepath.Join(dir, "state.yaml"), []byte("x"), 0o644)
+	if !errors.Is(err, errBusy) {
+		t.Fatalf("WriteFileAtomic() error = %v, want the last rename error", err)
+	}
+	if calls != renameAttempts {
+		t.Errorf("rename calls = %d, want %d", calls, renameAttempts)
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+		t.Errorf("directory has %d entries after the failure, want none", len(entries))
+	}
+}
+
+// Um erro que não é transitório não é repetido: o comportamento de sempre.
+func TestWriteFileAtomicDoesNotRetryAPermanentRenameFailure(t *testing.T) {
+	calls := 0
+	origRename, origSleep := renameFile, sleepBetweenRetries
+	t.Cleanup(func() { renameFile, sleepBetweenRetries = origRename, origSleep })
+	renameFile = func(string, string) error { calls++; return errors.New("permanent") }
+	sleepBetweenRetries = func(time.Duration) { t.Error("slept on a permanent failure") }
+
+	if err := WriteFileAtomic(filepath.Join(t.TempDir(), "state.yaml"), []byte("x"), 0o644); err == nil {
+		t.Fatal("WriteFileAtomic() = nil, want the rename error")
+	}
+	if calls != 1 {
+		t.Errorf("rename calls = %d, want 1", calls)
 	}
 }
