@@ -152,6 +152,10 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	if err := st.Verify(); err != nil {
 		return Summary{}, err
 	}
+	baseline := store.ProjectBaseline(target)
+	if err := baseline.Verify(); err != nil {
+		return Summary{}, err
+	}
 
 	// 2. garante ~/.ray populado. Em dry-run nada de ~/.ray é gravado: os
 	// perfis de fábrica ausentes são lidos da memória (passo 3) e os templates
@@ -283,7 +287,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 			return Summary{}, err
 		}
 		onDiskHash, onDiskExists := store.LocalState(destDir)
-		pristineHash, hasPristine := st.PristineHash(target, c.Name)
+		pristineHash, hasPristine := baseline.PristineHash(c.Name)
 		overwrite, reason := store.DecideOverwrite(opts.Force, onDiskExists, onDiskHash, freshHash, pristineHash, hasPristine)
 		if !overwrite {
 			if opts.DryRun {
@@ -312,7 +316,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		if err != nil {
 			return Summary{}, err
 		}
-		if err := st.SetPristine(target, c.Name, leafHash); err != nil {
+		if err := baseline.SetPristine(c.Name, leafHash); err != nil {
 			return Summary{}, err
 		}
 		sum.Installed = append(sum.Installed, c.Name)

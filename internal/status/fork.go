@@ -38,10 +38,10 @@ func checkForks(target string, home Home) (string, []ComponentState, []string, e
 		return "", nil, []string{fmt.Sprintf("recorded profile could not be loaded: %v", err)}, nil
 	}
 
-	st := store.New(home.StoreDir)
+	baseline := store.ProjectBaseline(target)
 	// Sem linha-base legível, "procedência desconhecida" em cada componente
 	// culparia o componente por um defeito do arquivo.
-	if err := st.Verify(); err != nil {
+	if err := baseline.Verify(); err != nil {
 		return prof.Name, nil, []string{err.Error()}, nil
 	}
 	var out []ComponentState
@@ -56,7 +56,7 @@ func checkForks(target string, home Home) (string, []ComponentState, []string, e
 			return "", nil, nil, err
 		}
 
-		pristine, hasPristine := st.PristineHash(target, c.Name)
+		pristine, hasPristine := baseline.PristineHash(c.Name)
 		if !hasPristine {
 			out = append(out, ComponentState{Coord: c.Name, State: ForkUnknown})
 			continue

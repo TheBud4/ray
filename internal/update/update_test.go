@@ -331,8 +331,7 @@ func TestRunOverwritesWhenDiskMatchesPristine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	st := store.New(home.StoreDir)
-	if err := st.SetPristine(target, coordS, pristineHash); err != nil {
+	if err := store.ProjectBaseline(target).SetPristine(coordS, pristineHash); err != nil {
 		t.Fatal(err)
 	}
 
@@ -361,7 +360,7 @@ func TestRunOverwritesWhenDiskMatchesPristine(t *testing.T) {
 		t.Errorf("Updated = %v, want it to include %q", sum.Updated, coordS)
 	}
 
-	newPristine, ok := st.PristineHash(target, coordS)
+	newPristine, ok := store.ProjectBaseline(target).PristineHash(coordS)
 	if !ok {
 		t.Fatal("PristineHash() ok = false after overwrite, want it re-recorded")
 	}
@@ -391,8 +390,7 @@ func TestRunSkipsForkWithoutForce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	st := store.New(home.StoreDir)
-	if err := st.SetPristine(target, coordS, oldPristine); err != nil {
+	if err := store.ProjectBaseline(target).SetPristine(coordS, oldPristine); err != nil {
 		t.Fatal(err)
 	}
 
@@ -440,8 +438,7 @@ func TestRunForceOverwritesFork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	st := store.New(home.StoreDir)
-	if err := st.SetPristine(target, coordS, oldPristine); err != nil {
+	if err := store.ProjectBaseline(target).SetPristine(coordS, oldPristine); err != nil {
 		t.Fatal(err)
 	}
 
@@ -494,8 +491,7 @@ func TestRunNewCloneNoPristineMatchesUpstreamRecordsPristine(t *testing.T) {
 		t.Errorf("Unchanged = %v, Updated = %v, want %q only in Unchanged (matches upstream, not a fork)", sum.Unchanged, sum.Updated, coordS)
 	}
 
-	st := store.New(home.StoreDir)
-	if _, ok := st.PristineHash(target, coordS); !ok {
+	if _, ok := store.ProjectBaseline(target).PristineHash(coordS); !ok {
 		t.Error("PristineHash() ok = false, want it recorded now that we've confirmed it's not a fork")
 	}
 }
@@ -526,7 +522,7 @@ func TestRunIdenticalComponentIsNeitherRecopiedNorReportedUpdated(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.New(home.StoreDir).SetPristine(target, coordS, hash); err != nil {
+	if err := store.ProjectBaseline(target).SetPristine(coordS, hash); err != nil {
 		t.Fatal(err)
 	}
 
@@ -657,8 +653,7 @@ func TestRunDryRunReportsForkAsSkipped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	st := store.New(home.StoreDir)
-	if err := st.SetPristine(target, coordS, oldPristine); err != nil {
+	if err := store.ProjectBaseline(target).SetPristine(coordS, oldPristine); err != nil {
 		t.Fatal(err)
 	}
 
@@ -845,7 +840,7 @@ func seedEditedComponentWithDanglingSymlink(t *testing.T, home Home, target stri
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.New(home.StoreDir).SetPristine(target, coordS, oldPristine); err != nil {
+	if err := store.ProjectBaseline(target).SetPristine(coordS, oldPristine); err != nil {
 		t.Fatal(err)
 	}
 	return skillDir
@@ -929,10 +924,7 @@ func TestRunStopsBeforeAnyEffectWhenThePristineFileIsUnreadable(t *testing.T) {
 	writeProfile(t, home.ProfilesDir, testProfile())
 	target := t.TempDir()
 	writeProfileRecord(t, target, "test")
-	if err := os.MkdirAll(home.StoreDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(home.StoreDir, "pristine.yaml"), []byte("{{{ not yaml"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(target, ".claude", ".ray-pristine.yaml"), []byte("{{{ not yaml"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -949,5 +941,42 @@ func TestRunStopsBeforeAnyEffectWhenThePristineFileIsUnreadable(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(target, ".claude", "skills", "s")); !os.IsNotExist(err) {
 		t.Errorf("the component was copied despite the error (stat err = %v)", err)
+	}
+}
+
+// A linha-base viaja com o projeto: copiar a pasta (ou clonar o repo) para outro
+// caminho não pode apagar o que se sabe sobre o que foi editado. Com ela indexada
+// pelo caminho absoluto, a cópia caía na degradação "sem linha-base".
+func TestRunKnowsTheBaselineAfterTheProjectIsCopiedElsewhere(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "# v1")
+	writeProfile(t, home.ProfilesDir, testProfile())
+	original := t.TempDir()
+	writeProfileRecord(t, original, "test")
+
+	if _, err := Run(&runner.FakeRunner{}, cleanGitCheck(), Options{Target: original, NoGlobal: true}, home); err != nil {
+		t.Fatalf("first Run() error = %v", err)
+	}
+
+	moved := filepath.Join(t.TempDir(), "moved")
+	if err := os.CopyFS(moved, os.DirFS(original)); err != nil {
+		t.Fatal(err)
+	}
+	skill := filepath.Join(moved, ".claude", "skills", "s", "SKILL.md")
+	if err := os.WriteFile(skill, []byte("# edited in the copy"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	seedComponent(t, home, "# v2")
+
+	sum, err := Run(&runner.FakeRunner{}, cleanGitCheck(), Options{Target: moved, NoGlobal: true}, home)
+	if err != nil {
+		t.Fatalf("Run() on the copy error = %v", err)
+	}
+	if !slices.Contains(sum.Skipped, coordS) {
+		t.Fatalf("Skipped = %v, want the edited component preserved", sum.Skipped)
+	}
+	reasons := strings.Join(sum.Warnings, "\n")
+	if !strings.Contains(reasons, "last pristine") || strings.Contains(reasons, "no pristine baseline") {
+		t.Errorf("Warnings = %q, want the decision made from the baseline that travelled (\"differs from last pristine\"), not the no-baseline fallback", reasons)
 	}
 }

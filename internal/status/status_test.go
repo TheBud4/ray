@@ -189,8 +189,7 @@ func TestForksReportPristineWhenDiskMatchesBaseline(t *testing.T) {
 	home := writeEnv(t, target, []profile.Component{skillComponent()})
 	h := seedVendored(t, target, "original\n")
 
-	st := store.New(home.StoreDir)
-	if err := st.SetPristine(target, "tdd", h); err != nil {
+	if err := store.ProjectBaseline(target).SetPristine("tdd", h); err != nil {
 		t.Fatal(err)
 	}
 
@@ -208,8 +207,7 @@ func TestForksReportEditedWhenDiskDivergedFromBaseline(t *testing.T) {
 	home := writeEnv(t, target, []profile.Component{skillComponent()})
 	seedVendored(t, target, "original\n")
 
-	st := store.New(home.StoreDir)
-	if err := st.SetPristine(target, "tdd", "0000deadbeef"); err != nil {
+	if err := store.ProjectBaseline(target).SetPristine("tdd", "0000deadbeef"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -465,10 +463,7 @@ func TestGitQueriesRunInTheTarget(t *testing.T) {
 func TestPristineFileUnreadableIsAProblem(t *testing.T) {
 	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
 	home := writeEnv(t, target, []profile.Component{{Name: "tdd", Dest: ".claude/skills"}})
-	if err := os.MkdirAll(home.StoreDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(home.StoreDir, "pristine.yaml"), []byte("{{{ not yaml"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(target, ".claude", ".ray-pristine.yaml"), []byte("{{{ not yaml"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -777,5 +772,40 @@ func TestGitignoreBlockIsNotCheckedWithoutARayProfile(t *testing.T) {
 	}
 	if len(rep.Problems) != 0 {
 		t.Errorf("Problems = %v, want none: ray did not scaffold this environment", rep.Problems)
+	}
+}
+
+// O diagnóstico acompanha a linha-base do projeto: a mesma pasta, copiada para
+// outro caminho, continua dizendo "intocado" e "editado" — não "desconhecido".
+func TestForksSurviveCopyingTheProjectElsewhere(t *testing.T) {
+	original := t.TempDir()
+	home := writeEnv(t, original, []profile.Component{skillComponent()})
+	h := seedVendored(t, original, "original\n")
+	if err := store.ProjectBaseline(original).SetPristine("tdd", h); err != nil {
+		t.Fatal(err)
+	}
+
+	moved := filepath.Join(t.TempDir(), "moved")
+	if err := os.CopyFS(moved, os.DirFS(original)); err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := Run(nil, Options{Target: moved}, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if len(rep.Forks) != 1 || rep.Forks[0].State != ForkPristine {
+		t.Fatalf("Forks = %+v, want ForkPristine in the copy", rep.Forks)
+	}
+
+	if err := os.WriteFile(filepath.Join(moved, ".claude", "skills", "tdd", "SKILL.md"), []byte("edited\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rep, err = Run(nil, Options{Target: moved}, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if len(rep.Forks) != 1 || rep.Forks[0].State != ForkEdited {
+		t.Errorf("Forks = %+v, want ForkEdited after editing the copy", rep.Forks)
 	}
 }

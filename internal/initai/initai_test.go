@@ -399,12 +399,11 @@ func TestRunWritesPristineHashForCopiedComponent(t *testing.T) {
 		t.Fatalf("HadFailure = true, Failed = %v", sum.Failed)
 	}
 
-	st := store.New(home.StoreDir)
 	onDiskHash, err := store.HashTree(filepath.Join(target, ".claude", "skills", "s"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	pristine, ok := st.PristineHash(target, "s")
+	pristine, ok := store.ProjectBaseline(target).PristineHash("s")
 	if !ok {
 		t.Fatal("PristineHash() ok = false, want a pristine hash recorded after Run")
 	}
@@ -426,8 +425,7 @@ func TestRunTwicePreservesEditedComponentAndItsPristine(t *testing.T) {
 	if _, err := Run(&runner.FakeRunner{}, allFound, opts, home); err != nil {
 		t.Fatalf("first Run() error = %v", err)
 	}
-	st := store.New(home.StoreDir)
-	pristineBefore, ok := st.PristineHash(target, "s")
+	pristineBefore, ok := store.ProjectBaseline(target).PristineHash("s")
 	if !ok {
 		t.Fatal("PristineHash() ok = false after first Run")
 	}
@@ -455,7 +453,7 @@ func TestRunTwicePreservesEditedComponentAndItsPristine(t *testing.T) {
 	if string(got) != edited {
 		t.Errorf("SKILL.md = %q, want the user's edit %q preserved", got, edited)
 	}
-	pristineAfter, _ := st.PristineHash(target, "s")
+	pristineAfter, _ := store.ProjectBaseline(target).PristineHash("s")
 	if pristineAfter != pristineBefore {
 		t.Errorf("PristineHash() = %q after second Run, want it unchanged (%q)", pristineAfter, pristineBefore)
 	}
@@ -535,7 +533,7 @@ func TestRunTwiceRefreshesUneditedComponentFromUpdatedSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pristine, _ := store.New(home.StoreDir).PristineHash(target, "s"); pristine != fresh {
+	if pristine, _ := store.ProjectBaseline(target).PristineHash("s"); pristine != fresh {
 		t.Errorf("PristineHash() = %q, want the new source hash %q", pristine, fresh)
 	}
 }
@@ -598,7 +596,7 @@ func TestRunForceOverwritesEditedComponentAndResetsPristine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pristine, _ := store.New(home.StoreDir).PristineHash(target, "s"); pristine != fresh {
+	if pristine, _ := store.ProjectBaseline(target).PristineHash("s"); pristine != fresh {
 		t.Errorf("PristineHash() = %q, want %q after --force", pristine, fresh)
 	}
 }
@@ -641,7 +639,7 @@ func TestRunWithoutPristineKeepsDivergentComponentAndCopiesIdenticalOne(t *testi
 			if string(got) != tc.wantDisk {
 				t.Errorf("SKILL.md = %q, want %q", got, tc.wantDisk)
 			}
-			_, hasPristine := store.New(home.StoreDir).PristineHash(target, "s")
+			_, hasPristine := store.ProjectBaseline(target).PristineHash("s")
 			preserved := slices.Contains(sum.Skipped, "s")
 			if tc.onDisk != "# s" {
 				if !preserved || hasPristine {
@@ -688,7 +686,7 @@ func TestRunDryRunReportsPreserveForEditedComponentAndCopyForUneditedOne(t *test
 			if err := os.WriteFile(filepath.Join(home.ComponentsDir, "s", "SKILL.md"), []byte("# new upstream"), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			pristineBefore, _ := store.New(home.StoreDir).PristineHash(target, "s")
+			pristineBefore, _ := store.ProjectBaseline(target).PristineHash("s")
 
 			var out bytes.Buffer
 			sum, err := Run(&runner.FakeRunner{}, allFound, Options{Profile: "test", Target: target, DryRun: true, Out: &out}, home)
@@ -708,7 +706,7 @@ func TestRunDryRunReportsPreserveForEditedComponentAndCopyForUneditedOne(t *test
 			if got, _ := os.ReadFile(skill); string(got) != wantDisk {
 				t.Errorf("SKILL.md = %q, dry-run must not write (want %q)", got, wantDisk)
 			}
-			if after, _ := store.New(home.StoreDir).PristineHash(target, "s"); after != pristineBefore {
+			if after, _ := store.ProjectBaseline(target).PristineHash("s"); after != pristineBefore {
 				t.Errorf("PristineHash() changed under dry-run: %q -> %q", pristineBefore, after)
 			}
 		})
@@ -1466,5 +1464,37 @@ func TestRunStopsBeforeAnyEffectWhenThePristineFileIsUnreadable(t *testing.T) {
 	entries, _ := os.ReadDir(target)
 	if len(entries) != 0 {
 		t.Errorf("target has %d entries after the failure, want it untouched", len(entries))
+	}
+}
+
+// Mesma garantia do update, no init ai: a linha-base que o próprio comando
+// gravou viaja com o projeto, e uma edição feita na cópia continua protegida
+// pela decisão "difere da última linha-base", não pela degradação sem ela.
+func TestRunKnowsTheBaselineAfterTheProjectIsCopiedElsewhere(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "s")
+	writeProfile(t, home.ProfilesDir, testProfile())
+	original := t.TempDir()
+
+	opts := Options{Profile: "test", Target: original, Out: &bytes.Buffer{}}
+	if _, err := Run(&runner.FakeRunner{}, allFound, opts, home); err != nil {
+		t.Fatalf("first Run() error = %v", err)
+	}
+
+	moved := filepath.Join(t.TempDir(), "moved")
+	if err := os.CopyFS(moved, os.DirFS(original)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(moved, ".claude", "skills", "s", "SKILL.md"), []byte("# edited in the copy"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sum, err := Run(&runner.FakeRunner{}, allFound, Options{Profile: "test", Target: moved, Out: &bytes.Buffer{}}, home)
+	if err != nil {
+		t.Fatalf("Run() on the copy error = %v", err)
+	}
+	reasons := strings.Join(sum.Warnings, "\n")
+	if !strings.Contains(reasons, "last pristine") || strings.Contains(reasons, "no pristine baseline") {
+		t.Errorf("Warnings = %q, want the decision made from the baseline that travelled, not the no-baseline fallback", reasons)
 	}
 }

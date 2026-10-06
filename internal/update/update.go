@@ -76,8 +76,8 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 
 	// A linha-base é o que separa "intocado" de "editado": ilegível, nada abaixo
 	// pode decidir sobre sobrescrita, então para antes de qualquer efeito.
-	st := store.New(home.StoreDir)
-	if err := st.Verify(); err != nil {
+	baseline := store.ProjectBaseline(target)
+	if err := baseline.Verify(); err != nil {
 		return Summary{}, err
 	}
 
@@ -122,7 +122,7 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 			return Summary{}, herr
 		}
 		onDiskHash, onDiskExists := store.LocalState(onDisk)
-		pristineHash, hasPristine := st.PristineHash(target, c.Name)
+		pristineHash, hasPristine := baseline.PristineHash(c.Name)
 
 		// Já é igual ao do upstream: não há o que recopiar. Só a linha-base
 		// pode estar defasada (clone novo, ou edição que coincidiu com o
@@ -131,7 +131,7 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 			if opts.DryRun {
 				fmt.Fprintf(out, "+ unchanged %s\n", c.Name)
 			} else if !hasPristine || pristineHash != freshHash {
-				if err := st.SetPristine(target, c.Name, freshHash); err != nil {
+				if err := baseline.SetPristine(c.Name, freshHash); err != nil {
 					return Summary{}, err
 				}
 			}
@@ -166,7 +166,7 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 			sum.Failed = append(sum.Failed, c.Name)
 			continue
 		}
-		if err := st.SetPristine(target, c.Name, freshHash); err != nil {
+		if err := baseline.SetPristine(c.Name, freshHash); err != nil {
 			return Summary{}, err
 		}
 		sum.Updated = append(sum.Updated, c.Name)
