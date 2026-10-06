@@ -25,7 +25,7 @@ fazer, sem tocar disco nem rede.
   │  profile  │ ────────────────────────────────▶ │ installer │
   └───────────┘                                   └───────────┘
         │                                               │  (delega processo externo)
-        │ (orquestra os 10 passos)                      ▼
+        │ (orquestra os 12 passos)                      ▼
         ▼                                         ┌───────────┐
   ┌───────────┐                                   │  runner   │──▶ npx, uv, git
   │  initai   │                                   └───────────┘
@@ -49,7 +49,7 @@ internal/
 │
 ├── profile/      # modelo de receita: o que um perfil declara
 ├── installer/    # traduz as integrações de uma receita em ações
-├── initai/       # orquestra os 10 passos de `ray init ai`; copia
+├── initai/       # orquestra os 12 passos de `ray init ai`; copia
 │                 #   componentes de ~/.ray/components/, nunca baixa
 ├── scaffold/     # escreve a árvore de orientação; templates embutidos
 ├── update/       # `ray update`: recópia local protegendo edição

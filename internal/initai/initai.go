@@ -1,4 +1,4 @@
-// Package initai orquestra os 10 passos de `ray init ai` (ver Run), ligando
+// Package initai orquestra os 12 passos de `ray init ai` (ver Run), ligando
 // profile, installer, mcp, claudecfg, vault, scaffold e preflight.
 package initai
 
@@ -124,7 +124,7 @@ func inGitRepo(dir string) bool {
 	}
 }
 
-// Run executa os 10 passos de `ray init ai`. r executa comandos de
+// Run executa os 12 passos de `ray init ai`. r executa comandos de
 // componentes/globais (respeita --dry-run na fiação real); l checa
 // dependências e deve continuar real mesmo sob --dry-run (mesmo raciocínio
 // de `ray doctor`, Fase 7: um gate de validação não deve virar teatro).
