@@ -68,6 +68,7 @@ internal/
 ├── rayconfig/    # lê e grava ~/.ray/config.yaml e o State
 ├── raypaths/     # resolve onde o ray guarda estado em disco
 ├── fsutil/       # escrita atômica de arquivo (estado compartilhado do ~/.ray)
+├── safepath/     # confere que um destino, seguindo symlink, fica dentro do projeto
 ├── runfile/      # aliases do `ray run` (ray.yaml do projeto + global)
 ├── preflight/    # fonte única de checagem de dependências externas
 ├── runner/       # ÚNICA fronteira para processos externos
@@ -131,7 +132,16 @@ que se referem (o projeto, ou o overlay de templates). `profile.PathFor` é o
 único ponto que transforma um nome digitado em caminho de receita; o registro
 `.claude/.ray-profile`, que viaja num clone, é lido com teto de 4 KiB e passa
 pelo mesmo `PathFor`. Confinar o que a receita diz não cobre symlink no disco:
-isso é outro mecanismo e não está fechado. Um servidor MCP (`headroom`, `code_graph`) se
+para isso `safepath.ResolveInside` resolve cada componente do caminho (inclusive
+link pendente) e `init ai` e `update` recusam, antes de qualquer efeito no
+projeto, um destino que um symlink leve para fora dele; o link que resolve para
+dentro continua valendo. O `init ai` confere os destinos fixos (`.mcp.json`,
+`settings.json`, `.gitignore`, o registro, a linha-base e os hooks de sistema) e
+os da receita; o `update`, o registro, a linha-base e cada componente com as
+entradas que já existem nele. A fonte dos componentes (`~/.ray/components`) segue
+symlink como antes: a pasta é do usuário. O guard é uma checagem prévia, não uma
+barreira no momento da escrita; ele cobre um clone, não um processo que troca o
+disco durante a execução. Um servidor MCP (`headroom`, `code_graph`) se
 declara em `Integrations`, nunca em `Components` — são conceitos disjuntos por
 construção, e `Component` não tem campo para dizer "isto é um servidor".
 

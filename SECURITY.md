@@ -64,6 +64,10 @@ O risco central deste programa: ele roda `uv`, `graphify`, `git` e os passos de
 
 - **[MUST]** Escrita fica dentro do diretório alvo e de `~/.ray`. Nunca escrever
   fora sem o usuário ter pedido aquele caminho.
+- **[MUST]** Um symlink no projeto que leve para fora dele não é seguido: `init ai`
+  e `update` recusam o destino antes de qualquer escrita (`internal/safepath`).
+  O teste enumera o que um `init ai` escreve num projeto vazio: um destino
+  novo que o guard esqueça faz o teste falhar.
 - **[MUST]** Não sobrescrever arquivo existente sem `--force` explícito, e
   `.claude/handoff.md` **nunca** é sobrescrito nem com `--force` — é estado vivo
   do usuário.
