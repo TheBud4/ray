@@ -302,9 +302,26 @@ isso garante que todo hook referenciado em `settings.json` tenha o script que
 ele nomeia. No `init ai`, os arquivos da receita e os de sistema são
 deduplicados por path (receita ganha).
 
-`scaffold.HookSettings()` devolve o bloco `hooks` mesclado em `settings.json`:
-`SessionStart` (sempre, injeta o handoff) + `PreToolUse` (os três guards de
-aviso) + `PostToolUse` (`guard-handoff`).
+`scaffold.HookSettings()` devolve o bloco `hooks` que o ray instala em
+`settings.json`: `SessionStart` (sempre, injeta o handoff) + `PreToolUse` (os
+três guards de aviso) + `PostToolUse` (`guard-handoff`).
+
+**Como o `init ai` aplica isso a um `settings.json` que já existe.** O que é seu
+vence, e `--force` é a única forma de o ray impor o dele:
+
+- `model`, `effortLevel` e qualquer outra chave de topo que o arquivo já tem
+  ficam como estão; só as que faltam são preenchidas.
+- `hooks` é unido por evento. Os seus ficam. Os do ray — todo comando que começa
+  com `bash .claude/hooks/` — são retirados e reinseridos a cada execução, de
+  modo que um guard renomeado ou removido numa versão nova do `ray` não fica
+  órfão apontando para um script que sumiu. Os hooks que a receita declara em
+  `scaffold.settings.hooks` convivem com os do ray.
+- Rodar de novo não muda o arquivo, byte a byte.
+- Com `--force`, o bloco `hooks` e as chaves de topo são substituídos; chaves que
+  o ray não gerencia (ex.: `env`) continuam preservadas.
+
+Um hook seu cujo comando comece com `bash .claude/hooks/` é tratado como do ray e
+será reescrito: esse diretório é o que o ray gerencia.
 
 ## Os quatro hooks de aviso
 
