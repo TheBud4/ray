@@ -1287,3 +1287,45 @@ func TestRunSummaryCarriesTheAbsoluteTarget(t *testing.T) {
 		t.Errorf("Summary.Target = %q, want %q", sum.Target, want)
 	}
 }
+
+// Se o usuário ignora a pasta .claude inteira, o git não vai ver o ambiente que o
+// ray acabou de escrever, e a whitelist do bloco não corrige isso. O init ai
+// avisa, em vez de deixar o usuário descobrir no primeiro commit.
+func TestRunWarnsWhenTheUsersGitignoreIgnoresTheClaudeDir(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "s")
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+	if err := os.WriteFile(filepath.Join(target, ".gitignore"), []byte("node_modules/\n.claude/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sum, err := Run(&runner.FakeRunner{}, allFound, Options{Profile: "test", Target: target, NoGlobal: true, Out: &bytes.Buffer{}}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(sum.Warnings, func(w string) bool {
+		return strings.Contains(w, ".gitignore") && strings.Contains(w, ".claude")
+	}) {
+		t.Errorf("Warnings = %v, want one about the .gitignore ignoring .claude", sum.Warnings)
+	}
+	// O arquivo do usuário não é reescrito para tirar a linha: o aviso é a resposta.
+	got, _ := os.ReadFile(filepath.Join(target, ".gitignore"))
+	if !strings.Contains(string(got), "\n.claude/\n") {
+		t.Errorf(".gitignore = %q, want the user's own .claude/ line left alone", got)
+	}
+}
+
+func TestRunDoesNotWarnAboutGitignoreByDefault(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "s")
+	writeProfile(t, home.ProfilesDir, testProfile())
+
+	sum, err := Run(&runner.FakeRunner{}, allFound, Options{Profile: "test", Target: t.TempDir(), NoGlobal: true, Out: &bytes.Buffer{}}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.ContainsFunc(sum.Warnings, func(w string) bool { return strings.Contains(w, ".gitignore") }) {
+		t.Errorf("Warnings = %v, want none about .gitignore on a clean target", sum.Warnings)
+	}
+}

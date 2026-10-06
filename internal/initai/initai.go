@@ -364,6 +364,11 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		return Summary{}, err
 	}
 	sum.Created = append(sum.Created, ".gitignore")
+	// Só leitura (vale no dry-run): se o usuário ignora .claude/ inteiro, a
+	// lista de exceções que o ray acabou de pôr não tem efeito.
+	if data, err := os.ReadFile(filepath.Join(target, ".gitignore")); err == nil && scaffold.GitignoreIgnoresClaudeDir(string(data)) {
+		sum.Warnings = append(sum.Warnings, "your .gitignore ignores .claude/, so git will not track the environment ray wrote; remove that line (the block ray adds cannot re-include files under an ignored directory)")
+	}
 
 	// 12. registro do perfil (I3) — permite a `ray update` descobrir qual
 	// receita re-adquirir sem exigir --profile num clone.

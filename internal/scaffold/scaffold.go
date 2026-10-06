@@ -268,6 +268,41 @@ func MergeGitignore(target string, stackLines []string, data Data, dryRun bool, 
 	return os.WriteFile(path, []byte(content), 0o644)
 }
 
+// GitignoreIgnoresClaudeDir diz se content ignora a pasta .claude inteira. Aí a
+// lista de exceções do ray não vale: o git não reinclui arquivo de uma pasta
+// ignorada. Só conta a linha que é exatamente uma das grafias da pasta; o bloco
+// do ray (marcadores e o que há entre eles), comentários e negações ficam de fora.
+func GitignoreIgnoresClaudeDir(content string) bool {
+	begin, beginEnd, closeEnd := markedRegion(content)
+	skipFrom, skipTo := -1, -1
+	if begin != -1 {
+		skipFrom, skipTo = begin, beginEnd
+		if closeEnd != -1 {
+			skipTo = closeEnd
+		}
+	}
+	pos := 0
+	for pos <= len(content) {
+		lineEnd := strings.IndexByte(content[pos:], '\n')
+		if lineEnd == -1 {
+			lineEnd = len(content)
+		} else {
+			lineEnd += pos
+		}
+		inBlock := skipFrom != -1 && pos >= skipFrom && pos < skipTo
+		line := strings.TrimSpace(content[pos:lineEnd])
+		pos = lineEnd + 1
+		if inBlock || line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "!") {
+			continue
+		}
+		switch line {
+		case ".claude", ".claude/", "/.claude", "/.claude/", "**/.claude", "**/.claude/":
+			return true
+		}
+	}
+	return false
+}
+
 // renderGitignoreStackLines executa cada linha de stackLines como
 // text/template com data (ex. "/{{.ProjectName}}" → "/ray").
 func renderGitignoreStackLines(stackLines []string, data Data) ([]string, error) {
@@ -298,12 +333,45 @@ func buildGitignoreBlock(stackLines []string) string {
 	return strings.Join(lines, "\n")
 }
 
+// markedRegion localiza o bloco do ray em content por linhas inteiras: um
+// marcador é uma linha cujo texto (sem espaços nas pontas) é exatamente o
+// marcador, nunca uma substring — "# >>> rayon" é comentário do usuário. begin é
+// o início da linha de abertura (-1 se não há) e beginEnd o fim dela, sem o
+// "\n". Se há fechamento depois da abertura, closeEnd é o fim da linha dele;
+// senão é -1 (bloco aberto e nunca fechado). Um fechamento sem abertura é só
+// uma linha comum.
+func markedRegion(content string) (begin, beginEnd, closeEnd int) {
+	begin, beginEnd, closeEnd = -1, -1, -1
+	pos := 0
+	for pos <= len(content) {
+		lineEnd := strings.IndexByte(content[pos:], '\n')
+		if lineEnd == -1 {
+			lineEnd = len(content)
+		} else {
+			lineEnd += pos
+		}
+		line := strings.TrimSpace(content[pos:lineEnd])
+		trimmedEnd := pos + len(strings.TrimRight(content[pos:lineEnd], " \t\r"))
+		switch {
+		case begin == -1 && line == gitignoreMarkerBegin:
+			begin, beginEnd = pos, trimmedEnd
+		case begin != -1 && line == gitignoreMarkerEnd:
+			return begin, beginEnd, trimmedEnd
+		}
+		pos = lineEnd + 1
+	}
+	return begin, beginEnd, -1
+}
+
 // mergeMarkedBlock devolve existing com block inserido/substituído entre
 // gitignoreMarkerBegin/End, e se o conteúdo mudou. Sem marcador prévio,
-// acrescenta ao final; com marcador, substitui só o miolo.
+// acrescenta ao final; com abertura e fechamento, substitui só do marcador de
+// abertura ao de fechamento; com abertura sem fechamento, troca só a linha de
+// abertura pelo bloco completo e mantém tudo que vem depois — o que o usuário
+// escreveu abaixo de um marcador órfão não é do ray.
 func mergeMarkedBlock(existing, block string) (string, bool) {
-	beginIdx := strings.Index(existing, gitignoreMarkerBegin)
-	if beginIdx == -1 {
+	begin, beginEnd, closeEnd := markedRegion(existing)
+	if begin == -1 {
 		trimmed := strings.TrimRight(existing, "\n")
 		var b strings.Builder
 		if trimmed != "" {
@@ -315,14 +383,11 @@ func mergeMarkedBlock(existing, block string) (string, bool) {
 		return b.String(), true
 	}
 
-	endIdx := strings.Index(existing[beginIdx:], gitignoreMarkerEnd)
-	var newContent string
-	if endIdx == -1 {
-		newContent = existing[:beginIdx] + block + "\n"
-	} else {
-		endIdx += beginIdx + len(gitignoreMarkerEnd)
-		newContent = existing[:beginIdx] + block + existing[endIdx:]
+	end := closeEnd
+	if end == -1 {
+		end = beginEnd
 	}
+	newContent := existing[:begin] + block + existing[end:]
 	return newContent, newContent != existing
 }
 

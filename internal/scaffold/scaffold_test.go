@@ -1257,3 +1257,102 @@ func TestEnsureTemplatesDryRunWritesNothing(t *testing.T) {
 		}
 	})
 }
+
+func mergeGitignoreOnce(t *testing.T, existing string) string {
+	t.Helper()
+	target := t.TempDir()
+	path := filepath.Join(target, ".gitignore")
+	if existing != "" {
+		if err := os.WriteFile(path, []byte(existing), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := MergeGitignore(target, nil, Data{ProjectName: "demo"}, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(got)
+}
+
+// Um marcador de abertura sem o de fechamento não diz onde o bloco acaba. O que
+// vem depois dele é do usuário até prova em contrário: antes, tudo abaixo do
+// marcador era apagado.
+func TestMergeGitignoreKeepsWhatFollowsAnUnclosedMarker(t *testing.T) {
+	existing := "node_modules/\n# >>> ray\n*.log\nminha-regra-importante\n.env.local\n"
+
+	got := mergeGitignoreOnce(t, existing)
+
+	for _, line := range []string{"node_modules/", "*.log", "minha-regra-importante", ".env.local"} {
+		if !strings.Contains(got, line+"\n") {
+			t.Errorf(".gitignore lost %q:\n%s", line, got)
+		}
+	}
+	if n := strings.Count(got, "# >>> ray"); n != 1 {
+		t.Errorf("opening markers = %d, want exactly one complete block:\n%s", n, got)
+	}
+	if n := strings.Count(got, "# <<< ray"); n != 1 {
+		t.Errorf("closing markers = %d, want exactly one complete block:\n%s", n, got)
+	}
+}
+
+// Depois do conserto o bloco fica completo; rodar de novo não pode mexer em nada.
+func TestMergeGitignoreIsStableAfterRepairingAnUnclosedMarker(t *testing.T) {
+	target := t.TempDir()
+	path := filepath.Join(target, ".gitignore")
+	if err := os.WriteFile(path, []byte("# >>> ray\nminha-regra\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if err := MergeGitignore(target, nil, Data{ProjectName: "demo"}, false, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first, _ := os.ReadFile(path)
+	if err := MergeGitignore(target, nil, Data{ProjectName: "demo"}, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	third, _ := os.ReadFile(path)
+	if string(first) != string(third) {
+		t.Errorf("a further run changed the file:\n--- before ---\n%s\n--- after ---\n%s", first, third)
+	}
+	if !strings.Contains(string(third), "minha-regra\n") {
+		t.Errorf("user line lost:\n%s", third)
+	}
+}
+
+// Os marcadores são linhas inteiras: um comentário do usuário que apenas começa
+// igual não é o bloco do ray.
+func TestMergeGitignoreOnlyTreatsWholeLinesAsMarkers(t *testing.T) {
+	existing := "# >>> rayon is a different tool\nrayon-cache/\n"
+
+	got := mergeGitignoreOnce(t, existing)
+
+	for _, line := range []string{"# >>> rayon is a different tool", "rayon-cache/"} {
+		if !strings.Contains(got, line+"\n") {
+			t.Errorf(".gitignore lost %q:\n%s", line, got)
+		}
+	}
+	if !strings.Contains(got, "\n# >>> ray\n") {
+		t.Errorf("the ray block was not appended as its own block:\n%s", got)
+	}
+}
+
+// IgnoresClaudeDir diz se o usuário ignora a pasta .claude inteira: aí a
+// whitelist do ray não vale (o git não reincluía arquivo de pasta ignorada).
+func TestGitignoreIgnoresClaudeDir(t *testing.T) {
+	yes := []string{".claude", ".claude/", "/.claude", "/.claude/", "**/.claude/", "  .claude/  ", "node_modules\n.claude/\n"}
+	no := []string{"", ".claude/*", ".claude/settings.local.json", "claude/", "# .claude/", "!.claude/", ".claude-old/", "# >>> ray\n!.claude/skills/\n# <<< ray\n"}
+	for _, c := range yes {
+		if !GitignoreIgnoresClaudeDir(c) {
+			t.Errorf("GitignoreIgnoresClaudeDir(%q) = false, want true", c)
+		}
+	}
+	for _, c := range no {
+		if GitignoreIgnoresClaudeDir(c) {
+			t.Errorf("GitignoreIgnoresClaudeDir(%q) = true, want false", c)
+		}
+	}
+}
