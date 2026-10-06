@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	"gopkg.in/yaml.v3"
 )
@@ -63,6 +64,9 @@ func (p *Profile) Validate() error {
 	if strings.TrimSpace(p.Name) == "" {
 		return fmt.Errorf("name is required")
 	}
+	if err := checkSingleSegment(p.Name); err != nil {
+		return fmt.Errorf("name %w", err)
+	}
 	for i, c := range p.Components {
 		if err := c.validate(); err != nil {
 			return fmt.Errorf("component %d: %w", i, err)
@@ -80,8 +84,22 @@ func (c Component) validate() error {
 	if strings.TrimSpace(c.Name) == "" {
 		return fmt.Errorf("name is required")
 	}
+	if err := checkSingleSegment(c.Name); err != nil {
+		return fmt.Errorf("name %w", err)
+	}
 	if strings.TrimSpace(c.Dest) == "" {
 		return fmt.Errorf("dest is required")
+	}
+	return nil
+}
+
+// checkSingleSegment recusa um nome que não seja um único elemento de caminho:
+// o nome vira parte de um caminho em disco, então separador, "." , ".." ou
+// caractere de controle (inclusive NUL) poderiam sair do diretório esperado.
+// Não há lista branca: acento, espaço, ponto e hífen continuam válidos.
+func checkSingleSegment(v string) error {
+	if v == "." || v == ".." || strings.ContainsAny(v, `/\`) || strings.IndexFunc(v, unicode.IsControl) >= 0 {
+		return fmt.Errorf(`must be a single path element (no separators, ".", ".." or control characters)`)
 	}
 	return nil
 }

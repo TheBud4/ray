@@ -104,6 +104,44 @@ func TestValidate(t *testing.T) {
 	}
 }
 
+// Nome de perfil e de componente viram parte de caminho (Join). Um nome que
+// não é um único elemento sobe diretórios ou aponta para o próprio diretório,
+// então Validate o recusa antes de qualquer Join.
+func TestValidateRejectsNameThatIsNotASingleSegment(t *testing.T) {
+	bad := []string{"..", ".", "a/b", `a\b`, "../x", "x/..", "/abs", "a\nb", "a\x00b", "a\tb"}
+	for _, name := range bad {
+		t.Run("profile "+strings.NewReplacer("\n", `\n`, "\x00", `\0`, "\t", `\t`).Replace(name), func(t *testing.T) {
+			err := (&Profile{Name: name}).Validate()
+			if err == nil || !strings.Contains(err.Error(), "single path element") {
+				t.Errorf("Validate() = %v, want an error mentioning a single path element", err)
+			}
+		})
+		t.Run("component "+strings.NewReplacer("\n", `\n`, "\x00", `\0`, "\t", `\t`).Replace(name), func(t *testing.T) {
+			p := &Profile{Name: "ok", Components: []Component{{Name: name, Dest: ".claude/skills"}}}
+			err := p.Validate()
+			if err == nil || !strings.Contains(err.Error(), "component 0") || !strings.Contains(err.Error(), "single path element") {
+				t.Errorf("Validate() = %v, want a component error mentioning a single path element", err)
+			}
+		})
+	}
+}
+
+// Controle do teste acima: a regra recusa forma, não vocabulário. Nomes comuns
+// e os perfis de fábrica seguem válidos — inclusive com ponto, hífen e espaço.
+func TestValidateAcceptsOrdinaryNamesAndFactoryProfiles(t *testing.T) {
+	for _, name := range []string{"web", "my-skill", "a.b", "meu perfil", "Go_1.25"} {
+		p := &Profile{Name: name, Components: []Component{{Name: name, Dest: ".claude/skills"}}}
+		if err := p.Validate(); err != nil {
+			t.Errorf("Validate(%q) = %v, want nil", name, err)
+		}
+	}
+	for _, p := range Defaults() {
+		if err := p.Validate(); err != nil {
+			t.Errorf("Defaults() profile %q: Validate() = %v, want nil", p.Name, err)
+		}
+	}
+}
+
 func TestLoadRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "x.yaml")
