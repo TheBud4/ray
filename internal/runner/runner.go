@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // Command represents a process to execute.
@@ -51,6 +52,10 @@ type Runner interface {
 	Run(ctx context.Context, c Command) (Result, error)
 }
 
+// waitDelay é quanto o Run ainda espera pelo fim da E/S depois que o processo
+// morreu ou o contexto foi cancelado.
+const waitDelay = time.Second
+
 // ExecRunner runs the actual commands. If the DryRun flag is active, it only prints them.
 type ExecRunner struct {
 	DryRun bool
@@ -68,6 +73,10 @@ func (r ExecRunner) Run(ctx context.Context, c Command) (Result, error) {
 
 	cmd := exec.CommandContext(ctx, c.Name, c.Args...)
 	cmd.Dir = c.Dir
+	// O cancelamento do contexto mata o processo, não os netos; um neto que
+	// segura o pipe de saída prenderia o Run até terminar sozinho. Depois do
+	// cancelamento, esperar pelo pipe mais que isto não traz saída útil.
+	cmd.WaitDelay = waitDelay
 	if c.Env != nil {
 		cmd.Env = os.Environ()
 		for k, v := range c.Env {

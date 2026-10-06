@@ -186,3 +186,26 @@ func TestExecRunnerStillBuffersWhenNoStreamsAreGiven(t *testing.T) {
 		t.Errorf("Result = %+v, want the buffered output", res)
 	}
 }
+
+// O timeout mata o processo filho, não os netos. Um neto que segura o pipe de
+// stdout deixava o Run preso até ele terminar por conta própria — o looker de
+// 3s do preflight levava o tempo do neto, não os 3s. O WaitDelay solta a espera
+// pelo pipe pouco depois do contexto vencer.
+func TestExecRunnerReturnsSoonAfterTimeoutEvenIfAGrandchildHoldsThePipe(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("depende de sh")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	res, _ := ExecRunner{}.Run(ctx, Command{Name: "sh", Args: []string{"-c", "sleep 6 & wait"}})
+	elapsed := time.Since(start)
+
+	if res.ExitCode == 0 {
+		t.Error("ExitCode = 0, want the killed process reported as failed")
+	}
+	if elapsed > 3*time.Second {
+		t.Errorf("Run() took %v after a 200ms timeout; a grandchild holding the pipe must not hold the runner", elapsed)
+	}
+}
