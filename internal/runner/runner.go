@@ -84,3 +84,32 @@ func (r ExecRunner) Run(ctx context.Context, c Command) (Result, error) {
 
 	return res, nil
 }
+
+// FailureReason resume em uma linha por que um comando falhou: vazio quando
+// deu certo, o erro quando o processo nem chegou a rodar e, quando saiu com
+// código diferente de zero, "exit N" seguido da última linha não vazia do
+// stderr (cortada em 200 bytes, com "..." ao fim).
+func FailureReason(res Result, err error) string {
+	if err != nil {
+		return err.Error()
+	}
+	if res.ExitCode == 0 {
+		return ""
+	}
+	reason := fmt.Sprintf("exit %d", res.ExitCode)
+	lines := strings.Split(res.Stderr, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" {
+			continue
+		}
+		if len(line) > maxReasonBytes {
+			line = line[:maxReasonBytes] + "..."
+		}
+		return reason + ": " + line
+	}
+	return reason
+}
+
+// maxReasonBytes limita a linha de stderr que FailureReason cita.
+const maxReasonBytes = 200

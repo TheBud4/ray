@@ -38,6 +38,7 @@ func runDoctor(l preflight.Looker, fixRunner runner.Runner, fix bool, out io.Wri
 
 	if fix {
 		uvWasMissing := false
+		uvInstalled := false
 		for _, c := range checks {
 			if c.Found || len(c.Fix) == 0 {
 				continue
@@ -50,17 +51,27 @@ func runDoctor(l preflight.Looker, fixRunner runner.Runner, fix bool, out io.Wri
 				// exec.CommandContext resolveria "uv" contra o PATH herdado
 				// no início do processo e não acharia o binário recém-posto
 				// em disco.
-				fmt.Fprintf(out, "⚠ skip fix %s: needs uv, which was just installed — reopen your shell and run `ray doctor --fix` again\n", c.Name)
+				if uvInstalled {
+					fmt.Fprintf(out, "⚠ skip fix %s: needs uv, which was just installed — reopen your shell and run `ray doctor --fix` again\n", c.Name)
+				} else {
+					fmt.Fprintf(out, "⚠ skip fix %s: needs uv, whose install failed\n", c.Name)
+				}
 				continue
 			}
+			fixOK := true
 			for _, cmd := range c.Fix {
-				if _, err := fixRunner.Run(context.Background(), cmd); err != nil {
-					fmt.Fprintf(out, "✗ fix %s failed: %v\n", c.Name, err)
+				res, err := fixRunner.Run(context.Background(), cmd)
+				if err != nil || res.ExitCode != 0 {
+					fixOK = false
+					fmt.Fprintf(out, "✗ fix %s failed: %s\n", c.Name, runner.FailureReason(res, err))
 				}
+			}
+			if c.Name == "uv" {
+				uvInstalled = fixOK
 			}
 		}
 		checks = preflight.Run(l, true)
-		if uvWasMissing {
+		if uvInstalled {
 			fmt.Fprintln(out, "uv was just installed — reopen your shell so PATH picks it up.")
 		}
 	}

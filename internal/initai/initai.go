@@ -219,8 +219,9 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 			}
 			allOK := true
 			for _, c := range g.Commands {
-				if !runOne(r, c) {
+				if ok, reason := runOne(r, c); !ok {
 					allOK = false
+					sum.Warnings = append(sum.Warnings, fmt.Sprintf("`%s`: %s", c.String(), reason))
 				}
 			}
 			if allOK {
@@ -305,10 +306,10 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	// 1 sem que nada tenha dado errado. Não aborta o loop.
 	for _, c := range plan.Commands {
 		c.Dir = target
-		if runOne(r, c) {
+		if ok, reason := runOne(r, c); ok {
 			sum.Installed = append(sum.Installed, c.String())
 		} else {
-			sum.Warnings = append(sum.Warnings, fmt.Sprintf("`%s` failed; run it again once the project has content", c.String()))
+			sum.Warnings = append(sum.Warnings, fmt.Sprintf("`%s` failed (%s); run it again once the project has content", c.String(), reason))
 		}
 	}
 

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 
@@ -136,10 +137,12 @@ func TestRunDoctorFixInstallsAndRechecks(t *testing.T) {
 		t.Fatalf("runDoctor() error = %v, want nil after fix", err)
 	}
 
-	wantCalled := "sh -c curl -LsSf https://astral.sh/uv/install.sh | sh"
+	// O fix do uv é um `sh -c <script>` que baixa de astral.sh; a forma exata do
+	// script não é o que este teste prende.
+	wantCalled := "sh -c <script from https://astral.sh/uv/install.sh>"
 	found := false
 	for _, c := range fr.Calls {
-		if c.String() == wantCalled {
+		if c.Name == "sh" && strings.Contains(c.String(), "https://astral.sh/uv/install.sh") {
 			found = true
 		}
 		if c.Name == "uv" {
@@ -214,5 +217,48 @@ func TestRunDoctorFixDryRunDoesNotExecute(t *testing.T) {
 	err := runDoctor(l, dryRunner, true, &out)
 	if err == nil {
 		t.Fatal("runDoctor() = nil error, want error: python3.10+/uv still missing after a dry-run fix")
+	}
+}
+
+// exitRunner faz todo comando sair com code e stderr, sem err — como o
+// ExecRunner faz com um processo que roda e falha.
+type exitRunner struct {
+	code   int
+	stderr string
+}
+
+func (e exitRunner) Run(_ context.Context, _ runner.Command) (runner.Result, error) {
+	return runner.Result{ExitCode: e.code, Stderr: e.stderr}, nil
+}
+
+// O ExecRunner devolve err == nil para um processo que saiu com código ≠ 0; um
+// doctor que só olha o err deixava o fix falhar calado.
+func TestRunDoctorFixReportsAFixThatExitsNonZero(t *testing.T) {
+	l := stubLooker{"npx": true, "node": true, "python3.10+": true, "uv": true} // headroom e graphify faltam
+	var out bytes.Buffer
+
+	if err := runDoctor(l, exitRunner{code: 1, stderr: "error: No space left on device\n"}, true, &out); err != nil {
+		t.Fatalf("runDoctor() error = %v (headroom and graphify are optional)", err)
+	}
+	if !strings.Contains(out.String(), "✗ fix headroom failed: exit 1: error: No space left on device") {
+		t.Errorf("output = %q, want the failed fix reported with its exit code and stderr", out.String())
+	}
+}
+
+// "uv was just installed" é uma afirmação: só vale se o fix do uv deu certo.
+func TestRunDoctorFixDoesNotClaimUVWasInstalledWhenItFailed(t *testing.T) {
+	l := stubLooker{"npx": true, "node": true} // uv e python faltam
+	var out bytes.Buffer
+
+	_ = runDoctor(l, exitRunner{code: 6, stderr: "curl: (6) Could not resolve host\n"}, true, &out)
+	got := out.String()
+	if strings.Contains(got, "uv was just installed") {
+		t.Errorf("output = %q, must not say uv was installed when its fix failed", got)
+	}
+	if strings.Contains(got, "which was just installed") {
+		t.Errorf("output = %q, the skip notice must not claim uv was installed when its fix failed", got)
+	}
+	if !strings.Contains(got, "✗ fix uv failed: exit 6: curl: (6) Could not resolve host") {
+		t.Errorf("output = %q, want the uv fix failure reported", got)
 	}
 }

@@ -819,3 +819,26 @@ func TestRunForceOverwritesComponentWhoseHashCannotBeComputed(t *testing.T) {
 		t.Errorf("SKILL.md = %q, want the upstream content after --force", got)
 	}
 }
+
+func TestRunToolUpgradeFailureCarriesItsReason(t *testing.T) {
+	home := newHome(t)
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+	writeProfileRecord(t, target, "test")
+	fr := &runner.FakeRunner{Results: map[string]runner.Result{
+		"uv tool upgrade headroom-ai": {ExitCode: 1, Stderr: "error: network unreachable\n"},
+	}}
+
+	sum, err := Run(fr, cleanGitCheck(), Options{Target: target}, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !sum.HadFailure || !slices.Contains(sum.Failed, "uv tool upgrade headroom-ai") {
+		t.Errorf("HadFailure = %v, Failed = %v; want the upgrade reported as failed", sum.HadFailure, sum.Failed)
+	}
+	if !slices.ContainsFunc(sum.Warnings, func(w string) bool {
+		return strings.Contains(w, "uv tool upgrade headroom-ai") && strings.Contains(w, "exit 1: error: network unreachable")
+	}) {
+		t.Errorf("Warnings = %v, want the failed command with its exit code and stderr", sum.Warnings)
+	}
+}

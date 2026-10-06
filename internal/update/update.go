@@ -89,10 +89,11 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 	// não tiver recortado a máquina para fora deste update.
 	if !opts.NoGlobal {
 		for _, cmd := range toolUpgradeCommands(prof.Integrations) {
-			if runOne(r, cmd) {
+			if ok, reason := runOne(r, cmd); ok {
 				sum.Updated = append(sum.Updated, cmd.String())
 			} else {
 				sum.Failed = append(sum.Failed, cmd.String())
+				sum.Warnings = append(sum.Warnings, fmt.Sprintf("`%s`: %s", cmd.String(), reason))
 			}
 		}
 	}
@@ -187,11 +188,12 @@ func toolUpgradeCommands(in profile.Integrations) []runner.Command {
 	return cmds
 }
 
-// runOne roda c via r e classifica o resultado: err ou ExitCode != 0 → false.
-func runOne(r runner.Runner, c runner.Command) bool {
+// runOne roda c via r e classifica o resultado: err ou ExitCode != 0 → ok
+// false, com o motivo (runner.FailureReason) para quem quiser mostrá-lo.
+func runOne(r runner.Runner, c runner.Command) (ok bool, reason string) {
 	res, err := r.Run(context.Background(), c)
-	if err != nil {
-		return false
+	if err != nil || res.ExitCode != 0 {
+		return false, runner.FailureReason(res, err)
 	}
-	return res.ExitCode == 0
+	return true, ""
 }

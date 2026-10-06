@@ -1181,3 +1181,45 @@ func TestRunGlobalInstallFailureStillFailsTheRun(t *testing.T) {
 		t.Error("HadFailure = false, want true when the global installs fail")
 	}
 }
+
+// O resumo diz O QUE falhou e, agora, POR QUÊ: exit code e a última linha do
+// stderr, em vez de só o nome do comando.
+func TestRunFailureCarriesItsReason(t *testing.T) {
+	t.Run("global install", func(t *testing.T) {
+		home := newHome(t)
+		seedComponent(t, home, "s")
+		writeProfile(t, home.ProfilesDir, testProfile())
+		fr := &runner.FakeRunner{Results: map[string]runner.Result{
+			"uv tool install graphifyy": {ExitCode: 2, Stderr: "error: No space left on device\n"},
+		}}
+
+		sum, err := Run(fr, allFound, Options{Profile: "test", Target: t.TempDir(), Out: &bytes.Buffer{}}, home)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !sum.HadFailure {
+			t.Fatal("HadFailure = false, want the failed install to fail the run")
+		}
+		if !slices.ContainsFunc(sum.Warnings, func(w string) bool {
+			return strings.Contains(w, "uv tool install graphifyy") && strings.Contains(w, "exit 2: error: No space left on device")
+		}) {
+			t.Errorf("Warnings = %v, want the failed command with its exit code and stderr", sum.Warnings)
+		}
+	})
+	t.Run("per-project command", func(t *testing.T) {
+		home := newHome(t)
+		seedComponent(t, home, "s")
+		writeProfile(t, home.ProfilesDir, testProfile())
+		fr := &runner.FakeRunner{Results: map[string]runner.Result{
+			"graphify update .": {ExitCode: 1, Stderr: "[graphify watch] No code files found - nothing to rebuild.\n"},
+		}}
+
+		sum, err := Run(fr, allFound, Options{Profile: "test", Target: t.TempDir(), NoGlobal: true, Out: &bytes.Buffer{}}, home)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.ContainsFunc(sum.Warnings, func(w string) bool { return strings.Contains(w, "No code files found") }) {
+			t.Errorf("Warnings = %v, want the graphify reason in the warning", sum.Warnings)
+		}
+	})
+}

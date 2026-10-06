@@ -35,13 +35,14 @@ func ensureWritableDir(dir string, dryRun bool, out io.Writer) error {
 	return os.Remove(probe)
 }
 
-// runOne roda c via r e classifica o resultado: err ou ExitCode != 0 → false.
-func runOne(r runner.Runner, c runner.Command) bool {
+// runOne roda c via r e classifica o resultado: err ou ExitCode != 0 → ok
+// false, com o motivo (runner.FailureReason) para quem quiser mostrá-lo.
+func runOne(r runner.Runner, c runner.Command) (ok bool, reason string) {
 	res, err := r.Run(context.Background(), c)
-	if err != nil {
-		return false
+	if err != nil || res.ExitCode != 0 {
+		return false, runner.FailureReason(res, err)
 	}
-	return res.ExitCode == 0
+	return true, ""
 }
 
 // dedupScaffoldFiles mantém base inteiro e acrescenta de extra só os paths

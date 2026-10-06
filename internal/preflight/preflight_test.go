@@ -1,6 +1,14 @@
 package preflight
 
-import "testing"
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+
+	"github.com/TheBud4/ray/internal/runner"
+)
 
 type stubLooker map[string]bool
 
@@ -116,5 +124,69 @@ func TestRunIncludesOptionalJQ(t *testing.T) {
 	}
 	if jq.Hint == "" {
 		t.Error("jq Hint is empty; without it ray doctor cannot say what to do")
+	}
+}
+
+// uvFixCommand devolve o Fix da checagem do uv, como o doctor o executa.
+func uvFixCommand(t *testing.T) runner.Command {
+	t.Helper()
+	for _, c := range Run(stubMissing{}, true) {
+		if c.Name == "uv" && len(c.Fix) == 1 {
+			return c.Fix[0]
+		}
+	}
+	t.Fatal("no fix command for uv")
+	return runner.Command{}
+}
+
+type stubMissing struct{}
+
+func (stubMissing) Look(string) bool { return false }
+
+func fakeCurl(t *testing.T, body string) (pathEnv string) {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "curl"), []byte("#!/bin/sh\n"+body+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return dir + string(os.PathListSeparator) + os.Getenv("PATH")
+}
+
+// O script roda de verdade, com um curl falso na frente do PATH: o exit do curl
+// tem de ser o exit do fix. Sem rede, `curl | sh` devolvia o exit do sh (0) e o
+// doctor anunciava um uv que nunca foi instalado.
+func TestUVInstallScriptPropagatesACurlFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("posix shell script")
+	}
+	cmd := uvFixCommand(t)
+	cmd.Env = map[string]string{"PATH": fakeCurl(t, "echo 'curl: (6) Could not resolve host' >&2; exit 6")}
+
+	res, err := runner.ExecRunner{}.Run(context.Background(), cmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.ExitCode == 0 {
+		t.Errorf("exit = 0 with a failing curl; want non-zero (stderr = %q)", res.Stderr)
+	}
+}
+
+func TestUVInstallScriptRunsWhatCurlDownloads(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("posix shell script")
+	}
+	marker := filepath.Join(t.TempDir(), "installed")
+	cmd := uvFixCommand(t)
+	cmd.Env = map[string]string{"PATH": fakeCurl(t, "echo 'touch "+marker+"'")}
+
+	res, err := runner.ExecRunner{}.Run(context.Background(), cmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.ExitCode != 0 {
+		t.Fatalf("exit = %d, stderr = %q; want 0", res.ExitCode, res.Stderr)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Errorf("the downloaded script did not run (%v)", err)
 	}
 }

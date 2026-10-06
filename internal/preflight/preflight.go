@@ -18,7 +18,11 @@ type Check struct {
 	Fix      []runner.Command
 }
 
-const uvInstallScript = `curl -LsSf https://astral.sh/uv/install.sh | sh`
+// uvInstallScript baixa e roda o instalador do uv. O download fica numa
+// variável antes do `sh` porque em `curl ... | sh` o status do pipeline é o do
+// `sh`: uma falha do curl (sem rede, host que não resolve) passaria por
+// sucesso. Assim o exit do curl é propagado.
+const uvInstallScript = `s=$(curl -LsSf https://astral.sh/uv/install.sh) || exit $?; printf '%s\n' "$s" | sh`
 
 // Run monta a tabela de checagens (README.md) e resolve Found via l.
 // needPython liga o requisito de python3.10+/uv (usado por headroom/code_graph).
