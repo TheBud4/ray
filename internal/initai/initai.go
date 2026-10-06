@@ -300,13 +300,15 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 
 	// 7c. comandos por-projeto das integrações (ex. `graphify update .`) —
 	// roda depois de 7b para achar o conteúdo vendorizado já no disco.
-	// Falha isolada não aborta o loop.
+	// A falha vira aviso, não Failed: o resultado desses comandos (o índice do
+	// graphify) é regenerável, e numa pasta ainda sem código o graphify sai com
+	// 1 sem que nada tenha dado errado. Não aborta o loop.
 	for _, c := range plan.Commands {
 		c.Dir = target
 		if runOne(r, c) {
 			sum.Installed = append(sum.Installed, c.String())
 		} else {
-			sum.Failed = append(sum.Failed, c.String())
+			sum.Warnings = append(sum.Warnings, fmt.Sprintf("`%s` failed; run it again once the project has content", c.String()))
 		}
 	}
 

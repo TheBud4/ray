@@ -2,6 +2,7 @@ package initai
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -1094,5 +1095,89 @@ func TestRunDryRunForceKeepsAnEditedTemplate(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(tmpl); string(got) != "# my custom template" {
 		t.Errorf("template = %q, want the edit kept", got)
+	}
+}
+
+// O `graphify update .` indexa o que o projeto já tem; numa pasta sem código ele
+// sai com 1 ("nothing to rebuild"), e isso não é o ambiente falhando — o índice
+// é regenerável. Vira aviso: o resumo diz o que aconteceu e o comando não
+// acusa erro.
+func TestRunPerProjectCommandFailureIsAWarningNotAFailure(t *testing.T) {
+	cases := map[string]*runner.FakeRunner{
+		"exit code 1": {Results: map[string]runner.Result{"graphify update .": {ExitCode: 1}}},
+	}
+	for name, fr := range cases {
+		t.Run(name, func(t *testing.T) {
+			home := newHome(t)
+			seedComponent(t, home, "s")
+			writeProfile(t, home.ProfilesDir, testProfile())
+			opts := Options{Profile: "test", Target: t.TempDir(), NoGlobal: true, Out: &bytes.Buffer{}}
+
+			sum, err := Run(fr, allFound, opts, home)
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if sum.HadFailure || len(sum.Failed) != 0 {
+				t.Errorf("HadFailure = %v, Failed = %v; want none: an index that could not be built is not a failed environment", sum.HadFailure, sum.Failed)
+			}
+			if !slices.ContainsFunc(sum.Warnings, func(w string) bool {
+				return strings.Contains(w, "graphify update .") && strings.Contains(w, "failed")
+			}) {
+				t.Errorf("Warnings = %v, want one saying `graphify update .` failed", sum.Warnings)
+			}
+			if slices.Contains(sum.Installed, "graphify update .") {
+				t.Errorf("Installed = %v, must not list the command that failed", sum.Installed)
+			}
+		})
+	}
+}
+
+// Quando o comando nem chega a rodar (binário ausente, erro de exec), vale o
+// mesmo: aviso, não falha.
+func TestRunPerProjectCommandExecErrorIsAWarning(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "s")
+	writeProfile(t, home.ProfilesDir, testProfile())
+	// NoGlobal: o erro de exec não pode derrubar também os passos globais.
+	fr := &failOnlyRunner{match: "graphify update .", err: errors.New("exec: graphify not found")}
+
+	sum, err := Run(fr, allFound, Options{Profile: "test", Target: t.TempDir(), NoGlobal: true, Out: &bytes.Buffer{}}, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if sum.HadFailure {
+		t.Errorf("HadFailure = true, Failed = %v; want a warning only", sum.Failed)
+	}
+	if !slices.ContainsFunc(sum.Warnings, func(w string) bool { return strings.Contains(w, "graphify update .") }) {
+		t.Errorf("Warnings = %v, want one mentioning the command", sum.Warnings)
+	}
+}
+
+// failOnlyRunner devolve err só para o comando que casa com match.
+type failOnlyRunner struct {
+	match string
+	err   error
+}
+
+func (f *failOnlyRunner) Run(_ context.Context, c runner.Command) (runner.Result, error) {
+	if c.String() == f.match {
+		return runner.Result{}, f.err
+	}
+	return runner.Result{ExitCode: 0}, nil
+}
+
+// Controle: o que continua sendo falha. Uma instalação global que não roda
+// compromete a máquina, e aí o resumo e o exit têm de acusar.
+func TestRunGlobalInstallFailureStillFailsTheRun(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "s")
+	writeProfile(t, home.ProfilesDir, testProfile())
+
+	sum, err := Run(&runner.FakeRunner{Err: errors.New("boom")}, allFound, Options{Profile: "test", Target: t.TempDir(), Out: &bytes.Buffer{}}, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !sum.HadFailure {
+		t.Error("HadFailure = false, want true when the global installs fail")
 	}
 }

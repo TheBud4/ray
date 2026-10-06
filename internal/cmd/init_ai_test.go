@@ -179,3 +179,29 @@ func TestPrintInitAISummaryNoFooterOnFailure(t *testing.T) {
 		t.Error("summary shows next steps after a failure; the environment is half-written")
 	}
 }
+
+// Numa pasta nova o índice do graphify não tem o que indexar. O comando termina
+// sem erro e o rodapé com os próximos passos aparece — é o que a pessoa precisa
+// para commitar o ambiente que acabou de nascer.
+func TestRunInitAIOnAnEmptyFolderSucceedsAndShowsNextSteps(t *testing.T) {
+	home := newTestHome(t)
+	// CodeGraph ligado: é o que faz o plano incluir `graphify update .`. Sem ele
+	// o comando nunca rodaria e o teste não exercitaria o caminho.
+	p := newTestProfile(nil)
+	p.Integrations = profile.Integrations{CodeGraph: true}
+	writeTestProfile(t, home.ProfilesDir, p)
+	fr := &runner.FakeRunner{Results: map[string]runner.Result{"graphify update .": {ExitCode: 1}}}
+	var out bytes.Buffer
+	opts := initai.Options{Profile: "test", Target: t.TempDir(), NoGlobal: true, Out: &out}
+
+	if err := runInitAI(fr, allFound, opts, home, &out); err != nil {
+		t.Fatalf("runInitAI() error = %v, want nil: %s", err, out.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, "Next steps:") {
+		t.Errorf("output = %q, want the next-steps footer", got)
+	}
+	if !strings.Contains(got, "Warnings:") || !strings.Contains(got, "graphify update .") {
+		t.Errorf("output = %q, want a warning about `graphify update .`", got)
+	}
+}
