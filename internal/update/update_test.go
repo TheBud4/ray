@@ -220,6 +220,11 @@ func TestRunMissingProfileRecordAndNoOverrideErrors(t *testing.T) {
 	if err == nil {
 		t.Fatal("Run() = nil error, want error when no .claude/.ray-profile and no --profile")
 	}
+	// Pasta sem ambiente: o que falta é montá-lo, e a saída comum é o init ai —
+	// o --profile só serve a quem sabe o que quer atualizar sem registro.
+	if !strings.Contains(err.Error(), "ray init ai") {
+		t.Errorf("error = %q, want it to point at `ray init ai`", err)
+	}
 }
 
 // ---- Run: tool upgrades ---------------------------------------------

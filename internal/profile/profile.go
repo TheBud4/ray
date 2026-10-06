@@ -247,7 +247,7 @@ func LoadForTarget(profilesDir, target, overrideName string) (*Profile, error) {
 			// o caminho inteiro duas vezes na mesma linha. E "não existe"
 			// merece frase própria — é o caso comum, e a saída é uma só.
 			if os.IsNotExist(err) {
-				return nil, fmt.Errorf("no profile recorded at %s (pass --profile to choose one)", ProfileRecordPath(target))
+				return nil, fmt.Errorf("no profile recorded at %s (run `ray init ai` to set up the environment here, or pass --profile to choose a recipe)", ProfileRecordPath(target))
 			}
 			return nil, fmt.Errorf("reading the recorded profile: %w", err)
 		}
