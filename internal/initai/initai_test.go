@@ -877,3 +877,39 @@ func TestInGitRepoDetectsAncestorDotGit(t *testing.T) {
 		t.Error("inGitRepo() = true outside any repo")
 	}
 }
+
+// O init ai carrega a receita pelo mesmo Load que valida: uma receita hostil no
+// disco falha antes de qualquer efeito no alvo.
+func TestRunRefusesHostileRecipeBeforeAnyEffectOnTarget(t *testing.T) {
+	recipes := map[string]string{
+		"component name climbs": "name: hostile\ncomponents:\n  - name: ..\n    dest: .claude/skills\n",
+		"component dest climbs": "name: hostile\ncomponents:\n  - name: s\n    dest: ../../elsewhere\n",
+		"scaffold path climbs":  "name: hostile\nscaffold:\n  files:\n    - path: ../../outside.md\n",
+		"scaffold template":     "name: hostile\nscaffold:\n  files:\n    - path: CLAUDE.md\n      template: ../../secret\n",
+	}
+	for label, yamlText := range recipes {
+		t.Run(label, func(t *testing.T) {
+			home := newHome(t)
+			seedComponent(t, home, "s")
+			if err := os.MkdirAll(home.ProfilesDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(home.ProfilesDir, "hostile.yaml"), []byte(yamlText), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			target := t.TempDir()
+
+			_, err := Run(&runner.FakeRunner{}, allFound, Options{Profile: "hostile", Target: target, Force: true, Out: &bytes.Buffer{}}, home)
+			if err == nil || !strings.Contains(err.Error(), "invalid profile") {
+				t.Fatalf("Run() error = %v, want an invalid profile error", err)
+			}
+			entries, rerr := os.ReadDir(target)
+			if rerr != nil {
+				t.Fatal(rerr)
+			}
+			if len(entries) != 0 {
+				t.Errorf("target has %d entries after a refused recipe, want none: %v", len(entries), entries)
+			}
+		})
+	}
+}

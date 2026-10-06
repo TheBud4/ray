@@ -2,6 +2,7 @@ package update
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -674,4 +675,76 @@ func seedTempFile(t *testing.T, content string) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+// writeRawProfile grava YAML cru como receita: é assim que uma receita hostil
+// chega ao disco (editada à mão ou trazida de fora), sem passar por Validate.
+func writeRawProfile(t *testing.T, dir, name, yamlText string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, name+".yaml"), []byte(yamlText), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Uma receita com componente que sobe diretórios (ou que aponta para a raiz do
+// projeto) é recusada ao carregar, antes de qualquer cópia ou RemoveAll — com e
+// sem --force. O alvo e o que há nele continuam intactos.
+func TestRunRefusesHostileRecipeBeforeAnyEffect(t *testing.T) {
+	recipes := map[string]string{
+		"name climbs":   "name: hostile\ncomponents:\n  - name: ..\n    dest: .claude/skills\n",
+		"name is root":  "name: hostile\ncomponents:\n  - name: .\n    dest: .\n",
+		"dest climbs":   "name: hostile\ncomponents:\n  - name: s\n    dest: ../../elsewhere\n",
+		"dest absolute": "name: hostile\ncomponents:\n  - name: s\n    dest: /tmp\n",
+	}
+	for label, yamlText := range recipes {
+		for _, force := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/force=%v", label, force), func(t *testing.T) {
+				home := newHome(t)
+				seedComponent(t, home, "# upstream")
+				writeRawProfile(t, home.ProfilesDir, "hostile", yamlText)
+				target := t.TempDir()
+				sentinel := filepath.Join(target, "keep.txt")
+				if err := os.WriteFile(sentinel, []byte("mine"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+
+				_, err := Run(&runner.FakeRunner{}, cleanGitCheck(), Options{Profile: "hostile", Target: target, Force: force, NoGlobal: true}, home)
+				if err == nil || !strings.Contains(err.Error(), "invalid profile") {
+					t.Fatalf("Run() error = %v, want an invalid profile error", err)
+				}
+				if got, rerr := os.ReadFile(sentinel); rerr != nil || string(got) != "mine" {
+					t.Errorf("target file = %q, %v; want it untouched (force=%v)", got, rerr, force)
+				}
+				if _, serr := os.Stat(filepath.Join(target, ".claude")); !os.IsNotExist(serr) {
+					t.Errorf(".claude was created in the target (stat err = %v)", serr)
+				}
+			})
+		}
+	}
+}
+
+// Um .claude/.ray-profile forjado num repo clonado não pode escolher uma receita
+// de fora de ProfilesDir: a receita de fora é válida e copiaria um componente
+// para dentro do projeto se fosse carregada.
+func TestRunRefusesForgedProfileRecord(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "# upstream")
+	if err := os.MkdirAll(home.ProfilesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// ../evil.yaml fica ao lado de ProfilesDir, fora dele.
+	writeRawProfile(t, filepath.Dir(home.ProfilesDir), "evil", "name: evil\ncomponents:\n  - name: s\n    dest: .claude/skills\n")
+	target := t.TempDir()
+	writeProfileRecord(t, target, "../evil")
+
+	_, err := Run(&runner.FakeRunner{}, cleanGitCheck(), Options{Target: target, Force: true, NoGlobal: true}, home)
+	if err == nil || !strings.Contains(err.Error(), "single path element") {
+		t.Fatalf("Run() error = %v, want an error mentioning a single path element", err)
+	}
+	if _, serr := os.Stat(filepath.Join(target, ".claude", "skills")); !os.IsNotExist(serr) {
+		t.Errorf("a component was copied from the forged recipe (stat err = %v)", serr)
+	}
 }
