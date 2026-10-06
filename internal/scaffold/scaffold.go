@@ -75,11 +75,21 @@ type Result struct {
 // opts.Data e grava em opts.Target/f.Path. Não sobrescreve arquivos existentes
 // a menos que opts.Force — exceto .claude/handoff.md, que Force nunca toca.
 //
-// A resolução de template de toda a lista é validada antes de escrever
-// qualquer arquivo (RF-04): um path sem template no meio da lista não pode
-// deixar os arquivos anteriores já gravados no disco.
+// A resolução e a renderização dos templates de toda a lista são validadas
+// antes de escrever qualquer arquivo: um path sem template, ou um template que
+// não renderiza, no meio da lista não pode deixar os arquivos anteriores já
+// gravados no disco. Template quebrado de um arquivo que seria pulado não
+// falha a execução.
 func WriteFiles(files []profile.ScaffoldFile, opts Options) (Result, error) {
-	tmplNames := make([]string, len(files))
+	// Tudo que pode recusar a execução acontece antes de gravar qualquer
+	// arquivo: resolução do template, existência dele e — para o arquivo que
+	// vai de fato ser gravado — o parse e a execução. O conteúdo já renderizado
+	// é guardado para o laço de escrita não renderizar de novo.
+	type planned struct {
+		skip     bool
+		rendered []byte
+	}
+	plan := make([]planned, len(files))
 	for i, f := range files {
 		tmplName := f.Template
 		if tmplName == "" {
@@ -95,16 +105,9 @@ func WriteFiles(files []profile.ScaffoldFile, opts Options) (Result, error) {
 		if _, err := readTemplate(tmplName, opts.TemplatesDir); err != nil {
 			return Result{}, err
 		}
-		tmplNames[i] = tmplName
-	}
 
-	var res Result
-	for i, f := range files {
-		tmplName := tmplNames[i]
-
-		targetPath := filepath.Join(opts.Target, f.Path)
 		exists := false
-		if _, err := os.Stat(targetPath); err == nil {
+		if _, err := os.Stat(filepath.Join(opts.Target, f.Path)); err == nil {
 			exists = true
 		} else if !os.IsNotExist(err) {
 			return Result{}, err
@@ -115,13 +118,22 @@ func WriteFiles(files []profile.ScaffoldFile, opts Options) (Result, error) {
 		isHandoff := filepath.ToSlash(filepath.Clean(f.Path)) == handoffPath
 		force := opts.Force && !isHandoff
 		if exists && !force {
-			res.Skipped = append(res.Skipped, f.Path)
+			plan[i].skip = true
 			continue
 		}
 
 		data, err := render(tmplName, opts.TemplatesDir, opts.Data)
 		if err != nil {
 			return Result{}, err
+		}
+		plan[i].rendered = data
+	}
+
+	var res Result
+	for i, f := range files {
+		if plan[i].skip {
+			res.Skipped = append(res.Skipped, f.Path)
+			continue
 		}
 
 		if opts.DryRun {
@@ -132,6 +144,7 @@ func WriteFiles(files []profile.ScaffoldFile, opts Options) (Result, error) {
 			continue
 		}
 
+		targetPath := filepath.Join(opts.Target, f.Path)
 		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 			return Result{}, err
 		}
@@ -139,7 +152,7 @@ func WriteFiles(files []profile.ScaffoldFile, opts Options) (Result, error) {
 		if strings.HasSuffix(f.Path, executableSuffix) {
 			mode = 0o755
 		}
-		if err := os.WriteFile(targetPath, data, mode); err != nil {
+		if err := os.WriteFile(targetPath, plan[i].rendered, mode); err != nil {
 			return Result{}, err
 		}
 		res.Created = append(res.Created, f.Path)

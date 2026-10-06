@@ -1329,3 +1329,32 @@ func TestRunDoesNotWarnAboutGitignoreByDefault(t *testing.T) {
 		t.Errorf("Warnings = %v, want none about .gitignore on a clean target", sum.Warnings)
 	}
 }
+
+// O settings.json aponta para os scripts de hook do scaffold. Se um template do
+// overlay não renderiza, o init ai aborta SEM ter gravado o settings.json: um
+// settings que cita hook inexistente faz toda chamada de ferramenta falhar com
+// 127 até alguém o consertar à mão.
+func TestRunLeavesNoSettingsPointingAtMissingHooksWhenATemplateFails(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "s")
+	writeProfile(t, home.ProfilesDir, testProfile())
+	broken := filepath.Join(home.TemplatesDir, "claude", "hooks", "guard-add.sh.tmpl")
+	if err := os.MkdirAll(filepath.Dir(broken), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(broken, []byte("{{ .ProjectName"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	target := t.TempDir()
+
+	_, err := Run(&runner.FakeRunner{}, allFound, Options{Profile: "test", Target: target, NoGlobal: true, Out: &bytes.Buffer{}}, home)
+	if err == nil || !strings.Contains(err.Error(), "guard-add.sh.tmpl") {
+		t.Fatalf("Run() error = %v, want one naming the broken template", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(target, ".claude", "settings.json")); !os.IsNotExist(statErr) {
+		t.Errorf("settings.json exists although the hooks it names were never written (stat err = %v)", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(target, ".claude", "hooks")); !os.IsNotExist(statErr) {
+		t.Errorf(".claude/hooks exists after a refused run (stat err = %v)", statErr)
+	}
+}

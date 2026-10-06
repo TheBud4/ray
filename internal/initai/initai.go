@@ -332,13 +332,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		sum.Created = append(sum.Created, ".mcp.json")
 	}
 
-	// 9. settings.json.
-	settings := mergeSettings(prof.Scaffold.Settings, scaffold.HookSettings())
-	if err := claudecfg.MergeSettings(target, settings, opts.Force, opts.DryRun, out); err != nil {
-		return Summary{}, err
-	}
-
-	// 10. scaffold (orientação + arquivos de sistema).
+	// 9. scaffold (orientação + arquivos de sistema).
 	files := dedupScaffoldFiles(prof.Scaffold.Files, scaffold.SystemFiles())
 	res, err := scaffold.WriteFiles(files, scaffold.Options{
 		Target:       target,
@@ -356,6 +350,14 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	// os descartaria em silêncio. Os passos 11 e 12 já acumulavam.
 	sum.Created = append(sum.Created, res.Created...)
 	sum.Skipped = append(sum.Skipped, res.Skipped...)
+
+	// 10. settings.json. Vem depois do scaffold porque ele cita os scripts de
+	// hook que o scaffold grava: se o scaffold falha, não sobra um settings
+	// apontando para hooks inexistentes.
+	settings := mergeSettings(prof.Scaffold.Settings, scaffold.HookSettings())
+	if err := claudecfg.MergeSettings(target, settings, opts.Force, opts.DryRun, out); err != nil {
+		return Summary{}, err
+	}
 
 	// 11. .gitignore (I1) — regra-mãe: conteúdo de IA vendorizado é
 	// commitável, runtime/segredos nunca são.

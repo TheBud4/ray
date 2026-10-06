@@ -1356,3 +1356,60 @@ func TestGitignoreIgnoresClaudeDir(t *testing.T) {
 		}
 	}
 }
+
+func writeOverlayTemplate(t *testing.T, dir, name, content string) {
+	t.Helper()
+	path := filepath.Join(dir, filepath.FromSlash(name))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Um template que não renderiza (sintaxe quebrada, ou campo que não existe) tem
+// de falhar ANTES de qualquer arquivo ser gravado: o pré-check só conferia que o
+// template existe, e os arquivos anteriores da lista já estavam no disco quando
+// o erro vinha.
+func TestWriteFilesRendersEveryTemplateBeforeWritingAnything(t *testing.T) {
+	cases := map[string]string{
+		"syntax error":        "{{ .ProjectName",
+		"unknown data field":  "{{ .NoSuchField }}",
+		"unknown template fn": "{{ nosuchfunc }}",
+	}
+	for name, broken := range cases {
+		t.Run(name, func(t *testing.T) {
+			target := t.TempDir()
+			overlay := t.TempDir()
+			writeOverlayTemplate(t, overlay, "claude/hooks/guard-add.sh.tmpl", broken)
+			files := []profile.ScaffoldFile{
+				{Path: "CLAUDE.md"},
+				{Path: ".claude/hooks/guard-add.sh"}, // o do overlay quebrado, no meio da lista
+				{Path: ".claude/handoff.md"},
+			}
+
+			_, err := WriteFiles(files, Options{Target: target, TemplatesDir: overlay, Data: Data{ProjectName: "demo", Stack: "go"}})
+			if err == nil || !strings.Contains(err.Error(), "guard-add.sh.tmpl") {
+				t.Fatalf("WriteFiles() error = %v, want one naming the broken template", err)
+			}
+			for _, f := range files {
+				if _, statErr := os.Stat(filepath.Join(target, f.Path)); !os.IsNotExist(statErr) {
+					t.Errorf("%s was written even though a later template cannot render (stat err = %v)", f.Path, statErr)
+				}
+			}
+		})
+	}
+}
+
+// O dry-run usa o mesmo pré-check: simular não pode prometer o que a execução
+// real não consegue fazer.
+func TestWriteFilesDryRunAlsoRefusesATemplateThatDoesNotRender(t *testing.T) {
+	overlay := t.TempDir()
+	writeOverlayTemplate(t, overlay, "claude/handoff.md.tmpl", "{{ .ProjectName")
+
+	_, err := WriteFiles([]profile.ScaffoldFile{{Path: ".claude/handoff.md"}}, Options{Target: t.TempDir(), TemplatesDir: overlay, DryRun: true, Data: Data{ProjectName: "demo"}})
+	if err == nil {
+		t.Fatal("WriteFiles() dry-run = nil error, want the render error")
+	}
+}
