@@ -22,6 +22,14 @@ type Command struct {
 	// DO_NOT_TRACK=1 para o CliAcquirer). nil = herda só o ambiente do
 	// processo pai, sem adições.
 	Env map[string]string
+	// Stdin, Stdout e Stderr, quando definidos, ligam o processo direto a esses
+	// fluxos: a saída chega em tempo real, o processo pode ler a entrada, e
+	// stdout e stderr ficam separados. Quando nulos, o processo roda sem entrada
+	// e a saída é acumulada em Result.Stdout/Result.Stderr (o comportamento de
+	// sempre). Um Stdout definido deixa Result.Stdout vazio — a saída já foi para
+	// onde foi pedida.
+	Stdin          io.Reader
+	Stdout, Stderr io.Writer
 }
 
 // String gives a legible form to logs and error messages.
@@ -37,8 +45,8 @@ type Result struct {
 
 // Runner is the contract: it knows how to execute a Command.
 // Everything in ray depends on this interface rather than on exec directly — that's what enables FakeRunner in tests.
-// Única exceção: spawnEditor (internal/cmd/profile.go) — Result bufferiza stdout/stderr, e um editor interativo
-// precisa herdar o terminal cru.
+// Única exceção: spawnEditor (internal/cmd/profile.go) — um editor interativo precisa herdar o terminal cru,
+// e não só receber streams (Command.Stdin/Stdout/Stderr).
 type Runner interface {
 	Run(ctx context.Context, c Command) (Result, error)
 }
@@ -66,9 +74,17 @@ func (r ExecRunner) Run(ctx context.Context, c Command) (Result, error) {
 			cmd.Env = append(cmd.Env, k+"="+v)
 		}
 	}
+	// Fluxo dado no Command: o processo escreve/lê direto nele, sem buffer.
+	// Os que faltam continuam sendo acumulados em Result.
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	cmd.Stdin = c.Stdin
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if c.Stdout != nil {
+		cmd.Stdout = c.Stdout
+	}
+	if c.Stderr != nil {
+		cmd.Stderr = c.Stderr
+	}
 
 	err := cmd.Run()
 	res := Result{Stdout: stdout.String(), Stderr: stderr.String()}

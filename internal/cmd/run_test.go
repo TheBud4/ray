@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -235,5 +236,31 @@ func TestRunStillForwardsArgumentsAfterTheDash(t *testing.T) {
 	}
 	if !strings.Contains(out, "+ echo oi x y") {
 		t.Errorf("output = %q, want the extra args forwarded", out)
+	}
+}
+
+// O `ray run` liga o processo ao terminal em vez de acumular a saída: stdin
+// herdado, stdout e stderr separados, e nada copiado de Result depois (o servidor
+// de dev e o comando interativo só funcionam assim).
+func TestRunRunCmdWiresTheProcessToTheStreams(t *testing.T) {
+	in := strings.NewReader("input")
+	var out, errOut bytes.Buffer
+	fr := &runner.FakeRunner{Results: map[string]runner.Result{
+		"echo one": {Stdout: "buffered-should-not-be-copied", Stderr: "nor-this"},
+	}}
+	commands := map[string]runfile.Resolved{"x": {Name: "x", Steps: []string{"echo one"}}}
+
+	if err := runRunCmdIO(commands, "x", nil, false, fr, false, runIO{In: in, Out: &out, Err: &errOut}); err != nil {
+		t.Fatalf("runRunCmdIO() error = %v", err)
+	}
+	if len(fr.Calls) != 1 {
+		t.Fatalf("Calls = %v", fr.Calls)
+	}
+	c := fr.Calls[0]
+	if c.Stdin != io.Reader(in) || c.Stdout != io.Writer(&out) || c.Stderr != io.Writer(&errOut) {
+		t.Errorf("command streams = (%v, %v, %v), want the ones given to runRunCmdIO", c.Stdin, c.Stdout, c.Stderr)
+	}
+	if out.Len() != 0 || errOut.Len() != 0 {
+		t.Errorf("out = %q, err = %q; nothing should be copied from Result when the process writes straight to the streams", out.String(), errOut.String())
 	}
 }

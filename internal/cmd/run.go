@@ -45,7 +45,8 @@ func newRunCmd() *cobra.Command {
 			}
 
 			r := runner.ExecRunner{DryRun: flagDryRun, Out: cmd.OutOrStdout()}
-			return runRunCmd(commands, alias, extra, flagRunList, r, flagVerbose, cmd.OutOrStdout())
+			return runRunCmdIO(commands, alias, extra, flagRunList, r, flagVerbose,
+				runIO{In: os.Stdin, Out: cmd.OutOrStdout(), Err: cmd.ErrOrStderr()})
 		},
 	}
 	c.Flags().BoolVar(&flagRunList, "list", false, "list available aliases")
@@ -67,7 +68,22 @@ func splitAliasArgs(args []string, dashAt int) (alias string, extra []string) {
 	return alias, args[dashAt:]
 }
 
+// runIO são os fluxos a que `ray run` liga cada passo: o processo lê de In e
+// escreve direto em Out e Err, em tempo real e separados.
+type runIO struct {
+	In       io.Reader
+	Out, Err io.Writer
+}
+
+// runRunCmd roda o alias com stdout e stderr no mesmo writer e sem entrada.
 func runRunCmd(commands map[string]runfile.Resolved, alias string, extra []string, list bool, r runner.Runner, verbose bool, out io.Writer) error {
+	return runRunCmdIO(commands, alias, extra, list, r, verbose, runIO{Out: out, Err: out})
+}
+
+// runRunCmdIO roda o alias ligando cada passo aos fluxos de sio. Nada é
+// copiado de Result depois: a saída já foi para onde o processo escreveu.
+func runRunCmdIO(commands map[string]runfile.Resolved, alias string, extra []string, list bool, r runner.Runner, verbose bool, sio runIO) error {
+	out := sio.Out
 	if list || alias == "" {
 		printAliasList(out, commands)
 		return nil
@@ -100,12 +116,13 @@ func runRunCmd(commands map[string]runfile.Resolved, alias string, extra []strin
 		if verbose {
 			fmt.Fprintf(out, "> %s\n", step)
 		}
-		result, err := r.Run(context.Background(), runner.Command{Name: fields[0], Args: fields[1:], Dir: res.BaseDir})
+		result, err := r.Run(context.Background(), runner.Command{
+			Name: fields[0], Args: fields[1:], Dir: res.BaseDir,
+			Stdin: sio.In, Stdout: sio.Out, Stderr: sio.Err,
+		})
 		if err != nil {
 			return err
 		}
-		io.WriteString(out, result.Stdout)
-		io.WriteString(out, result.Stderr)
 		if result.ExitCode != 0 {
 			return fmt.Errorf("step %q exited with code %d", step, result.ExitCode)
 		}

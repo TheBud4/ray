@@ -1,10 +1,15 @@
 package runner
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestFakeRecordCalls(t *testing.T) {
@@ -87,5 +92,97 @@ func TestFailureReason(t *testing.T) {
 				t.Errorf("FailureReason() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// lineSignal é um io.Writer que avisa quando recebe uma linha, para provar que
+// a saída chega ENQUANTO o processo ainda roda.
+type lineSignal struct {
+	mu   sync.Mutex
+	buf  bytes.Buffer
+	seen chan struct{}
+	want string
+	once sync.Once
+}
+
+func (w *lineSignal) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	n, err := w.buf.Write(p)
+	if strings.Contains(w.buf.String(), w.want) {
+		w.once.Do(func() { close(w.seen) })
+	}
+	return n, err
+}
+
+func (w *lineSignal) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.String()
+}
+
+// O processo imprime "first" e fica esperando uma linha na entrada. Se a saída
+// fosse acumulada até o fim, "first" nunca chegaria antes de a entrada ser
+// dada, e o teste travaria (por isso o prazo). Prova streaming E stdin de uma vez.
+func TestExecRunnerStreamsOutputAndForwardsInput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("posix shell")
+	}
+	stdin, feed := io.Pipe()
+	defer feed.Close() // se o teste falhar, o processo não fica esperando a entrada
+	out := &lineSignal{seen: make(chan struct{}), want: "first"}
+	var errOut bytes.Buffer
+
+	done := make(chan error, 1)
+	var res Result
+	go func() {
+		var err error
+		res, err = ExecRunner{}.Run(context.Background(), Command{
+			Name: "sh", Args: []string{"-c", "echo first; read x; echo got-$x; echo warn >&2"},
+			Stdin: stdin, Stdout: out, Stderr: &errOut,
+		})
+		done <- err
+	}()
+
+	select {
+	case <-out.seen:
+	case <-time.After(3 * time.Second):
+		t.Fatal(`"first" did not arrive while the process was still running: the output is buffered until the end`)
+	}
+	if _, err := io.WriteString(feed, "hello\n"); err != nil {
+		t.Fatal(err)
+	}
+	feed.Close()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("process did not finish after receiving its input")
+	}
+	if got := out.String(); got != "first\ngot-hello\n" {
+		t.Errorf("stdout = %q, want %q", got, "first\ngot-hello\n")
+	}
+	if got := errOut.String(); got != "warn\n" {
+		t.Errorf("stderr = %q, want it kept apart from stdout: %q", got, "warn\n")
+	}
+	if res.Stdout != "" || res.Stderr != "" {
+		t.Errorf("Result = %+v, want empty Stdout/Stderr when the streams were provided", res)
+	}
+}
+
+// Sem fluxos, nada muda: a saída continua acumulada em Result.
+func TestExecRunnerStillBuffersWhenNoStreamsAreGiven(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("posix shell")
+	}
+	res, err := ExecRunner{}.Run(context.Background(), Command{Name: "sh", Args: []string{"-c", "echo out; echo err >&2"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Stdout != "out\n" || res.Stderr != "err\n" {
+		t.Errorf("Result = %+v, want the buffered output", res)
 	}
 }
