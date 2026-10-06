@@ -36,7 +36,7 @@ make install
 Depois, confira as dependências externas:
 
 ```sh
-ray doctor          # checa npx, python3.10+, uv, headroom, graphify
+ray doctor          # checa npx, node, jq, python3.10+, uv, headroom, graphify
 ray doctor --fix    # instala o que o ray consegue instalar sozinho
 ```
 
@@ -44,6 +44,7 @@ ray doctor --fix    # instala o que o ray consegue instalar sozinho
 |---|---|---|
 | `npx` | não — só o `create:` de receitas que o usam (ex. `web`); `ray new` confere antes de criar a pasta | — (instale Node.js) |
 | `node` | não | — |
+| `jq` | não — sem ele os hooks de aviso (`guard-*`) não fazem nada | — (instale `jq`) |
 | `python3.10+` | sim, se `headroom`/`code_graph` ligados | — |
 | `uv` | sim, se `headroom`/`code_graph` ligados | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | `headroom` | não | `uv tool install headroom-ai[mcp]` |
@@ -153,7 +154,7 @@ make fmt-check   # falha se algo precisar de gofmt
 make ci          # fmt-check + vet + test (o que o CI roda)
 ```
 
-CI: GitHub Actions roda `make ci` em todo push/PR.
+CI: GitHub Actions roda `make ci` em push na `main` e em todo PR.
 
 Documentação de projeto, em `docs/`:
 
