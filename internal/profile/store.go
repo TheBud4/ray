@@ -137,13 +137,13 @@ func List(dir string) ([]Entry, error) {
 			out = append(out, Entry{Name: de.Name(), Problem: oneLine(err), Unreadable: true})
 			continue
 		}
-		name := p.Name
-		if name == "" {
-			name = strings.TrimSuffix(de.Name(), ".yaml")
-		}
+		// O nome da entrada é o do arquivo: é o que `--profile` recebe.
+		name := strings.TrimSuffix(de.Name(), ".yaml")
 		e := Entry{Name: name, Description: p.Description}
 		if err := p.Validate(); err != nil {
 			e.Problem = oneLine(err)
+		} else if p.Name != name {
+			e.Problem = fmt.Sprintf("name: %q differs from the file name %q (LoadByName refuses it)", p.Name, name)
 		}
 		out = append(out, e)
 	}

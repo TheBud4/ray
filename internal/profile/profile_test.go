@@ -562,3 +562,26 @@ func TestLoadByNameOrDefaultDecidesLikeEnsureDir(t *testing.T) {
 		})
 	}
 }
+
+// `cp go.yaml api.yaml` sem editar o `name:` deixa duas identidades: o arquivo
+// que o usuário digitou (api) e a que o init gravaria no registro (go), e o
+// update recarregaria a receita errada. A divergência é recusada na carga, e o
+// erro cita os dois nomes e o arquivo para o ajuste ser de uma linha.
+func TestLoadByNameRefusesNameThatDiffersFromFileName(t *testing.T) {
+	dir := t.TempDir()
+	body := "name: go\ncomponents:\n  - name: x\n    dest: .claude/x\n"
+	if err := os.WriteFile(filepath.Join(dir, "api.yaml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := LoadByName(dir, "api")
+	if err == nil {
+		t.Fatal("LoadByName() = nil error, want error when name: differs from the file name")
+	}
+	msg := err.Error()
+	for _, want := range []string{"api.yaml", `"go"`, `"api"`} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("error = %q, want it to mention %s", msg, want)
+		}
+	}
+}

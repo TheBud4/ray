@@ -468,3 +468,29 @@ func TestIsFactory(t *testing.T) {
 		}
 	}
 }
+
+// A receita cujo name: difere do nome do arquivo não pode listar como sã: o
+// LoadByName a recusa, e uma lista que a mostra como "go" esconde que `--profile
+// api` falha. A entrada mantém o nome do arquivo, que é o que o usuário digita.
+func TestListFlagsNameThatDiffersFromFileName(t *testing.T) {
+	dir := t.TempDir()
+	body := "name: go\ncomponents:\n  - name: x\n    dest: .claude/x\n"
+	if err := os.WriteFile(filepath.Join(dir, "api.yaml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := List(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("List() = %d entries, want 1", len(got))
+	}
+	e := got[0]
+	if e.Name != "api" {
+		t.Errorf("Name = %q, want the file name %q", e.Name, "api")
+	}
+	if !strings.Contains(e.Problem, `"go"`) {
+		t.Errorf("Problem = %q, want it to flag the differing name: %q", e.Problem, "go")
+	}
+}

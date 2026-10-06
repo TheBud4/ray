@@ -255,6 +255,12 @@ ambiente de IA sem stack — sem `create:` e sem linhas extras de `.gitignore` �
 `headroom` e `code_graph`. `ray new base <nome>` também funciona: cria a pasta e
 o `git init`, sem passo de criação de projeto.
 
+**Arquivo e `name:` são a mesma identidade.** O `.ray-profile` grava o nome da
+receita e o `update` a relê por nome de arquivo. Por isso `LoadByName` recusa uma
+receita cujo `name:` difere do nome do arquivo (o caso de `cp go.yaml api.yaml`
+sem editar a linha), com o erro citando os dois nomes, e `profile list` a marca
+como inválida, com o nome do arquivo.
+
 **Os perfis de fábrica acompanham o binário.** `profile list`, `new` e `init ai`
 sincronizam as quatro receitas com as do binário, pela mesma regra de "o usuário
 editou isto?" dos templates e do `update` (`store.DecideOverwrite`), com a

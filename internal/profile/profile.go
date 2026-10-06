@@ -157,7 +157,17 @@ func LoadByName(profilesDir, name string) (*Profile, error) {
 	if _, err := os.Stat(path); err != nil && os.IsNotExist(err) {
 		return nil, fmt.Errorf("profile %q not found in %s", name, profilesDir)
 	}
-	return Load(path)
+	p, err := Load(path)
+	if err != nil {
+		return nil, err
+	}
+	// O registro do projeto grava p.Name e o update o relê por nome: se o
+	// arquivo e o name: divergirem (cp go.yaml api.yaml), o update carregaria
+	// outra receita.
+	if p.Name != name {
+		return nil, fmt.Errorf("profile file %s has name: %q, want %q (the file name and name: must match)", filepath.Base(path), p.Name, name)
+	}
+	return p, nil
 }
 
 // LoadByNameOrDefault é LoadByName para quem não pode gravar o diretório de
