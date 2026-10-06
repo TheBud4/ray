@@ -5,6 +5,7 @@ package profile
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -136,6 +137,11 @@ func checkRelativeBelowRoot(v string) error {
 // e devolver o caminho cru a quem digitou `--profile web` troca o vocabulário
 // no meio do caminho.
 func LoadByName(profilesDir, name string) (*Profile, error) {
+	if name != "" {
+		if err := checkSingleSegment(name); err != nil {
+			return nil, fmt.Errorf("profile name %q %w", name, err)
+		}
+	}
 	path := filepath.Join(profilesDir, name+".yaml")
 	if _, err := os.Stat(path); err != nil && os.IsNotExist(err) {
 		return nil, fmt.Errorf("profile %q not found in %s", name, profilesDir)
@@ -174,13 +180,35 @@ func ProfileRecordPath(target string) string {
 	return filepath.Join(target, ".claude", ".ray-profile")
 }
 
+// maxRecordBytes limita o tamanho do registro de perfil: ele guarda só um
+// nome, então um arquivo maior que isso não é um registro legítimo.
+const maxRecordBytes = 4096
+
+// readRecord lê o registro em path sem passar de maxRecordBytes; um arquivo
+// maior vira erro em vez de ser carregado inteiro na memória.
+func readRecord(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, maxRecordBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxRecordBytes {
+		return nil, fmt.Errorf("%s is too large (limit %d bytes)", path, maxRecordBytes)
+	}
+	return data, nil
+}
+
 // LoadForTarget resolve e carrega o perfil de target: overrideName, se
 // não-vazio, ganha; senão lê o registro project-local
 // (ProfileRecordPath(target), escrito por `ray init ai`).
 func LoadForTarget(profilesDir, target, overrideName string) (*Profile, error) {
 	name := overrideName
 	if name == "" {
-		data, err := os.ReadFile(ProfileRecordPath(target))
+		data, err := readRecord(ProfileRecordPath(target))
 		if err != nil {
 			// O erro do os.ReadFile já carrega o caminho: envolvê-lo repetia
 			// o caminho inteiro duas vezes na mesma linha. E "não existe"

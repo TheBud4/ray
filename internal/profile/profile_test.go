@@ -382,6 +382,67 @@ func TestLoadByNameNamesTheProfile(t *testing.T) {
 	}
 }
 
+// Um nome que não é um único elemento nunca pode chegar ao Join: a receita
+// sentinela fica FORA de profilesDir e é uma receita válida, então se o
+// LoadByName a carregasse o teste enxergaria. Cobre `--profile`, `update` e o
+// `.claude/.ray-profile` que viaja num clone.
+func TestLoadByNameRefusesNameOutsideProfilesDir(t *testing.T) {
+	root := t.TempDir()
+	profilesDir := filepath.Join(root, "profiles")
+	if err := os.MkdirAll(profilesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestProfile(t, root, "outside") // root/outside.yaml, fora de profilesDir
+
+	for _, name := range []string{"../outside", "..", "a/../../outside", `..\outside`, filepath.Join(root, "outside")} {
+		p, err := LoadByName(profilesDir, name)
+		if err == nil || !strings.Contains(err.Error(), "single path element") {
+			t.Errorf("LoadByName(%q) = (%v, %v), want an error mentioning a single path element", name, p, err)
+		}
+	}
+}
+
+func TestLoadForTargetRefusesForgedRecordedName(t *testing.T) {
+	root := t.TempDir()
+	profilesDir := filepath.Join(root, "profiles")
+	if err := os.MkdirAll(profilesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestProfile(t, root, "outside")
+	target := filepath.Join(root, "project")
+	if err := os.MkdirAll(filepath.Join(target, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ProfileRecordPath(target), []byte("../outside\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := LoadForTarget(profilesDir, target, "")
+	if err == nil || !strings.Contains(err.Error(), "single path element") {
+		t.Errorf("LoadForTarget() = (%v, %v), want an error mentioning a single path element", p, err)
+	}
+}
+
+// O registro é um nome de perfil, não um arquivo livre: lê-se um teto de bytes.
+// Sem ele, um registro gigante (ou um symlink para um dispositivo sem fim)
+// seria lido até esgotar a memória.
+func TestLoadForTargetRefusesOversizedRecord(t *testing.T) {
+	profilesDir := t.TempDir()
+	target := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(target, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	big := strings.Repeat("a", 5000) + "\n"
+	if err := os.WriteFile(ProfileRecordPath(target), []byte(big), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := LoadForTarget(profilesDir, target, "")
+	if err == nil || !strings.Contains(err.Error(), "too large") {
+		t.Errorf("LoadForTarget() = (%v, %v), want an error saying the record is too large", p, err)
+	}
+}
+
 func TestLoadByNameLoadsAndValidates(t *testing.T) {
 	dir := t.TempDir()
 	writeTestProfile(t, dir, "go")
