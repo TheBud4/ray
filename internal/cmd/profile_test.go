@@ -86,8 +86,9 @@ func TestRunProfileShowPrintsComponents(t *testing.T) {
 	}
 
 	got := out.String()
-	if !strings.Contains(got, "s -> .claude/skills/s") {
-		t.Errorf("output = %q, want the component's local name and dest, never a download command", got)
+	want := "s -> " + filepath.Join(".claude/skills", "s")
+	if !strings.Contains(got, want) {
+		t.Errorf("output = %q, want it to contain %q: the component's local name and dest, never a download command", got, want)
 	}
 }
 

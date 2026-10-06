@@ -3,13 +3,20 @@ package preflight
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
-// writeExecutable cria um executável vazio em dir e devolve seu nome.
+// writeExecutable cria um executável vazio em dir e devolve o nome pelo qual
+// ele é procurado. No Windows o exec.LookPath só acha arquivos com extensão do
+// PATHEXT, então o arquivo ganha ".exe" e o nome devolvido continua sem ela.
 func writeExecutable(t *testing.T, dir, name string) string {
 	t.Helper()
-	p := filepath.Join(dir, name)
+	file := name
+	if runtime.GOOS == "windows" {
+		file += ".exe"
+	}
+	p := filepath.Join(dir, file)
 	if err := os.WriteFile(p, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -37,6 +44,9 @@ func TestPathLookerMissing(t *testing.T) {
 // Um arquivo sem bit de execução não conta: é a diferença entre existir e
 // poder ser rodado, e o .mcp.json aponta comandos para rodar.
 func TestPathLookerNonExecutable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("o Windows não tem bit de execução: executável é questão de extensão")
+	}
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "raytestbin"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
