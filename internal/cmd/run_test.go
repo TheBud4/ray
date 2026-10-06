@@ -2,6 +2,9 @@ package cmd
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -132,5 +135,105 @@ func TestSplitAliasArgs(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Um passo é dividido como um shell divide a linha — aspas e barra invertida —
+// para que `git commit -m "a b"` chegue ao git como TRÊS argumentos, não como
+// `"a` e `b"`. Sem expansão de variável nem de curinga: o ray não é um shell.
+func TestRunRunCmdSplitsStepsLikeAShell(t *testing.T) {
+	cases := []struct {
+		step string
+		want []string
+	}{
+		{`git commit -m "a b"`, []string{"git", "commit", "-m", "a b"}},
+		{`echo 'it'"'"'s'`, []string{"echo", "it's"}},
+		{`echo a\ b`, []string{"echo", "a b"}},
+		{`echo ""`, []string{"echo", ""}},
+		{`echo "say \"hi\""`, []string{"echo", `say "hi"`}},
+		{`echo '$HOME \n'`, []string{"echo", `$HOME \n`}},
+		{"  go   test  ./... ", []string{"go", "test", "./..."}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.step, func(t *testing.T) {
+			commands := map[string]runfile.Resolved{"x": {Name: "x", Steps: []string{tc.step}}}
+			fr := &runner.FakeRunner{}
+			if err := runRunCmd(commands, "x", nil, false, fr, false, &bytes.Buffer{}); err != nil {
+				t.Fatalf("runRunCmd() error = %v", err)
+			}
+			if len(fr.Calls) != 1 {
+				t.Fatalf("Calls = %v, want one", fr.Calls)
+			}
+			got := append([]string{fr.Calls[0].Name}, fr.Calls[0].Args...)
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("command = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// Os argumentos depois de `--` são acrescentados como vieram: já são argumentos
+// separados, não texto a dividir de novo.
+func TestRunRunCmdKeepsExtraArgsWholeAfterSplitting(t *testing.T) {
+	commands := map[string]runfile.Resolved{"x": {Name: "x", Steps: []string{`echo "a b"`}}}
+	fr := &runner.FakeRunner{}
+	if err := runRunCmd(commands, "x", []string{"c d"}, false, fr, false, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := fr.Calls[0].Args; !slices.Equal(got, []string{"a b", "c d"}) {
+		t.Errorf("Args = %q, want [\"a b\" \"c d\"]", got)
+	}
+}
+
+// Aspas sem fechar são um erro do ray.yaml. E nenhum passo roda: se o segundo
+// passo é inválido, o primeiro não pode já ter sido executado.
+func TestRunRunCmdRefusesAnUnterminatedQuoteBeforeRunningAnything(t *testing.T) {
+	commands := map[string]runfile.Resolved{"x": {Name: "x", Steps: []string{"echo ok", `echo "abc`}}}
+	fr := &runner.FakeRunner{}
+
+	err := runRunCmd(commands, "x", nil, false, fr, false, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "unterminated") || !strings.Contains(err.Error(), `echo "abc`) {
+		t.Fatalf("error = %v, want one naming the unterminated quote and the step", err)
+	}
+	if len(fr.Calls) != 0 {
+		t.Errorf("Calls = %v, want nothing run when any step is invalid", fr.Calls)
+	}
+}
+
+func rayYAMLWithHello(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "ray.yaml"), []byte("commands:\n  hello:\n    steps:\n      - echo oi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+}
+
+// `ray run alias x y` sem `--` descartava `x y` e saía 0, como se a pessoa
+// tivesse pedido outra coisa. Agora recusa e diz onde pôr os argumentos.
+func TestRunRefusesStrayArgumentsWithoutTheDash(t *testing.T) {
+	dryRunHome(t)
+	rayYAMLWithHello(t)
+
+	out, err := execRoot(t, "run", "--dry-run", "hello", "x", "y")
+	if err == nil || !strings.Contains(err.Error(), "unexpected argument") || !strings.Contains(err.Error(), "--") {
+		t.Fatalf("Execute() error = %v, want an error about unexpected arguments that mentions `--`", err)
+	}
+	if strings.Contains(out, "+ echo") {
+		t.Errorf("output = %q, the alias must not run when arguments were dropped", out)
+	}
+}
+
+// Controle: o caminho certo continua funcionando.
+func TestRunStillForwardsArgumentsAfterTheDash(t *testing.T) {
+	dryRunHome(t)
+	rayYAMLWithHello(t)
+
+	out, err := execRoot(t, "run", "--dry-run", "hello", "--", "x", "y")
+	if err != nil {
+		t.Fatalf("Execute() error = %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "+ echo oi x y") {
+		t.Errorf("output = %q, want the extra args forwarded", out)
 	}
 }

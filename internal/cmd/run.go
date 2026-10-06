@@ -24,6 +24,11 @@ func newRunCmd() *cobra.Command {
 		Short: "Run a project or global command alias",
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Sem `--`, só o alias é consumido: qualquer outro argumento seria
+			// descartado em silêncio e o comando sairia 0 sem fazer o pedido.
+			if cmd.ArgsLenAtDash() == -1 && len(args) > 1 {
+				return fmt.Errorf("unexpected argument(s) %q after alias %q: put the arguments for the command after `--` (ray run %s -- ...)", args[1:], args[0], args[0])
+			}
 			alias, extra := splitAliasArgs(args, cmd.ArgsLenAtDash())
 
 			workdir, err := os.Getwd()
@@ -73,8 +78,19 @@ func runRunCmd(commands map[string]runfile.Resolved, alias string, extra []strin
 		return fmt.Errorf("unknown alias %q (see `ray run --list`)", alias)
 	}
 
+	// Todos os passos são divididos antes de rodar o primeiro: um passo
+	// inválido não pode aparecer depois de os anteriores já terem executado.
+	parsed := make([][]string, len(res.Steps))
 	for i, step := range res.Steps {
-		fields := strings.Fields(step)
+		fields, err := splitCommand(step)
+		if err != nil {
+			return err
+		}
+		parsed[i] = fields
+	}
+
+	for i, step := range res.Steps {
+		fields := parsed[i]
 		if len(fields) == 0 {
 			continue
 		}
@@ -95,6 +111,64 @@ func runRunCmd(commands map[string]runfile.Resolved, alias string, extra []strin
 		}
 	}
 	return nil
+}
+
+// splitCommand divide um passo de alias em argumentos como um shell faria com
+// as aspas: espaço e tab separam; aspas simples são literais; aspas duplas
+// aceitam `\"` e `\\` como escapes (outras barras ficam literais); fora de
+// aspas, a barra invertida escapa o caractere seguinte; `""` gera um argumento
+// vazio. Não há expansão de variável nem de curinga — o ray não é um shell, e
+// o passo é executado direto, sem `sh -c`. Aspas sem fechar são erro.
+func splitCommand(step string) ([]string, error) {
+	var args []string
+	var cur strings.Builder
+	inToken := false
+	runes := []rune(step)
+	for i := 0; i < len(runes); i++ {
+		r := runes[i]
+		switch r {
+		case ' ', '\t':
+			if inToken {
+				args = append(args, cur.String())
+				cur.Reset()
+				inToken = false
+			}
+		case '\'':
+			inToken = true
+			i++
+			for ; i < len(runes) && runes[i] != '\''; i++ {
+				cur.WriteRune(runes[i])
+			}
+			if i >= len(runes) {
+				return nil, fmt.Errorf("step `%s`: unterminated quote", step)
+			}
+		case '"':
+			inToken = true
+			i++
+			for ; i < len(runes) && runes[i] != '"'; i++ {
+				if runes[i] == '\\' && i+1 < len(runes) && (runes[i+1] == '"' || runes[i+1] == '\\') {
+					i++
+				}
+				cur.WriteRune(runes[i])
+			}
+			if i >= len(runes) {
+				return nil, fmt.Errorf("step `%s`: unterminated quote", step)
+			}
+		case '\\':
+			inToken = true
+			if i+1 < len(runes) {
+				i++
+			}
+			cur.WriteRune(runes[i])
+		default:
+			inToken = true
+			cur.WriteRune(r)
+		}
+	}
+	if inToken {
+		args = append(args, cur.String())
+	}
+	return args, nil
 }
 
 func printAliasList(out io.Writer, commands map[string]runfile.Resolved) {
