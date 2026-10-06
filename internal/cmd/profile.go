@@ -25,6 +25,7 @@ func newProfileCmd() *cobra.Command {
 func newProfileListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
+		Args:  cobra.NoArgs,
 		Short: "List available profiles",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir, err := raypaths.ProfilesDir()
@@ -227,6 +228,7 @@ func runProfileRemove(dir, name string) error {
 func newProfilePathCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "path",
+		Args:  cobra.NoArgs,
 		Short: "Print the profiles directory",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir, err := raypaths.ProfilesDir()

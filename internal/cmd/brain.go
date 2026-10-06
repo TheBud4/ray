@@ -81,6 +81,7 @@ func runBrainSet(configPath, path string, out io.Writer) error {
 func newBrainStatusCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
+		Args:  cobra.NoArgs,
 		Short: "Show the brain's path, existence and note count",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			configPath, err := raypaths.ConfigPath()
@@ -115,6 +116,7 @@ func runBrainStatus(configPath string, out io.Writer) error {
 func newBrainOpenCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "open",
+		Args:  cobra.NoArgs,
 		Short: "Open the brain in the default app",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			configPath, err := raypaths.ConfigPath()
@@ -137,6 +139,7 @@ func runBrainOpen(r runner.Runner, configPath string) error {
 func newBrainPathCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "path",
+		Args:  cobra.NoArgs,
 		Short: "Print the configured brain directory",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			configPath, err := raypaths.ConfigPath()

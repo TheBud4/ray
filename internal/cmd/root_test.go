@@ -93,3 +93,40 @@ func TestVShorthandStillRunsTheSubcommand(t *testing.T) {
 		t.Errorf("output = %q, want it to contain the seeded profiles", got)
 	}
 }
+
+// O Cobra aceita qualquer argumento numa folha que não declara Args, e o
+// resultado é um exit 0 sem efeito: `ray doctor fix` (em vez de `--fix`) não
+// consertava nada e passava por sucesso. A varredura é da árvore inteira de
+// propósito: uma folha nova tem de declarar o que aceita, mesmo que seja nada.
+func TestLeafCommandsDeclareTheirArgs(t *testing.T) {
+	var walk func(c *cobra.Command)
+	walk = func(c *cobra.Command) {
+		if !c.HasSubCommands() && c.Runnable() && c.Args == nil {
+			t.Errorf("%q does not declare Args; a stray argument would be silently accepted", c.CommandPath())
+		}
+		for _, sub := range c.Commands() {
+			walk(sub)
+		}
+	}
+	walk(newRootCmd())
+}
+
+// A consequência pelo caminho real: o erro tem de nomear o argumento, que é o
+// que o usuário errou.
+func TestDoctorRefusesAStrayArgument(t *testing.T) {
+	t.Setenv("RAY_HOME", t.TempDir())
+
+	var out bytes.Buffer
+	root := newRootCmd()
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"doctor", "fix"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("Execute() = nil, want an error for `doctor fix`")
+	}
+	if !strings.Contains(err.Error(), "fix") {
+		t.Errorf("error = %q, want it to name the stray argument", err)
+	}
+}

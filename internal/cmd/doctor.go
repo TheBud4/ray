@@ -17,6 +17,7 @@ var flagFix bool
 func newDoctorCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "doctor",
+		Args:  cobra.NoArgs,
 		Short: "Check external dependencies (npx, python, uv, headroom, graphify)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			checkRunner := runner.ExecRunner{}
