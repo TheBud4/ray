@@ -42,7 +42,7 @@ ray doctor --fix    # instala o que o ray consegue instalar sozinho
 
 | Dependência | Obrigatória | `--fix` instala |
 |---|---|---|
-| `npx` | sim | — (instale Node.js) |
+| `npx` | não — só o `create:` de receitas que o usam (ex. `web`); `ray new` confere antes de criar a pasta | — (instale Node.js) |
 | `node` | não | — |
 | `python3.10+` | sim, se `headroom`/`code_graph` ligados | — |
 | `uv` | sim, se `headroom`/`code_graph` ligados | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |

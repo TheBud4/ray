@@ -155,8 +155,16 @@ que decide se ela existe. Fonte única da checagem é fonte única da mensagem, 
 **O que tem de valer:**
 
 - **Não é interativo.** Um prompt "instalar agora?" só teria onde agir num caso
-  estreito: a dependência incondicionalmente obrigatória não tem instalação
-  automática, então o prompt dispararia exatamente onde não há o que executar.
+  estreito: o que é obrigatório sem condição não tem instalação automática (o
+  `python3.10+`, quando uma integração o liga), então o prompt dispararia
+  exatamente onde não há o que executar.
+- **O `npx` é opcional, e `ray new` confere o que o `create:` precisa.** Só o
+  `create:` de certas receitas (a `web`) usa o `npx`; tratá-lo como obrigatório
+  barrava `init ai` e `doctor` numa máquina sem Node por um programa que nem
+  entrava no caso. Em troca, `ray new` confere, **antes de criar a pasta**, que o
+  programa de cada passo do `create:` existe, e nomeia a receita e o passo quando
+  não existe. "Existe" é "o processo inicia", não "o `--version` passa": o `go`
+  sai com código 2 no `--version` e está instalado.
 - **O comando de instalação não aparece cru na saída.** Não se normaliza
   `curl | sh` impresso na tela. Quem quer auditar roda o `doctor` com `--fix` em
   modo de simulação, que imprime o comando sem executá-lo.
