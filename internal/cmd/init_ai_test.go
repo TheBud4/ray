@@ -205,3 +205,55 @@ func TestRunInitAIOnAnEmptyFolderSucceedsAndShowsNextSteps(t *testing.T) {
 		t.Errorf("output = %q, want a warning about `graphify update .`", got)
 	}
 }
+
+// Os próximos passos (`git add`, `claude`) valem DENTRO do projeto. Quando o
+// alvo não é o diretório atual — o caso de `ray new go app` — o rodapé começa
+// com o `cd`; sem isso o `git add` sugerido roda na pasta errada.
+func TestNextStepsStartWithCdWhenTheTargetIsNotTheCurrentDir(t *testing.T) {
+	cases := []struct {
+		name   string
+		target func(base string) string
+		wantCd string // "" = não deve haver cd
+	}{
+		{"child of the current dir", func(b string) string { return filepath.Join(b, "app") }, "cd app"},
+		{"current dir itself", func(b string) string { return b }, ""},
+		{"sibling outside the current dir", func(b string) string { return filepath.Join(filepath.Dir(b), "elsewhere") }, "cd "},
+		{"name with spaces is quoted", func(b string) string { return filepath.Join(b, "my app") }, `cd "my app"`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			base := t.TempDir()
+			t.Chdir(base)
+			var out bytes.Buffer
+			printInitAISummary(&out, initai.Summary{
+				Created:        []string{".claude/.ray-profile"},
+				VersionedPaths: []string{".claude"},
+				InGitRepo:      true,
+				Target:         tc.target(base),
+			})
+			got := out.String()
+			cdAt := strings.Index(got, "  cd ")
+			if tc.wantCd == "" {
+				if cdAt >= 0 {
+					t.Errorf("output = %q, want no `cd` line", got)
+				}
+				return
+			}
+			if !strings.Contains(got, "  "+tc.wantCd) {
+				t.Errorf("output = %q, want a line starting with %q", got, "  "+tc.wantCd)
+			}
+			if addAt := strings.Index(got, "  git add"); cdAt < 0 || addAt < cdAt {
+				t.Errorf("output = %q, want the cd BEFORE the git add", got)
+			}
+		})
+	}
+}
+
+// Sem alvo conhecido (resumo montado por quem não o informa), nada de cd.
+func TestNextStepsHaveNoCdWithoutAKnownTarget(t *testing.T) {
+	var out bytes.Buffer
+	printInitAISummary(&out, initai.Summary{VersionedPaths: []string{".claude"}, InGitRepo: true})
+	if strings.Contains(out.String(), "  cd ") {
+		t.Errorf("output = %q, want no cd when the target is unknown", out.String())
+	}
+}

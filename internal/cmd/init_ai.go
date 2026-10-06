@@ -3,6 +3,8 @@ package cmd
 import (
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -149,6 +151,11 @@ func printNextSteps(out io.Writer, sum initai.Summary) {
 		return
 	}
 	fmt.Fprintln(out, "\nNext steps:")
+	if dest := cdDestination(sum.Target); dest != "" {
+		// Os passos abaixo valem dentro do projeto; quem acabou de rodar
+		// `ray new` ainda está na pasta pai.
+		fmt.Fprintf(out, "  cd %s\n", shellQuote(dest))
+	}
 	if sum.InGitRepo && len(sum.VersionedPaths) > 0 {
 		// Caminhos por nome, nunca `git add -A`/`.`: o guard-add.sh que este
 		// mesmo comando acabou de instalar avisa contra add cego.
@@ -156,4 +163,45 @@ func printNextSteps(out io.Writer, sum initai.Summary) {
 		fmt.Fprintln(out, `  git commit -m "chore: vendor ai environment"`)
 	}
 	fmt.Fprintln(out, "  claude")
+}
+
+// cdDestination devolve para onde a pessoa precisa dar `cd` para chegar em
+// target: vazio se target é desconhecido ou é o diretório atual; o caminho
+// relativo quando target está abaixo do diretório atual; o absoluto nos outros
+// casos (inclusive quando o diretório atual não pode ser descoberto).
+func cdDestination(target string) string {
+	if target == "" {
+		return ""
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return target
+	}
+	rel, err := filepath.Rel(cwd, target)
+	if err != nil {
+		return target
+	}
+	if rel == "." {
+		return ""
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return target
+	}
+	return rel
+}
+
+// shellQuote põe s entre aspas duplas quando tem espaço ou metacaractere de
+// shell, escapando `\`, `"`, `$` e crase; caminhos simples saem como estão.
+func shellQuote(s string) string {
+	safe := s != ""
+	for _, r := range s {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("_-./@%+=:,", r)) {
+			safe = false
+			break
+		}
+	}
+	if safe {
+		return s
+	}
+	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`, `$`, `\$`, "`", "\\`").Replace(s) + `"`
 }

@@ -58,6 +58,10 @@ type Summary struct {
 	// internal/cmd/init_ai.go.
 	VersionedPaths []string
 	InGitRepo      bool
+
+	// Target é o alvo, em caminho absoluto: o rodapé o usa para dizer onde os
+	// próximos passos valem.
+	Target string
 }
 
 // versionedPaths reduz a lista de arquivos criados aos caminhos de topo que o
@@ -376,6 +380,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	}
 	sum.Created = append(sum.Created, ".claude/.ray-profile")
 
+	sum.Target = target
 	sum.HadFailure = len(sum.Failed) > 0
 	sum.VersionedPaths = versionedPaths(target, sum.Created)
 	sum.InGitRepo = inGitRepo(target)

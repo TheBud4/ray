@@ -1268,3 +1268,22 @@ func TestRunStillCreatesANewTargetDir(t *testing.T) {
 		t.Errorf("target not provisioned: %v", err)
 	}
 }
+
+// O resumo carrega o alvo (caminho absoluto): o rodapé precisa dele para dizer
+// onde os próximos passos devem ser rodados.
+func TestRunSummaryCarriesTheAbsoluteTarget(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "s")
+	writeProfile(t, home.ProfilesDir, testProfile())
+	base := t.TempDir()
+	t.Chdir(base)
+
+	sum, err := Run(&runner.FakeRunner{}, allFound, Options{Profile: "test", Target: "rel/proj", NoGlobal: true, Out: &bytes.Buffer{}}, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(base, "rel", "proj")
+	if sum.Target != want {
+		t.Errorf("Summary.Target = %q, want %q", sum.Target, want)
+	}
+}
