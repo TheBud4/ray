@@ -131,13 +131,11 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		out = io.Discard
 	}
 
-	// 1. target + writability.
+	// 1. target (só o caminho absoluto; a pasta é criada no passo 6, depois de
+	// tudo que pode recusar a execução).
 	target, err := filepath.Abs(opts.Target)
 	if err != nil {
 		return Summary{}, err
-	}
-	if err := ensureWritableDir(target, opts.DryRun, out); err != nil {
-		return Summary{}, fmt.Errorf("target %s is not writable: %w", target, err)
 	}
 
 	// 2. garante ~/.ray populado. Em dry-run nada de ~/.ray é gravado: os
@@ -205,6 +203,13 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	plan, err := installer.Resolve(prof)
 	if err != nil {
 		return Summary{}, err
+	}
+
+	// 6. target + writability. Fica depois de tudo que pode recusar sem efeito
+	// (receita, preflight, plano) e antes do primeiro efeito: recusar não pode
+	// deixar uma pasta nova para trás.
+	if err := ensureWritableDir(target, opts.DryRun, out); err != nil {
+		return Summary{}, fmt.Errorf("target %s is not writable: %w", target, err)
 	}
 
 	// 7a. globais (install-once, rastreados em state.yaml).

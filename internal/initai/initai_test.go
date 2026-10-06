@@ -1223,3 +1223,48 @@ func TestRunFailureCarriesItsReason(t *testing.T) {
 		}
 	})
 }
+
+// Um alvo novo só passa a existir depois que o que pode recusar o comando foi
+// conferido: receita inexistente e dependência faltando não deixam pasta vazia
+// para trás (a mesma classe do que o `ray new` já evita).
+func TestRunLeavesNoTargetDirBehindWhenItRefusesToStart(t *testing.T) {
+	cases := map[string]struct {
+		profile string
+		looker  stubLooker
+		want    string
+	}{
+		"unknown profile":    {profile: "no-such-profile", looker: allFound, want: "not found"},
+		"missing dependency": {profile: "test", looker: stubLooker{"npx": true, "node": true, "uv": true}, want: "ray doctor"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			home := newHome(t)
+			seedComponent(t, home, "s")
+			writeProfile(t, home.ProfilesDir, testProfile())
+			target := filepath.Join(t.TempDir(), "brand-new")
+
+			_, err := Run(&runner.FakeRunner{}, tc.looker, Options{Profile: tc.profile, Target: target, Out: &bytes.Buffer{}}, home)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Run() error = %v, want one mentioning %q", err, tc.want)
+			}
+			if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
+				t.Errorf("the target dir exists after a refused run (stat err = %v)", statErr)
+			}
+		})
+	}
+}
+
+// Controle: o alvo novo continua sendo criado quando o comando vai adiante.
+func TestRunStillCreatesANewTargetDir(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "s")
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := filepath.Join(t.TempDir(), "brand-new")
+
+	if _, err := Run(&runner.FakeRunner{}, allFound, Options{Profile: "test", Target: target, NoGlobal: true, Out: &bytes.Buffer{}}, home); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(target, ".claude")); err != nil {
+		t.Errorf("target not provisioned: %v", err)
+	}
+}
