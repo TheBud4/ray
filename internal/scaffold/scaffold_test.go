@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/TheBud4/ray/internal/claudecfg"
 	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/runner"
 	"github.com/TheBud4/ray/internal/store"
@@ -1191,5 +1192,25 @@ func TestGitignoreAccessorsMirrorTheBlock(t *testing.T) {
 	GitignoreBaseLines()[0] = "mutated"
 	if gitignoreBaseLines[0] == "mutated" {
 		t.Error("GitignoreBaseLines() returned an alias; a caller can corrupt the block")
+	}
+}
+
+// O claudecfg reconhece como "do ray" o hook cujo comando começa com
+// claudecfg.RayHookPrefix. Se um lado mudar o prefixo e o outro não, os hooks do
+// ray deixariam de ser atualizados e passariam a se acumular.
+func TestHookSettingsCommandsAllStartWithTheRayPrefix(t *testing.T) {
+	hooks, _ := HookSettings()["hooks"].(map[string]any)
+	if len(hooks) == 0 {
+		t.Fatal("HookSettings() has no hooks")
+	}
+	for event, v := range hooks {
+		for _, e := range v.([]any) {
+			for _, h := range e.(map[string]any)["hooks"].([]any) {
+				cmd := h.(map[string]any)["command"].(string)
+				if !strings.HasPrefix(cmd, claudecfg.RayHookPrefix) {
+					t.Errorf("%s hook %q does not start with %q", event, cmd, claudecfg.RayHookPrefix)
+				}
+			}
+		}
 	}
 }

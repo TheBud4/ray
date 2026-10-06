@@ -309,8 +309,8 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	}
 
 	// 9. settings.json.
-	settings := mergeMaps(prof.Scaffold.Settings, scaffold.HookSettings())
-	if err := claudecfg.MergeSettings(target, settings, opts.DryRun, out); err != nil {
+	settings := mergeSettings(prof.Scaffold.Settings, scaffold.HookSettings())
+	if err := claudecfg.MergeSettings(target, settings, opts.Force, opts.DryRun, out); err != nil {
 		return Summary{}, err
 	}
 

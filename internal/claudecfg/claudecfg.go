@@ -7,13 +7,23 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 )
 
-// MergeSettings aplica settings em <target>/.claude/settings.json: cada chave
-// de topo de settings (ex. model, effortLevel, hooks) substitui a do arquivo,
-// preservando as chaves que o ray não gerencia. dryRun imprime o resultado em
-// out em vez de gravar.
-func MergeSettings(target string, settings map[string]any, dryRun bool, out io.Writer) error {
+// RayHookPrefix é o começo do comando de todo hook que o ray instala. É por
+// ele que MergeSettings distingue um hook do ray (substituído a cada rodada)
+// de um hook do usuário (preservado).
+const RayHookPrefix = "bash .claude/hooks/"
+
+// MergeSettings aplica settings em <target>/.claude/settings.json. Sem force,
+// o que o usuário já tem vence: uma chave de topo só é gravada se o arquivo não
+// a tem, e `hooks` é mesclado por evento — os hooks do ray (comando começando
+// por RayHookPrefix) são trocados pelos atuais e os do usuário ficam, antes
+// dos novos. Com force, cada chave de settings substitui a do arquivo, inclusive
+// `hooks`. Em ambos os casos as chaves que o ray não gerencia são preservadas.
+// dryRun imprime o resultado em out em vez de gravar.
+func MergeSettings(target string, settings map[string]any, force, dryRun bool, out io.Writer) error {
 	claudeDir := filepath.Join(target, ".claude")
 	path := filepath.Join(claudeDir, "settings.json")
 
@@ -26,8 +36,24 @@ func MergeSettings(target string, settings map[string]any, dryRun bool, out io.W
 		return err
 	}
 
-	for k, v := range settings {
-		doc[k] = v
+	// Ida e volta por JSON: os tipos de settings (int vindo do YAML, por
+	// exemplo) passam a coincidir com os do arquivo lido, e a comparação de
+	// entradas duplicadas deixa de falhar por tipo.
+	norm, err := normalize(settings)
+	if err != nil {
+		return err
+	}
+	for k, v := range norm {
+		switch {
+		case force:
+			doc[k] = v
+		case k == "hooks":
+			doc[k] = mergeHooks(doc[k], v)
+		default:
+			if _, ok := doc[k]; !ok {
+				doc[k] = v
+			}
+		}
 	}
 
 	data, err := json.MarshalIndent(doc, "", "  ")
@@ -44,4 +70,97 @@ func MergeSettings(target string, settings map[string]any, dryRun bool, out io.W
 		return err
 	}
 	return os.WriteFile(path, data, 0o644)
+}
+
+// normalize devolve m com os tipos que o encoding/json produziria ao ler o
+// arquivo.
+func normalize(m map[string]any) (map[string]any, error) {
+	data, err := json.Marshal(m)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]any{}
+	if err := json.Unmarshal(data, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// mergeHooks une os hooks novos aos do arquivo, evento por evento: tira dos
+// existentes os comandos do ray e acrescenta ao fim cada entrada nova que
+// ainda não esteja lá. Se existing ou novo não forem o mapa esperado, vale o
+// novo.
+func mergeHooks(existing, novo any) any {
+	cur, ok := existing.(map[string]any)
+	nv, ok2 := novo.(map[string]any)
+	if !ok || !ok2 {
+		return novo
+	}
+	for event, v := range cur {
+		list, isList := v.([]any)
+		if !isList {
+			continue
+		}
+		if kept := dropRayEntries(list); len(kept) > 0 {
+			cur[event] = kept
+		} else {
+			delete(cur, event)
+		}
+	}
+	for event, v := range nv {
+		add, isList := v.([]any)
+		if !isList {
+			continue
+		}
+		list, _ := cur[event].([]any)
+		for _, e := range add {
+			if !containsEntry(list, e) {
+				list = append(list, e)
+			}
+		}
+		cur[event] = list
+	}
+	return cur
+}
+
+// dropRayEntries remove de cada entrada os hooks do ray e descarta a entrada
+// que ficou sem hooks. Entrada sem lista `hooks` é do usuário e fica como está.
+func dropRayEntries(entries []any) []any {
+	kept := []any{}
+	for _, e := range entries {
+		entry, ok := e.(map[string]any)
+		if !ok {
+			kept = append(kept, e)
+			continue
+		}
+		hooks, ok := entry["hooks"].([]any)
+		if !ok {
+			kept = append(kept, e)
+			continue
+		}
+		left := []any{}
+		for _, h := range hooks {
+			if hm, ok := h.(map[string]any); ok {
+				if cmd, _ := hm["command"].(string); strings.HasPrefix(cmd, RayHookPrefix) {
+					continue
+				}
+			}
+			left = append(left, h)
+		}
+		if len(left) == 0 {
+			continue
+		}
+		entry["hooks"] = left
+		kept = append(kept, entry)
+	}
+	return kept
+}
+
+func containsEntry(list []any, e any) bool {
+	for _, x := range list {
+		if reflect.DeepEqual(x, e) {
+			return true
+		}
+	}
+	return false
 }

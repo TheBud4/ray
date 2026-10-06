@@ -63,14 +63,47 @@ func dedupScaffoldFiles(base, extra []profile.ScaffoldFile) []profile.ScaffoldFi
 	return out
 }
 
-// mergeMaps é uma união rasa: b sobrescreve chaves de a.
-func mergeMaps(a, b map[string]any) map[string]any {
+// mergeSettings une os settings da receita aos do ray: `hooks` é unido por
+// evento (entradas da receita primeiro, as do ray depois) para que os hooks do
+// ray não apaguem os da receita; as demais chaves são uma união rasa em que b
+// vence.
+func mergeSettings(a, b map[string]any) map[string]any {
 	out := make(map[string]any, len(a)+len(b))
 	for k, v := range a {
 		out[k] = v
 	}
 	for k, v := range b {
+		if k == "hooks" {
+			out[k] = mergeHookEvents(out[k], v)
+			continue
+		}
 		out[k] = v
+	}
+	return out
+}
+
+// mergeHookEvents concatena as entradas de cada evento de a e b, sem alterar
+// nenhum dos dois. Se algum não for um mapa de eventos, vale b.
+func mergeHookEvents(a, b any) any {
+	am, ok := a.(map[string]any)
+	bm, ok2 := b.(map[string]any)
+	if !ok || !ok2 {
+		return b
+	}
+	out := make(map[string]any, len(am)+len(bm))
+	for event, v := range am {
+		out[event] = v
+	}
+	for event, v := range bm {
+		prev, pok := out[event].([]any)
+		add, aok := v.([]any)
+		if !pok || !aok {
+			out[event] = v
+			continue
+		}
+		merged := make([]any, 0, len(prev)+len(add))
+		merged = append(merged, prev...)
+		out[event] = append(merged, add...)
 	}
 	return out
 }

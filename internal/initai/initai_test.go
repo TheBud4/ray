@@ -956,3 +956,90 @@ func TestRunTwicePreservesEditedComponentWhoseHashCannotBeComputed(t *testing.T)
 		})
 	}
 }
+
+func settingsEventCommands(t *testing.T, target, event string) []string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(target, ".claude", "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Hooks map[string][]struct {
+			Hooks []struct {
+				Command string `json:"command"`
+			} `json:"hooks"`
+		} `json:"hooks"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		t.Fatal(err)
+	}
+	var cmds []string
+	for _, e := range doc.Hooks[event] {
+		for _, h := range e.Hooks {
+			cmds = append(cmds, h.Command)
+		}
+	}
+	return cmds
+}
+
+// Os hooks que a receita declara e os do ray se somam por evento: antes, a
+// união rasa deixava os do ray e apagava os da receita antes de chegar ao arquivo.
+func TestRunKeepsRecipeHooksAlongsideTheRaysAndDoesNotDuplicateThem(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "s")
+	p := testProfile()
+	p.Scaffold.Settings = map[string]any{
+		"model": "opus",
+		"hooks": map[string]any{
+			"SessionStart": []any{map[string]any{"hooks": []any{map[string]any{"type": "command", "command": "bash my-recipe-hook.sh"}}}},
+		},
+	}
+	writeProfile(t, home.ProfilesDir, p)
+	target := t.TempDir()
+	opts := Options{Profile: "test", Target: target, Out: &bytes.Buffer{}}
+
+	for run := 1; run <= 2; run++ {
+		if _, err := Run(&runner.FakeRunner{}, allFound, opts, home); err != nil {
+			t.Fatalf("Run() #%d error = %v", run, err)
+		}
+		got := settingsEventCommands(t, target, "SessionStart")
+		var recipe, ray int
+		for _, c := range got {
+			switch c {
+			case "bash my-recipe-hook.sh":
+				recipe++
+			case "bash .claude/hooks/session-start.sh":
+				ray++
+			}
+		}
+		if recipe != 1 || ray != 1 {
+			t.Errorf("run %d: SessionStart = %v, want the recipe's hook and the ray's exactly once each", run, got)
+		}
+	}
+}
+
+// O usuário que já tem hooks e model no settings.json não os perde ao rodar init ai.
+func TestRunKeepsTheUsersExistingSettings(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "s")
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(target, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mine := `{"model": "sonnet", "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "notify-send done"}]}]}}`
+	if err := os.WriteFile(filepath.Join(target, ".claude", "settings.json"), []byte(mine), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Run(&runner.FakeRunner{}, allFound, Options{Profile: "test", Target: target, Out: &bytes.Buffer{}}, home); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if got := settingsEventCommands(t, target, "Stop"); !slices.Equal(got, []string{"notify-send done"}) {
+		t.Errorf("Stop = %v, want the user's hook kept", got)
+	}
+	data, _ := os.ReadFile(filepath.Join(target, ".claude", "settings.json"))
+	if !strings.Contains(string(data), `"model": "sonnet"`) {
+		t.Errorf("settings.json = %s, want the user's model kept", data)
+	}
+}
