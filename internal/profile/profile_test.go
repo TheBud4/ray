@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/TheBud4/ray/internal/store"
 )
 
 func TestValidate(t *testing.T) {
@@ -483,7 +485,7 @@ func TestLoadByNameOrDefault(t *testing.T) {
 	t.Run("file wins over the factory profile", func(t *testing.T) {
 		dir := t.TempDir()
 		writeTestProfile(t, dir, "go")
-		p, err := LoadByNameOrDefault(dir, "go")
+		p, err := LoadByNameOrDefault(dir, "go", store.New(t.TempDir()))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -492,7 +494,7 @@ func TestLoadByNameOrDefault(t *testing.T) {
 		}
 	})
 	t.Run("missing file falls back to the factory profile", func(t *testing.T) {
-		p, err := LoadByNameOrDefault(filepath.Join(t.TempDir(), "no-such-dir"), "go")
+		p, err := LoadByNameOrDefault(filepath.Join(t.TempDir(), "no-such-dir"), "go", store.New(t.TempDir()))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -501,15 +503,62 @@ func TestLoadByNameOrDefault(t *testing.T) {
 		}
 	})
 	t.Run("unknown name is not found", func(t *testing.T) {
-		_, err := LoadByNameOrDefault(t.TempDir(), "nope")
+		_, err := LoadByNameOrDefault(t.TempDir(), "nope", store.New(t.TempDir()))
 		if err == nil || !strings.Contains(err.Error(), "not found") {
 			t.Errorf("error = %v, want a not found error", err)
 		}
 	})
 	t.Run("a name that leaves the dir is still refused", func(t *testing.T) {
-		_, err := LoadByNameOrDefault(t.TempDir(), "../go")
+		_, err := LoadByNameOrDefault(t.TempDir(), "../go", store.New(t.TempDir()))
 		if err == nil || !strings.Contains(err.Error(), "single path element") {
 			t.Errorf("error = %v, want a single path element error", err)
 		}
 	})
+}
+
+// O dry-run decide como a execução real: um perfil de fábrica defasado e nunca
+// editado é o que o EnsureDir atualizaria, então é o de fábrica que a simulação
+// usa — senão ela mostraria o plano de uma receita que a execução real não usa.
+// Em nenhum caso grava o arquivo nem a linha-base.
+func TestLoadByNameOrDefaultDecidesLikeEnsureDir(t *testing.T) {
+	old := []byte("name: go\ndescription: an older factory go\n")
+	cases := []struct {
+		name     string
+		pristine []byte // nil = sem linha-base
+		wantDesc string
+	}{
+		{"never edited and outdated: the factory one", old, "Go backend stack"},
+		{"edited: the file on disk", []byte("name: go\ndescription: what the ray wrote\n"), "an older factory go"},
+		{"no baseline: the file on disk", nil, "an older factory go"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir, storeRoot := t.TempDir(), t.TempDir()
+			st := store.New(storeRoot)
+			path := filepath.Join(dir, "go.yaml")
+			if err := os.WriteFile(path, old, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if tc.pristine != nil {
+				if err := st.SetPristine(dir, "go.yaml", store.HashBytes(tc.pristine)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			pristineBefore, _ := os.ReadFile(filepath.Join(storeRoot, "pristine.yaml"))
+
+			p, err := LoadByNameOrDefault(dir, "go", st)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if p.Description != tc.wantDesc {
+				t.Errorf("Description = %q, want %q", p.Description, tc.wantDesc)
+			}
+			if got, _ := os.ReadFile(path); string(got) != string(old) {
+				t.Errorf("go.yaml was rewritten by a read-only load: %q", got)
+			}
+			if after, _ := os.ReadFile(filepath.Join(storeRoot, "pristine.yaml")); string(after) != string(pristineBefore) {
+				t.Error("the baseline was written by a read-only load")
+			}
+		})
+	}
 }

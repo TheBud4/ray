@@ -271,3 +271,67 @@ func TestInitAISyncsOutdatedFactoryProfiles(t *testing.T) {
 	}
 	assertProfileIsCurrent(t, home.ProfilesDir, "base", current)
 }
+
+// A receita antiga, nunca editada, traz um passo create: e um componente que a
+// de fábrica atual não tem. Sob --dry-run, se a simulação usasse o arquivo, esses
+// dois apareceriam no plano — de uma receita que a execução real não usaria.
+func seedOutdatedBaseWithExtras(t *testing.T, dir, storeDir string) {
+	t.Helper()
+	old := []byte("name: base\ndescription: older\ncreate:\n  - echo from-the-old-recipe\ncomponents:\n  - name: s\n    dest: .claude/skills\n")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "base.yaml"), old, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.New(storeDir).SetPristine(dir, "base.yaml", store.HashBytes(old)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNewDryRunUsesTheRecipeTheRealRunWouldUse(t *testing.T) {
+	t.Chdir(t.TempDir())
+	home := newTestHome(t)
+	seedOutdatedBaseWithExtras(t, home.ProfilesDir, home.StoreDir)
+	before, _ := os.ReadFile(filepath.Join(home.ProfilesDir, "base.yaml"))
+
+	fr := &runner.FakeRunner{}
+	if _, err := runNew(fr, allFound, home.ProfilesDir, "base", "myproj", true, true, initai.Options{DryRun: true}, home); err != nil {
+		t.Fatalf("runNew() error = %v", err)
+	}
+	for _, c := range fr.Calls {
+		if strings.Contains(c.String(), "from-the-old-recipe") {
+			t.Errorf("dry-run planned %q from the outdated file; the real run would use the factory recipe", c.String())
+		}
+	}
+	if after, _ := os.ReadFile(filepath.Join(home.ProfilesDir, "base.yaml")); string(after) != string(before) {
+		t.Error("the dry-run rewrote the profile on disk")
+	}
+}
+
+func TestInitAIDryRunUsesTheRecipeTheRealRunWouldUse(t *testing.T) {
+	home := newTestHome(t)
+	home.ComponentsDir = filepath.Join(t.TempDir(), "components")
+	seedOutdatedBaseWithExtras(t, home.ProfilesDir, home.StoreDir)
+	if err := os.MkdirAll(filepath.Join(home.ComponentsDir, "s"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home.ComponentsDir, "s", "SKILL.md"), []byte("# s"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := os.ReadFile(filepath.Join(home.ProfilesDir, "base.yaml"))
+
+	opts := initai.Options{Profile: "base", Target: t.TempDir(), DryRun: true, Out: &bytes.Buffer{}}
+	sum, err := initai.Run(&runner.FakeRunner{}, allFound, opts, home)
+	if err != nil {
+		t.Fatalf("initai.Run() error = %v", err)
+	}
+	for _, it := range sum.Installed {
+		if it == "s" {
+			t.Error("dry-run would install component s from the outdated file; the real run uses the factory recipe, which has none")
+		}
+	}
+	if after, _ := os.ReadFile(filepath.Join(home.ProfilesDir, "base.yaml")); string(after) != string(before) {
+		t.Error("the dry-run rewrote the profile on disk")
+	}
+}

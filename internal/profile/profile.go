@@ -12,6 +12,8 @@ import (
 	"unicode"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/TheBud4/ray/internal/store"
 )
 
 // Profile é uma receita, normalmente guardada em ~/.ray/profiles/<name>.yaml.
@@ -162,24 +164,44 @@ func LoadByName(profilesDir, name string) (*Profile, error) {
 // receitas (dry-run): o arquivo em dir ganha, como sempre; se ele não existe e
 // name é de um perfil de fábrica, devolve uma cópia validada dele — o que
 // EnsureDir teria gravado. Sem nenhum dos dois, o mesmo erro de LoadByName.
-func LoadByNameOrDefault(dir, name string) (*Profile, error) {
+func LoadByNameOrDefault(dir, name string, st *store.Store) (*Profile, error) {
 	path, err := PathFor(dir, name)
 	if err != nil {
 		return nil, err
 	}
 	if _, err := os.Stat(path); err == nil || !os.IsNotExist(err) {
+		// Arquivo de fábrica defasado e nunca editado: é o que o EnsureDir
+		// gravaria por cima, então é a receita que a execução real usaria.
+		if st != nil {
+			for _, d := range Defaults() {
+				if d.Name != name {
+					continue
+				}
+				dec, err := decideFactory(dir, d, st)
+				if err != nil {
+					return nil, err
+				}
+				if dec.overwrite {
+					return validated(d)
+				}
+			}
+		}
 		return LoadByName(dir, name)
 	}
 	for _, d := range Defaults() {
 		if d.Name == name {
-			p := d
-			if err := p.Validate(); err != nil {
-				return nil, err
-			}
-			return &p, nil
+			return validated(d)
 		}
 	}
 	return LoadByName(dir, name)
+}
+
+// validated devolve uma cópia validada de p.
+func validated(p Profile) (*Profile, error) {
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
+	return &p, nil
 }
 
 // Load lê e valida a receita em path. Decodificação estrita: uma

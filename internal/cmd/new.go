@@ -77,7 +77,9 @@ func runNew(r runner.Runner, l preflight.Looker, profilesDir, profileName, proje
 	// vêm da memória.
 	loadProfile := profile.LoadByName
 	if dryRun {
-		loadProfile = profile.LoadByNameOrDefault
+		loadProfile = func(dir, name string) (*profile.Profile, error) {
+			return profile.LoadByNameOrDefault(dir, name, store.New(home.StoreDir))
+		}
 	} else if err := profile.EnsureDir(profilesDir, store.New(home.StoreDir)); err != nil {
 		return initai.Summary{}, err
 	}

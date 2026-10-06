@@ -35,41 +35,64 @@ func EnsureDir(dir string, st *store.Store) error {
 		return err
 	}
 	for _, p := range Defaults() {
-		coord := p.Name + ".yaml"
-		path := filepath.Join(dir, coord)
-
-		fresh, err := yaml.Marshal(p)
+		d, err := decideFactory(dir, p, st)
 		if err != nil {
 			return err
 		}
-		freshHash := store.HashBytes(fresh)
-
-		onDisk, readErr := os.ReadFile(path)
-		exists := readErr == nil
-		if readErr != nil && !os.IsNotExist(readErr) {
-			return readErr
-		}
-		onDiskHash := store.HashBytes(onDisk)
-		pristineHash, hasPristine := st.PristineHash(dir, coord)
-
-		overwrite, _ := store.DecideOverwrite(false, exists, onDiskHash, freshHash, pristineHash, hasPristine)
-		if !overwrite {
+		if !d.overwrite {
 			continue // editado: é do usuário
 		}
-		if !exists || onDiskHash != freshHash {
-			if err := os.WriteFile(path, fresh, 0o644); err != nil {
+		if !d.exists || d.onDiskHash != d.freshHash {
+			if err := os.WriteFile(d.path, d.fresh, 0o644); err != nil {
 				return err
 			}
 		}
 		// Só move a linha-base quando ela muda: o pristine.yaml é um arquivo só
 		// para tudo, e regravá-lo à toa acorda quem o observa.
-		if !hasPristine || pristineHash != freshHash {
-			if err := st.SetPristine(dir, coord, freshHash); err != nil {
+		if !d.hasPristine || d.pristineHash != d.freshHash {
+			if err := st.SetPristine(dir, d.coord, d.freshHash); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+// factoryDecision é o que a política de "o usuário editou isto?" decide para um
+// perfil de fábrica em dir. É compartilhada entre EnsureDir, que age, e
+// LoadByNameOrDefault, que só simula: as duas têm de concordar.
+type factoryDecision struct {
+	coord, path  string
+	fresh        []byte
+	freshHash    string
+	exists       bool
+	onDiskHash   string
+	pristineHash string
+	hasPristine  bool
+	// overwrite diz que o arquivo deve passar a ser o de fábrica: não existe, ou
+	// existe e nunca foi editado.
+	overwrite bool
+}
+
+func decideFactory(dir string, p Profile, st *store.Store) (factoryDecision, error) {
+	d := factoryDecision{coord: p.Name + ".yaml"}
+	d.path = filepath.Join(dir, d.coord)
+
+	fresh, err := yaml.Marshal(p)
+	if err != nil {
+		return d, err
+	}
+	d.fresh, d.freshHash = fresh, store.HashBytes(fresh)
+
+	onDisk, readErr := os.ReadFile(d.path)
+	d.exists = readErr == nil
+	if readErr != nil && !os.IsNotExist(readErr) {
+		return d, readErr
+	}
+	d.onDiskHash = store.HashBytes(onDisk)
+	d.pristineHash, d.hasPristine = st.PristineHash(dir, d.coord)
+	d.overwrite, _ = store.DecideOverwrite(false, d.exists, d.onDiskHash, d.freshHash, d.pristineHash, d.hasPristine)
+	return d, nil
 }
 
 // Entry é o resumo leve usado por `profile list`.

@@ -198,7 +198,9 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	// 3. carrega a receita.
 	loadProfile := profile.LoadByName
 	if opts.DryRun {
-		loadProfile = profile.LoadByNameOrDefault
+		loadProfile = func(dir, name string) (*profile.Profile, error) {
+			return profile.LoadByNameOrDefault(dir, name, st)
+		}
 	}
 	prof, err := loadProfile(home.ProfilesDir, opts.Profile)
 	if err != nil {
