@@ -130,3 +130,15 @@ func TestDoctorRefusesAStrayArgument(t *testing.T) {
 		t.Errorf("error = %q, want it to name the stray argument", err)
 	}
 }
+
+// O -v é global, mas só o `ray run` o lê. O --help não pode prometer "saída
+// detalhada" para todo comando: quem passa `ray -v doctor` esperaria mais saída.
+func TestVerboseFlagSaysWhereItApplies(t *testing.T) {
+	f := newRootCmd().PersistentFlags().Lookup("verbose")
+	if f == nil {
+		t.Fatal("--verbose is not a persistent flag of the root")
+	}
+	if !strings.Contains(f.Usage, "ray run") {
+		t.Errorf("--verbose usage = %q, want it to say it only applies to `ray run`", f.Usage)
+	}
+}

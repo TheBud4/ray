@@ -106,7 +106,8 @@ execução criou.
 | `ray stats [path]` | Agrega as métricas-proxy de economia de token registradas em `.claude/.ray-metrics/`. |
 | `ray status [path]` | Diagnostica o ambiente vendorizado: o que o `ray update` faria com cada componente, se o `.claude/` está versionado, se o bloco do `.gitignore` segue intacto e se os servidores MCP resolvem. Ambiente são imprime duas linhas. |
 
-Flags globais: `--verbose` (`-v`), `--dry-run` (imprime o que seria feito, sem
+Flags globais: `--verbose` (`-v`; só o `ray run` o lê, e imprime cada passo antes de
+rodá-lo), `--dry-run` (imprime o que seria feito, sem
 executar nem escrever nada) e `--version`, que não tem forma curta — o `-v` é da
 verbosidade.
 

@@ -54,7 +54,7 @@ func newRootCmd() *cobra.Command {
 	// se o encontrar livre no Execute, então quem chega antes fica com ele.
 	// Sem isto, `ray -v <comando>` imprime a versão, não roda o comando e sai
 	// 0 — sucesso aparente em script.
-	root.PersistentFlags().BoolVarP(&flagVerbose, "verbose", "v", false, "verbose output")
+	root.PersistentFlags().BoolVarP(&flagVerbose, "verbose", "v", false, "print each step before running it (only used by `ray run`)")
 	root.PersistentFlags().BoolVar(&flagDryRun, "dry-run", false, "print actions without doing them")
 
 	// Build the command tree
