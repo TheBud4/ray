@@ -146,6 +146,14 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		return Summary{}, err
 	}
 
+	// Symlink para fora do projeto é recusado antes de qualquer leitura ou
+	// efeito: nem a linha-base do projeto, que o passo abaixo lê, pode ser um
+	// link para fora. Os destinos que dependem da receita são conferidos logo
+	// depois de ela carregar (passo 3), ainda antes do primeiro efeito no projeto.
+	if err := checkDestinations(target, fixedDestinations()); err != nil {
+		return Summary{}, err
+	}
+
 	// A linha-base é o que separa "intocado" de "editado": ilegível, nenhum passo
 	// abaixo pode decidir sobre sobrescrita, então para antes de qualquer efeito.
 	st := store.New(home.StoreDir)
@@ -204,6 +212,10 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	}
 	prof, err := loadProfile(home.ProfilesDir, opts.Profile)
 	if err != nil {
+		return Summary{}, err
+	}
+
+	if err := checkDestinations(target, recipeDestinations(target, prof)); err != nil {
 		return Summary{}, err
 	}
 
