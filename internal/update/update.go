@@ -8,12 +8,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/runner"
+	"github.com/TheBud4/ray/internal/safepath"
 	"github.com/TheBud4/ray/internal/store"
 )
 
@@ -68,10 +70,32 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 		return Summary{}, err
 	}
 
+	// Um clone pode trazer .claude, o registro do perfil, a linha-base ou o
+	// destino de um componente como symlink para fora do projeto. Ler ou gravar
+	// por eles (e o --force apaga) alcançaria fora, então recusa antes de ler
+	// qualquer coisa do projeto e de qualquer efeito.
+	baselinePath := store.ProjectBaseline(target).Path()
+	if err := checkInside(target, profile.ProfileRecordPath(target), baselinePath); err != nil {
+		return Summary{}, err
+	}
+
 	// 1. resolve o perfil: --profile ganha; senão lê o registro project-local.
 	prof, err := profile.LoadForTarget(home.ProfilesDir, target, opts.Profile)
 	if err != nil {
 		return Summary{}, err
+	}
+
+	dests := make([]string, 0, len(prof.Components))
+	for _, c := range prof.Components {
+		dests = append(dests, filepath.Join(target, c.Dest, c.Name))
+	}
+	if err := checkInside(target, dests...); err != nil {
+		return Summary{}, err
+	}
+	for _, d := range dests {
+		if err := checkTreeInside(target, d); err != nil {
+			return Summary{}, err
+		}
 	}
 
 	// A linha-base é o que separa "intocado" de "editado": ilegível, nada abaixo
@@ -182,6 +206,35 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 
 	sum.HadFailure = len(sum.Failed) > 0
 	return sum, nil
+}
+
+// checkInside recusa o update se algum dos caminhos, seguindo os symlinks que
+// existem no meio dele, sai de target. Um symlink que resolve dentro do
+// projeto continua valendo.
+func checkInside(target string, paths ...string) error {
+	for _, p := range paths {
+		if err := safepath.ResolveInside(target, p); err != nil {
+			return fmt.Errorf("refusing to update: %w", err)
+		}
+	}
+	return nil
+}
+
+// checkTreeInside faz o mesmo para os symlinks que moram dentro de dir: a
+// recópia apaga e regrava a árvore inteira, então um arquivo ou subpasta dela
+// apontando para fora também é recusado. Um dir que não existe não tem o que
+// conferir.
+func checkTreeInside(target, dir string) error {
+	root, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return nil
+	}
+	return filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.Type()&fs.ModeSymlink == 0 {
+			return nil
+		}
+		return checkInside(target, p)
+	})
 }
 
 // decideOverwrite delega para store.DecideOverwrite. A política mora no
