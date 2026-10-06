@@ -27,6 +27,9 @@ type Options struct {
 type Home struct {
 	ProfilesDir string
 	StoreDir    string
+	// ConfigPath é o config.yaml, onde `ray brain set` grava o cérebro. Vazio
+	// dispensa a checagem do caminho gravado (só o override RAY_BRAIN vale).
+	ConfigPath string
 }
 
 // GitState é o estado do ambiente vendorizado na árvore git.
@@ -148,7 +151,7 @@ func run(check runner.Runner, l preflight.Looker, opts Options, home Home) (Repo
 	}
 	rep.Problems = append(rep.Problems, gitignoreProblems...)
 
-	mcpProblems, err := checkMCP(l, target)
+	mcpProblems, err := checkMCP(l, target, home.ConfigPath)
 	if err != nil {
 		return Report{}, err
 	}

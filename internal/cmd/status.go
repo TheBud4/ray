@@ -39,8 +39,12 @@ func runStatus(target string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	configPath, err := raypaths.ConfigPath()
+	if err != nil {
+		return err
+	}
 	rep, err := status.Run(runner.ExecRunner{}, status.Options{Target: target},
-		status.Home{ProfilesDir: profilesDir, StoreDir: storeDir})
+		status.Home{ProfilesDir: profilesDir, StoreDir: storeDir, ConfigPath: configPath})
 	if err != nil {
 		return err
 	}

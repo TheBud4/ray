@@ -663,6 +663,48 @@ func TestMCPBrainPathThatDoesNotExistIsAProblem(t *testing.T) {
 	}
 }
 
+// O caminho do cérebro que o ray guarda é o do config.yaml (`ray brain set`);
+// o RAY_BRAIN é só um override. Checar apenas o override deixava um cérebro
+// movido ou apagado passar em silêncio para quem nunca exportou a variável.
+func TestMCPBrainPathInConfigIsChecked(t *testing.T) {
+	t.Setenv("RAY_BRAIN", "")
+	missing := filepath.Join(t.TempDir(), "nao-existe")
+	existing := t.TempDir()
+
+	cases := []struct {
+		name    string
+		brain   string // "" = sem config.yaml
+		wantErr bool
+	}{
+		{"config points at a missing path", missing, true},
+		{"config points at an existing path", existing, false},
+		{"no config at all", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
+			cfgPath := filepath.Join(t.TempDir(), "config.yaml")
+			if tc.brain != "" {
+				if err := os.WriteFile(cfgPath, []byte("brain: "+tc.brain+"\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			rep, err := run(nil, stubLooker{}, Options{Target: target}, Home{ConfigPath: cfgPath})
+			if err != nil {
+				t.Fatalf("run() error = %v", err)
+			}
+			if tc.wantErr {
+				if len(rep.Problems) != 1 || !strings.Contains(rep.Problems[0], missing) {
+					t.Errorf("Problems = %v, want one naming %s", rep.Problems, missing)
+				}
+			} else if len(rep.Problems) != 0 {
+				t.Errorf("Problems = %v, want none", rep.Problems)
+			}
+		})
+	}
+}
+
 // Projeto que o ray não montou não tem .ray-profile, e o bloco do .gitignore
 // nunca foi escrito por ele. Reclamar ali é julgar arquivo alheio — e produz
 // falso positivo no próprio repositório do ray, cujo .claude/ é escrito à mão
