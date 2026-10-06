@@ -289,3 +289,25 @@ func TestPrintInitAISummaryUsesTheConditionalInDryRun(t *testing.T) {
 		}
 	}
 }
+
+// Em --dry-run nada foi escrito: mandar `git add` dos caminhos e rodar o
+// `claude` num ambiente que não existe seria o rodapé afirmando o contrário do
+// que o resumo acabou de dizer ("Would create").
+func TestPrintInitAISummaryNoNextStepsOnDryRun(t *testing.T) {
+	var out bytes.Buffer
+	printInitAISummary(&out, initai.Summary{
+		Created:        []string{"CLAUDE.md"},
+		VersionedPaths: []string{".claude", "CLAUDE.md"},
+		InGitRepo:      true,
+		DryRun:         true,
+	})
+	got := out.String()
+	if !strings.Contains(got, "Would create") {
+		t.Fatalf("summary = %q, want the dry-run wording", got)
+	}
+	for _, forbidden := range []string{"Next steps", "git add", "git commit"} {
+		if strings.Contains(got, forbidden) {
+			t.Errorf("dry-run summary = %q, must not contain %q: nothing was written", got, forbidden)
+		}
+	}
+}

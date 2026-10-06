@@ -151,9 +151,10 @@ func printInitAISummary(out io.Writer, sum initai.Summary) {
 // no disco de uma pessoa só não é ambiente reproduzível.
 //
 // Não aparece quando algum passo falhou: mandar commitar um ambiente escrito
-// pela metade grava o estado quebrado.
+// pela metade grava o estado quebrado. Nem em --dry-run: nada foi escrito, e
+// `git add` de caminhos que não existem contradiz o "Would create" acima.
 func printNextSteps(out io.Writer, sum initai.Summary) {
-	if sum.HadFailure {
+	if sum.HadFailure || sum.DryRun {
 		return
 	}
 	fmt.Fprintln(out, "\nNext steps:")
