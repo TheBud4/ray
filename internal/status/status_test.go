@@ -434,6 +434,31 @@ func TestGitQueriesNeverTakeOptionalLocks(t *testing.T) {
 	}
 }
 
+// O git tem de rodar no projeto diagnosticado, não no diretório de onde o ray
+// foi chamado: `ray status ../outro` consultaria o repositório errado.
+func TestGitQueriesRunInTheTarget(t *testing.T) {
+	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
+	fake := gitFake(".claude/skills/tdd/SKILL.md\n", "")
+
+	if _, err := Run(fake, Options{Target: target}, Home{}); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	var git int
+	for _, c := range fake.Calls {
+		if c.Name != "git" {
+			continue
+		}
+		git++
+		if c.Dir != target {
+			t.Errorf("%q ran in %q, want the target %q", c.String(), c.Dir, target)
+		}
+	}
+	if git == 0 {
+		t.Fatal("no git call was made; the test proves nothing")
+	}
+}
+
 func TestGitCleanWhenTrackedAndPorcelainEmpty(t *testing.T) {
 	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
 
@@ -515,11 +540,14 @@ func writeGitignore(t *testing.T, target string, drop ...string) {
 	}
 }
 
+// Sem o registro do perfil o checkGitignore nem lê o arquivo (projeto que o ray
+// não montou): o teste só prova algo se o ambiente for do ray, como nos irmãos.
 func TestGitignoreIntactBlockIsNoProblem(t *testing.T) {
 	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
+	home := writeEnv(t, target, nil)
 	writeGitignore(t, target)
 
-	rep, err := Run(nil, Options{Target: target}, Home{})
+	rep, err := Run(nil, Options{Target: target}, home)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
