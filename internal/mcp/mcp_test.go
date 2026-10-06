@@ -194,3 +194,40 @@ func TestWriteServersTreatsANullDocumentAsEmpty(t *testing.T) {
 		t.Errorf(".mcp.json = %s, want the server written", got)
 	}
 }
+
+// Uma receita sem integração não tem servidor a registrar: gravar um
+// `{"mcpServers": {}}` criava um arquivo vazio que o ray mandava commitar. E
+// um .mcp.json que já existe, sem nada a acrescentar, fica como está.
+func TestWriteServersWithoutServersWritesNothing(t *testing.T) {
+	t.Run("no file is created", func(t *testing.T) {
+		target := t.TempDir()
+		var out bytes.Buffer
+
+		if err := WriteServers(target, nil, false, &out); err != nil {
+			t.Fatalf("WriteServers() error = %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(target, ".mcp.json")); !os.IsNotExist(err) {
+			t.Errorf(".mcp.json exists after a call with no servers, stat err = %v", err)
+		}
+		if out.Len() != 0 {
+			t.Errorf("output = %q, want nothing printed when there is nothing to write", out.String())
+		}
+	})
+
+	t.Run("an existing file is left byte for byte", func(t *testing.T) {
+		target := t.TempDir()
+		path := filepath.Join(target, ".mcp.json")
+		original := []byte("{\"mcpServers\":{\"mine\":{\"command\":\"x\"}},\"extra\":1}")
+		if err := os.WriteFile(path, original, 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := WriteServers(target, nil, false, io.Discard); err != nil {
+			t.Fatalf("WriteServers() error = %v", err)
+		}
+		got, _ := os.ReadFile(path)
+		if !bytes.Equal(got, original) {
+			t.Errorf(".mcp.json = %q, want it untouched", got)
+		}
+	})
+}

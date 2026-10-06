@@ -58,6 +58,11 @@ func ReadServers(target string) ([]Server, error) {
 // nome (substitui o de mesmo nome, preserva o resto do arquivo). dryRun imprime
 // o resultado em out em vez de gravar.
 func WriteServers(target string, servers []Server, dryRun bool, out io.Writer) error {
+	// Nada a registrar: nem cria um .mcp.json vazio, nem regrava (e reformata)
+	// o que o usuário já tem.
+	if len(servers) == 0 {
+		return nil
+	}
 	path := filepath.Join(target, fileName)
 
 	doc := map[string]any{}
