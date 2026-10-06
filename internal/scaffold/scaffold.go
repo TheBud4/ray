@@ -110,7 +110,10 @@ func WriteFiles(files []profile.ScaffoldFile, opts Options) (Result, error) {
 			return Result{}, err
 		}
 
-		force := opts.Force && f.Path != handoffPath
+		// A imunidade é do arquivo, não da grafia: "./.claude/handoff.md" ou
+		// "a/../.claude/handoff.md" apontam para o mesmo handoff.
+		isHandoff := filepath.ToSlash(filepath.Clean(f.Path)) == handoffPath
+		force := opts.Force && !isHandoff
 		if exists && !force {
 			res.Skipped = append(res.Skipped, f.Path)
 			continue

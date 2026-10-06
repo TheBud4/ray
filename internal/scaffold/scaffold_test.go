@@ -162,6 +162,38 @@ func TestWriteFilesHandoffImmuneToForce(t *testing.T) {
 	}
 }
 
+// A imunidade do handoff é do ARQUIVO, não da grafia do caminho: uma receita
+// que o escreva como `.claude/./handoff.md` aponta para o mesmo arquivo e não
+// pode driblar a exclusão do --force.
+func TestWriteFilesHandoffImmuneToForceWithNonCanonicalPath(t *testing.T) {
+	for _, spelled := range []string{".claude/./handoff.md", "./.claude/handoff.md", ".claude//handoff.md", "a/../.claude/handoff.md"} {
+		t.Run(spelled, func(t *testing.T) {
+			target := t.TempDir()
+			path := filepath.Join(target, ".claude", "handoff.md")
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			custom := []byte("estado da sessão anterior")
+			if err := os.WriteFile(path, custom, 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			files := []profile.ScaffoldFile{{Path: spelled, Template: "claude/handoff.md.tmpl"}}
+			opts := Options{Target: target, Force: true, Data: Data{ProjectName: "demo", Stack: "go"}}
+			res, err := WriteFiles(files, opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(res.Created) != 0 {
+				t.Errorf("Created = %v, want none: --force must not regenerate handoff.md", res.Created)
+			}
+			if got, _ := os.ReadFile(path); string(got) != string(custom) {
+				t.Errorf("handoff.md = %q, want it untouched (%q)", got, custom)
+			}
+		})
+	}
+}
+
 func TestWriteFilesDryRunDoesNotWrite(t *testing.T) {
 	target := t.TempDir()
 	var out bytes.Buffer
