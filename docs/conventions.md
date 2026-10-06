@@ -72,6 +72,12 @@ com a correção ao lado, para virar item de revisão em vez de prosa:
   assim que `ray new --dry-run` e `ray init ai --dry-run` passaram a criar o
   diretório-alvo sem que nenhum teste percebesse — o que existia usava
   `t.TempDir()`, um diretório que já existe, onde o `MkdirAll` é no-op.
+  O vazamento foi bem maior que o diretório-alvo: `profile remove`, `profile
+  edit`, `brain open`, `profile list` e o sincronismo de templates de `~/.ray`
+  também agiam sob `--dry-run` (um `init ai --dry-run --force` chegava a
+  sobrescrever um template editado). Teste de dry-run parte de um `~/.ray`
+  **inexistente** e confere que ele continua inexistente depois: `RAY_HOME`
+  num `t.TempDir()` que já tem as pastas esconde o problema pela mesma razão.
 
 Esta lista cresce por acúmulo: um item entra quando o mesmo erro aparece pela
 segunda vez, não na primeira. Se um item aqui for verificável por lint ou teste,
