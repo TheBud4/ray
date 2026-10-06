@@ -245,6 +245,11 @@ ambiente de IA sem stack — sem `create:` e sem linhas extras de `.gitignore` �
 `headroom` e `code_graph`. `ray new base <nome>` também funciona: cria a pasta e
 o `git init`, sem passo de criação de projeto.
 
+A chave `scaffold.gitignore_stack` da receita lista linhas que o `init ai`
+acrescenta ao bloco do `.gitignore`, depois das linhas fixas (ex. `node_modules/`
+no `web`, `/{{.ProjectName}}` no `go`). Aceita `text/template` com os mesmos
+dados do scaffold. Sem a chave, o bloco só tem as linhas fixas.
+
 ## Integrações
 
 Um servidor MCP (`headroom`, `code_graph`) se declara em `integrations`, nunca
@@ -285,11 +290,13 @@ A árvore que `ray init ai` produz na pasta-alvo:
 <alvo>/
 ├── CLAUDE.md                 # a base estável: 12 seções XML (ver abaixo)
 ├── SECURITY.md                # [MUST]/[SHOULD], regras p/ código gerado por IA
+├── .gitignore                 # bloco do ray entre marcadores (negações + gitignore_stack)
 ├── .mcp.json                  # headroom + graphify, se ligados na receita
 ├── docs/                      # o ESTADO ATUAL do projeto (versionado)
 │   ├── README.md              # os dois papéis + o laço spec-driven
 │   └── architecture.md  conventions.md
 └── .claude/
+    ├── .ray-profile           # perfil usado; é o que o `ray update` lê
     ├── settings.json          # model, effortLevel, hooks
     ├── handoff.md              # estado vivo (gerido pela IA; NUNCA tocado por --force)
     ├── commands/{destilar,document,handoff,revisar}.md
