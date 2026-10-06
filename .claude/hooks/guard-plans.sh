@@ -14,6 +14,10 @@ fi
 payload="$(cat || true)"
 file="$(jq -r '.tool_input.file_path // empty' <<<"$payload" 2>/dev/null || true)"
 
+# No Windows o caminho do payload chega com `\`; um glob de barra nunca o
+# casaria e o hook viraria um no-op silencioso.
+file="${file//\\//}"
+
 if [[ -n "$file" && "$file" == *superpowers/* ]]; then
   # `|| true` é obrigatório: sob `set -e`, um jq que falhe aqui faria o hook sair
   # não-zero e bloquear — exatamente o que ele não tem direito de fazer.

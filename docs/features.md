@@ -405,6 +405,14 @@ ray e será reescrito: esse diretório é o que o ray gerencia.
 do repo), `guard-vocab` (contra vocabulário de processo em artefato entregue) e
 `guard-handoff` (contra `.claude/handoff.md` passar do dobro do orçamento).
 
+**Caminho do payload no Windows.** O Claude Code manda `tool_input.file_path` com
+`\` e letra de unidade (`C:\Users\x\proj\a.md`), mesmo sob Git bash, e um glob de
+barra nunca casa um caminho assim: o hook vira um no-op silencioso. Os três hooks
+que casam caminho (`guard-handoff`, `guard-vocab`, `guard-plans`) normalizam `\`
+para `/` e `C:/` para `/c/` (o formato do `$PWD` no Git bash) antes de comparar.
+O `CLAUDE_PROJECT_DIR` não é usado, então o formato dele no Windows não importa
+aqui. Os hooks precisam de `bash` e `jq`; sem `jq` fazem no-op por desenho.
+
 **Decisão central: avisam, não bloqueiam.** Hook que trava trabalho legítimo vira
 hook desligado. Com aviso, o custo de um falso positivo é uma linha ignorada; com
 bloqueio, é uma sessão travada — e na segunda vez, alguém remove o hook. A força
@@ -469,14 +477,9 @@ que número nenhum, e quem acabou de escrever a linha não precisa de coordenada
 ## Limites conhecidos no Windows
 
 Verificado só pelo CI (`go test ./...` em `windows-latest`); nenhum uso real
-medido. Três coisas estão fora do que a suíte afirma lá, e cada uma é um pulo
+medido. Duas coisas estão fora do que a suíte afirma lá, e cada uma é um pulo
 declarado em teste, não uma garantia:
 
-- **Os hooks de aviso podem ser um no-op silencioso.** Eles casam o caminho do
-  payload com globs de barra (`*.claude/handoff.md`, `*/test/*`, `$PWD`). No
-  Windows o caminho nativo tem `\` e o `$PWD` do Git bash é `/c/...`, e o formato
-  que o Claude Code põe no payload lá não está verificado. Quem decidir dar
-  suporte aos hooks no Windows normaliza `\` e a letra de unidade no próprio hook.
 - **Leitura concorrente da linha-base.** O `rename` atômico por cima de um arquivo
   que outro handle abre falha por instantes no Windows. A gravação repete o
   `rename` por até ~130 ms (`internal/fsutil`), mas um leitor que chega nesse
