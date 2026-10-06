@@ -143,3 +143,18 @@ func TestDryRunBrainOpenDoesNotLaunchTheApp(t *testing.T) {
 		t.Errorf("output = %q, want the planned `xdg-open` command printed", out)
 	}
 }
+
+// O plano do dry-run mostra o que seria gravado: o caminho absoluto, não o `.`.
+func TestDryRunBrainSetPrintsTheAbsolutePath(t *testing.T) {
+	dryRunHome(t)
+	brain := t.TempDir()
+	t.Chdir(brain)
+
+	out, err := execRoot(t, "brain", "set", ".", "--dry-run")
+	if err != nil {
+		t.Fatalf("Execute() error = %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "+ set brain to "+brain+" ") {
+		t.Errorf("output = %q, want the plan to name the absolute path %q", out, brain)
+	}
+}

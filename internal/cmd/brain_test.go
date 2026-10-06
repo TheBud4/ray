@@ -175,3 +175,39 @@ func TestRunBrainOpenInvokesOpener(t *testing.T) {
 		t.Errorf("opened %v, want a command mentioning %q", fake.Calls[0], brain)
 	}
 }
+
+// O config.yaml vale para qualquer pasta de onde o ray for rodado, então o
+// caminho gravado tem de ser absoluto: um `.` literal apontaria para o
+// diretório de onde `brain status` for chamado, não para o cérebro.
+func TestRunBrainSetStoresAnAbsolutePath(t *testing.T) {
+	for _, arg := range []string{".", "MegaBrain", "./MegaBrain/../MegaBrain"} {
+		t.Run(arg, func(t *testing.T) {
+			base := t.TempDir()
+			brain := filepath.Join(base, "MegaBrain")
+			if err := os.Mkdir(brain, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			configPath := filepath.Join(t.TempDir(), "config.yaml")
+			if arg == "." {
+				t.Chdir(brain)
+			} else {
+				t.Chdir(base)
+			}
+
+			var out bytes.Buffer
+			if err := runBrainSet(configPath, arg, &out); err != nil {
+				t.Fatalf("runBrainSet(%q) error = %v", arg, err)
+			}
+			cfg, err := rayconfig.Load(configPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Brain != brain {
+				t.Errorf("Brain = %q, want the absolute %q", cfg.Brain, brain)
+			}
+			if !strings.Contains(out.String(), brain) {
+				t.Errorf("output = %q, want it to confirm the absolute path %q", out.String(), brain)
+			}
+		})
+	}
+}

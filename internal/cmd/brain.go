@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"io"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -35,10 +36,11 @@ func newBrainSetCmd() *cobra.Command {
 			if flagDryRun {
 				// Só leitura: valida o caminho como o comando real e imprime a
 				// mudança planejada, sem tocar no config.yaml.
-				if err := vault.Verify(args[0]); err != nil {
+				abs, err := verifiedAbs(args[0])
+				if err != nil {
 					return err
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "+ set brain to %s (in %s)\n", args[0], configPath)
+				fmt.Fprintf(cmd.OutOrStdout(), "+ set brain to %s (in %s)\n", abs, configPath)
 				return nil
 			}
 			return runBrainSet(configPath, args[0], cmd.OutOrStdout())
@@ -46,12 +48,23 @@ func newBrainSetCmd() *cobra.Command {
 	}
 }
 
+// verifiedAbs valida path com vault.Verify e o devolve absoluto: o config.yaml
+// é global, e um "." ou caminho relativo gravado nele apontaria para outra
+// pasta quando lido de outro diretório.
+func verifiedAbs(path string) (string, error) {
+	if err := vault.Verify(path); err != nil {
+		return "", err
+	}
+	return filepath.Abs(path)
+}
+
 // runBrainSet valida o caminho e o grava. Confirma nomeando o que gravou:
 // gravar configuração em silêncio obriga quem rodou a checar com um segundo
 // comando se pegou — e o caminho impresso é o que o `vault.Verify` aceitou,
 // não o que foi digitado.
 func runBrainSet(configPath, path string, out io.Writer) error {
-	if err := vault.Verify(path); err != nil {
+	path, err := verifiedAbs(path)
+	if err != nil {
 		return err
 	}
 	cfg, err := rayconfig.Load(configPath)
