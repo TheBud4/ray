@@ -14,6 +14,8 @@ import (
 	"sort"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/TheBud4/ray/internal/fsutil"
 )
 
 // Store guarda a linha-base pristina em <root>/pristine.yaml (projeto →
@@ -192,7 +194,7 @@ func (s *Store) savePristine(index map[string]map[string]string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.pristinePath(), data, 0o644)
+	return fsutil.WriteFileAtomic(s.pristinePath(), data, 0o644)
 }
 
 // CopyTree copia src (arquivo ou diretório, com estrutura + permissões) para

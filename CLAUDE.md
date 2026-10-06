@@ -134,7 +134,7 @@ e os invariantes dela: `docs/features.md`. Não repita aqui o que está lá.
 - `make ci`            — o gate completo: `fmt-check`, `vet`, `test`
 - `gofmt -l .`         — precisa sair vazio; `make fmt` corrige
 - `go vet ./...`       — sem saída
-- `go test ./...`      — 19 pacotes `ok` (a raiz não tem testes)
+- `go test ./...`      — 20 pacotes `ok` (a raiz não tem testes)
 - `go build ./...`     — compila
 
 Definição de pronto: todos os CAs da spec com teste verde + os gates acima
@@ -197,7 +197,7 @@ declarar explicitamente por quê.
 - **Gate verde não é o mesmo que pronto.** Nunca apresente como completo algo que
   ainda depende de contrato de terceiro, licença ou validação de produto. Diga o
   que já funciona e nomeie exatamente o que falta.
-- Reporte números reais (`19 pacotes ok`), nunca "passou". Nunca resuma uma falha
+- Reporte números reais (`20 pacotes ok`), nunca "passou". Nunca resuma uma falha
   como "quase passou".
 - Git: rode `git status` antes de commitar e **nunca inclua mudança que não é sua**
   sem avisar. `git add` é sempre seletivo — nunca `git add .`/`-A` cego. Commit

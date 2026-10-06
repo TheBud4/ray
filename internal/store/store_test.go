@@ -206,3 +206,39 @@ func TestCopyTreeGivesASymlinkTheModeOfItsTarget(t *testing.T) {
 		t.Errorf("content = %q, want the target's", got)
 	}
 }
+
+// O pristine.yaml é um arquivo só para todos os projetos: perdê-lo, ou ler um
+// pedaço dele, faz toda linha-base virar "procedência desconhecida". O
+// os.WriteFile trunca antes de escrever, e um leitor que chega nesse intervalo
+// vê o arquivo vazio. A gravação tem de ser atômica: ou o conteúdo antigo, ou o
+// novo, nunca o meio.
+func TestSetPristineIsNeverObservedHalfWritten(t *testing.T) {
+	root := t.TempDir()
+	s := New(root)
+	if err := s.SetPristine("/proj", "seeded", "h-seeded"); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 3000; i++ {
+			if err := New(root).SetPristine("/proj", "other", "h-other"); err != nil {
+				t.Errorf("SetPristine() error = %v", err)
+				return
+			}
+		}
+	}()
+
+	reader := New(root)
+	for {
+		select {
+		case <-done:
+			return
+		default:
+		}
+		if got, ok := reader.PristineHash("/proj", "seeded"); !ok || got != "h-seeded" {
+			t.Fatalf("PristineHash() = (%q, %v) while another write was in flight, want the seeded baseline intact", got, ok)
+		}
+	}
+}

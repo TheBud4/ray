@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/TheBud4/ray/internal/fsutil"
 )
 
 // Config é a configuração persistente do usuário.
@@ -100,5 +102,5 @@ func saveYAML(path string, v any) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	return fsutil.WriteFileAtomic(path, data, 0o644)
 }

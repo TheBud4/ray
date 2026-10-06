@@ -66,6 +66,7 @@ internal/
 │
 ├── rayconfig/    # lê e grava ~/.ray/config.yaml e o State
 ├── raypaths/     # resolve onde o ray guarda estado em disco
+├── fsutil/       # escrita atômica de arquivo (estado compartilhado do ~/.ray)
 ├── runfile/      # aliases do `ray run` (ray.yaml do projeto + global)
 ├── preflight/    # fonte única de checagem de dependências externas
 ├── runner/       # ÚNICA fronteira para processos externos
