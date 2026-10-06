@@ -263,6 +263,10 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		}
 	}
 
+	// A linha-base do projeto é versionada: se este passo a muda, ela entra no
+	// Created e no `git add` do rodapé.
+	baselineBefore, _ := os.ReadFile(baseline.Path())
+
 	// 7b. componentes locais (skills/agents) — copiados de
 	// home.ComponentsDir, nunca baixados: o usuário mantém o conteúdo lá, o
 	// ray só copia e grava o hash pristino (para `ray update` decidir depois
@@ -425,6 +429,10 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		if err := baseline.Promote(); err != nil {
 			return Summary{}, err
 		}
+	}
+
+	if after, err := os.ReadFile(baseline.Path()); err == nil && !bytes.Equal(baselineBefore, after) {
+		sum.Created = append(sum.Created, store.BaselineFile)
 	}
 
 	sum.Target = target

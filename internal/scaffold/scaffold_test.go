@@ -336,7 +336,7 @@ func TestMergeGitignoreCreatesWhitelistAndBlacklist(t *testing.T) {
 	for _, want := range []string{
 		"!.claude/skills/", "!.claude/agents/", "!.claude/commands/",
 		"!.claude/settings.json", "!.mcp.json", "!docs/",
-		"!.claude/.ray-profile", "!**/.ray-origin", "!**/LICENSE",
+		"!.claude/.ray-profile", "!.claude/.ray-pristine.yaml", "!**/.ray-origin", "!**/LICENSE",
 	} {
 		if !strings.Contains(content, want) {
 			t.Errorf(".gitignore missing whitelist entry %q\n---\n%s", want, content)

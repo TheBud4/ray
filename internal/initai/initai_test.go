@@ -1404,7 +1404,7 @@ func TestRunClaudeMDOfBaseProfileDoesNotNameItAsStack(t *testing.T) {
 // e .gitignore, .mcp.json e o registro do perfil entravam sempre, mesmo com
 // conteúdo idêntico — repetir o comando listava como criado o que não mudou.
 func TestRunCreatedListsOnlyWhatChanged(t *testing.T) {
-	configFiles := []string{".claude/settings.json", ".gitignore", ".mcp.json", ".claude/.ray-profile"}
+	configFiles := []string{".claude/settings.json", ".gitignore", ".mcp.json", ".claude/.ray-profile", ".claude/.ray-pristine.yaml"}
 
 	home := newHome(t)
 	seedComponent(t, home, "s")

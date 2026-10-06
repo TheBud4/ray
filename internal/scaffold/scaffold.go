@@ -220,6 +220,7 @@ var gitignoreBaseLines = []string{
 	"!.mcp.json",
 	"!docs/",
 	"!.claude/.ray-profile",
+	"!.claude/.ray-pristine.yaml",
 	"!**/.ray-origin",
 	"!**/LICENSE",
 	"",
