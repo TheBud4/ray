@@ -32,6 +32,15 @@ func newBrainSetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if flagDryRun {
+				// Só leitura: valida o caminho como o comando real e imprime a
+				// mudança planejada, sem tocar no config.yaml.
+				if err := vault.Verify(args[0]); err != nil {
+					return err
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "+ set brain to %s (in %s)\n", args[0], configPath)
+				return nil
+			}
 			return runBrainSet(configPath, args[0], cmd.OutOrStdout())
 		},
 	}
@@ -99,7 +108,7 @@ func newBrainOpenCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runBrainOpen(runner.ExecRunner{}, configPath)
+			return runBrainOpen(runner.ExecRunner{DryRun: flagDryRun, Out: cmd.OutOrStdout()}, configPath)
 		},
 	}
 }

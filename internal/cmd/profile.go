@@ -31,14 +31,22 @@ func newProfileListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runProfileList(dir, cmd.OutOrStdout())
+			return runProfileListWith(dir, cmd.OutOrStdout(), !flagDryRun)
 		},
 	}
 }
 
 func runProfileList(dir string, out io.Writer) error {
-	if err := profile.EnsureDir(dir); err != nil {
-		return err
+	return runProfileListWith(dir, out, true)
+}
+
+// runProfileListWith lista as receitas de dir. seed controla se os perfis de
+// fábrica ausentes são gravados antes: listar sob --dry-run só lê.
+func runProfileListWith(dir string, out io.Writer, seed bool) error {
+	if seed {
+		if err := profile.EnsureDir(dir); err != nil {
+			return err
+		}
 	}
 	entries, err := profile.List(dir)
 	if err != nil {
@@ -120,6 +128,9 @@ func newProfileAddCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if flagDryRun {
+				return planProfileAdd(dir, args[0], cmd.OutOrStdout())
+			}
 			return runProfileAdd(dir, args[0])
 		},
 	}
@@ -127,6 +138,19 @@ func newProfileAddCmd() *cobra.Command {
 
 func runProfileAdd(dir, name string) error {
 	return profile.WriteNew(dir, profile.Starter(name))
+}
+
+// planProfileAdd valida o que `profile add` gravaria e só imprime o plano.
+func planProfileAdd(dir, name string, out io.Writer) error {
+	if err := profile.Starter(name).Validate(); err != nil {
+		return err
+	}
+	path, err := profile.PathFor(dir, name)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "+ add profile %s (%s)\n", name, path)
+	return nil
 }
 
 func newProfileEditCmd() *cobra.Command {
@@ -139,7 +163,16 @@ func newProfileEditCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runProfileEdit(dir, args[0], spawnEditor)
+			spawn := spawnEditor
+			if flagDryRun {
+				// O editor herda o terminal e não passa pelo runner: sob
+				// --dry-run o spawn só imprime o que abriria.
+				spawn = func(editor, path string) error {
+					fmt.Fprintf(cmd.OutOrStdout(), "+ edit %s (with %s)\n", path, editor)
+					return nil
+				}
+			}
+			return runProfileEdit(dir, args[0], spawn)
 		},
 	}
 }
@@ -173,6 +206,14 @@ func newProfileRemoveCmd() *cobra.Command {
 			dir, err := raypaths.ProfilesDir()
 			if err != nil {
 				return err
+			}
+			if flagDryRun {
+				path, err := profile.PathFor(dir, args[0])
+				if err != nil {
+					return err
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "+ remove profile %s (%s)\n", args[0], path)
+				return nil
 			}
 			return runProfileRemove(dir, args[0])
 		},
