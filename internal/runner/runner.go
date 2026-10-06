@@ -20,8 +20,8 @@ type Command struct {
 	Args []string
 	Dir  string // Working directory ("" = actual).
 	// Env são variáveis extras injetadas no ambiente do subprocesso (ex.
-	// DO_NOT_TRACK=1 para o CliAcquirer). nil = herda só o ambiente do
-	// processo pai, sem adições.
+	// DO_NOT_TRACK=1 para um instalador de terceiro). nil = herda só o ambiente
+	// do processo pai, sem adições.
 	Env map[string]string
 	// Stdin, Stdout e Stderr, quando definidos, ligam o processo direto a esses
 	// fluxos: a saída chega em tempo real, o processo pode ler a entrada, e

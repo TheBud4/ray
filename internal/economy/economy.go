@@ -7,7 +7,6 @@ package economy
 
 import (
 	"github.com/TheBud4/ray/internal/mcp"
-	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/runner"
 )
 
@@ -65,18 +64,4 @@ func Handoff() Mechanism {
 		Kind:      "hook",
 		MetricKey: "handoffs",
 	}
-}
-
-// Mechanisms devolve os mecanismos ativos para in: Handoff() sempre (é
-// built-in, não uma integração ligável), mais CodeGraph()/Headroom() se a
-// receita os liga.
-func Mechanisms(in profile.Integrations) []Mechanism {
-	mechs := []Mechanism{Handoff()}
-	if in.CodeGraph {
-		mechs = append(mechs, CodeGraph())
-	}
-	if in.Headroom {
-		mechs = append(mechs, Headroom())
-	}
-	return mechs
 }

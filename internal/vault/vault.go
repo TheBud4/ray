@@ -3,7 +3,7 @@
 //
 // O ray não é dono deste diretório: ele não cria layout nem escreve README.
 // Quem cria a vault é o usuário, no Obsidian; o ray só verifica que o caminho
-// aponta para algo utilizável e o expõe ao agente por MCP.
+// aponta para algo utilizável; o agente lê a vault direto pelo filesystem.
 package vault
 
 import (

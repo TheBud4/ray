@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/TheBud4/ray/internal/mcp"
-	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/runner"
 )
 
@@ -74,38 +73,5 @@ func TestHandoffFields(t *testing.T) {
 	}
 	if m.MetricKey == "" {
 		t.Error("MetricKey is empty")
-	}
-}
-
-func TestMechanismsWithHeadroomAndCodeGraph(t *testing.T) {
-	got := Mechanisms(profile.Integrations{Headroom: true, CodeGraph: true})
-	if len(got) != 3 {
-		t.Fatalf("len(Mechanisms()) = %d, want 3 (handoff + code_graph + headroom)", len(got))
-	}
-	names := map[string]bool{}
-	for _, m := range got {
-		names[m.Name] = true
-	}
-	for _, want := range []string{"handoff", "code_graph", "headroom"} {
-		if !names[want] {
-			t.Errorf("Mechanisms() = %v, want it to include %q", names, want)
-		}
-	}
-}
-
-func TestMechanismsWithNoneJustHandoff(t *testing.T) {
-	got := Mechanisms(profile.Integrations{})
-	if len(got) != 1 {
-		t.Fatalf("len(Mechanisms()) = %d, want 1 (just handoff)", len(got))
-	}
-	if got[0].Name != "handoff" {
-		t.Errorf("Mechanisms()[0].Name = %q, want %q", got[0].Name, "handoff")
-	}
-}
-
-func TestMechanismsOnlyHeadroom(t *testing.T) {
-	got := Mechanisms(profile.Integrations{Headroom: true})
-	if len(got) != 2 {
-		t.Fatalf("len(Mechanisms()) = %d, want 2 (handoff + headroom)", len(got))
 	}
 }
