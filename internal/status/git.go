@@ -74,7 +74,10 @@ func checkGit(check runner.Runner, target string, home Home) (GitState, int, []s
 	return GitClean, 0, nil
 }
 
+// gitOut roda uma consulta de git sem pegar lock opcional: `git status` renova
+// o índice e o grava por padrão, e o status só lê.
 func gitOut(check runner.Runner, dir string, args []string) (string, error) {
+	args = append([]string{"--no-optional-locks"}, args...)
 	res, err := check.Run(context.Background(), runner.Command{Name: "git", Args: args, Dir: dir})
 	if err != nil {
 		return "", err

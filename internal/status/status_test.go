@@ -284,8 +284,8 @@ func TestForksReportProblemWhenRecordedProfileIsUnreadable(t *testing.T) {
 // saídas dadas. A chave é runner.Command.String(), que ignora Dir.
 func gitFake(lsFiles, porcelain string) *runner.FakeRunner {
 	return &runner.FakeRunner{Results: map[string]runner.Result{
-		"git ls-files -- .claude .mcp.json":           {Stdout: lsFiles},
-		"git status --porcelain -- .claude .mcp.json": {Stdout: porcelain},
+		"git --no-optional-locks ls-files -- .claude .mcp.json":           {Stdout: lsFiles},
+		"git --no-optional-locks status --porcelain -- .claude .mcp.json": {Stdout: porcelain},
 	}}
 }
 
@@ -408,6 +408,32 @@ func TestGitDirtyWhenTrackedAndPorcelainHasOutput(t *testing.T) {
 	}
 }
 
+// `git status` renova o índice e, por padrão, grava .git/index — num comando que
+// promete só ler, e que pode rodar enquanto o usuário faz `git add` em outro
+// terminal. O --no-optional-locks vale para toda consulta que o status faz.
+func TestGitQueriesNeverTakeOptionalLocks(t *testing.T) {
+	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
+	fake := gitFake(".claude/skills/tdd/SKILL.md\n", "")
+
+	if _, err := Run(fake, Options{Target: target}, Home{}); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	var git int
+	for _, c := range fake.Calls {
+		if c.Name != "git" {
+			continue
+		}
+		git++
+		if len(c.Args) == 0 || c.Args[0] != "--no-optional-locks" {
+			t.Errorf("%q does not start with --no-optional-locks", c.String())
+		}
+	}
+	if git == 0 {
+		t.Fatal("no git call was made; the test proves nothing")
+	}
+}
+
 func TestGitCleanWhenTrackedAndPorcelainEmpty(t *testing.T) {
 	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
 
@@ -447,7 +473,7 @@ func TestGitUnavailableWhenCommandFails(t *testing.T) {
 func TestGitUnavailableWhenNotARepository(t *testing.T) {
 	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
 	notARepo := &runner.FakeRunner{Results: map[string]runner.Result{
-		"git ls-files -- .claude .mcp.json": {ExitCode: 128, Stderr: "fatal: not a git repository"},
+		"git --no-optional-locks ls-files -- .claude .mcp.json": {ExitCode: 128, Stderr: "fatal: not a git repository"},
 	}}
 
 	rep, err := Run(notARepo, Options{Target: target}, Home{})
