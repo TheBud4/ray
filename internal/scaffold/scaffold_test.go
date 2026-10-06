@@ -1214,3 +1214,46 @@ func TestHookSettingsCommandsAllStartWithTheRayPrefix(t *testing.T) {
 		}
 	}
 }
+
+// Simular não pode gravar: o overlay virgem não vira diretório, e um template
+// editado sobrevive mesmo com Force. O resultado, porém, é o do dia em que a
+// execução for real.
+func TestEnsureTemplatesDryRunWritesNothing(t *testing.T) {
+	t.Run("virgin overlay is not created", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "templates")
+		synced, err := EnsureTemplates(dir, EnsureOptions{DryRun: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(synced) == 0 {
+			t.Fatal("EnsureTemplates() returned nothing, want the actions it would take")
+		}
+		for _, s := range synced {
+			if s.Action != TemplateCreated {
+				t.Errorf("%s: action = %v, want TemplateCreated on a virgin overlay", s.Rel, s.Action)
+			}
+		}
+		if _, err := os.Stat(dir); !os.IsNotExist(err) {
+			t.Errorf("overlay dir exists after dry-run (stat err = %v)", err)
+		}
+	})
+	t.Run("edited template survives force", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "claude", "handoff.md.tmpl")
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("# my custom template"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := EnsureTemplates(dir, EnsureOptions{DryRun: true, Force: true}); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := os.ReadFile(path); string(got) != "# my custom template" {
+			t.Errorf("template = %q, want the edit untouched by a dry-run --force", got)
+		}
+		if _, err := os.Stat(filepath.Join(dir, "claude", "hooks")); !os.IsNotExist(err) {
+			t.Errorf("a sibling template was created during dry-run (stat err = %v)", err)
+		}
+	})
+}

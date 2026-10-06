@@ -352,6 +352,8 @@ type EnsureOptions struct {
 	Pristine func(rel string) (string, bool)
 	// Force sobrescreve mesmo template editado localmente.
 	Force bool
+	// DryRun só calcula o que faria: devolve as mesmas ações, sem gravar nada.
+	DryRun bool
 }
 
 // EnsureTemplates sincroniza o overlay editável em dir com os templates
@@ -410,11 +412,15 @@ func EnsureTemplates(dir string, opts EnsureOptions) ([]TemplateSync, error) {
 			return nil
 		}
 
-		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-			return err
-		}
-		if err := os.WriteFile(dest, fresh, 0o644); err != nil {
-			return err
+		// Em dry-run a decisão acima já foi tomada: só não se grava, para a
+		// simulação devolver as mesmas ações sem tocar o overlay.
+		if !opts.DryRun {
+			if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+				return err
+			}
+			if err := os.WriteFile(dest, fresh, 0o644); err != nil {
+				return err
+			}
 		}
 		action := TemplateCreated
 		if exists {

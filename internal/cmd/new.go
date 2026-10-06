@@ -72,10 +72,15 @@ func runNew(r runner.Runner, l preflight.Looker, profilesDir, profileName, proje
 	if !empty {
 		return initai.Summary{}, fmt.Errorf("target %q already exists and is not empty", target)
 	}
-	if err := profile.EnsureDir(profilesDir); err != nil {
+	// Em dry-run o diretório de receitas não é criado: os perfis de fábrica
+	// vêm da memória.
+	loadProfile := profile.LoadByName
+	if dryRun {
+		loadProfile = profile.LoadByNameOrDefault
+	} else if err := profile.EnsureDir(profilesDir); err != nil {
 		return initai.Summary{}, err
 	}
-	prof, err := profile.LoadByName(profilesDir, profileName)
+	prof, err := loadProfile(profilesDir, profileName)
 	if err != nil {
 		return initai.Summary{}, err
 	}

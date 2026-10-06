@@ -476,3 +476,40 @@ func TestLoadForTargetSurfacesRealReadErrors(t *testing.T) {
 		t.Errorf("error = %q, want it to report the read failure, not a missing record", err)
 	}
 }
+
+// Sem ~/.ray/profiles, o dry-run precisa de uma receita sem ter gravado nada: o
+// arquivo, se existe, ganha; senão vale o perfil de fábrica do mesmo nome.
+func TestLoadByNameOrDefault(t *testing.T) {
+	t.Run("file wins over the factory profile", func(t *testing.T) {
+		dir := t.TempDir()
+		writeTestProfile(t, dir, "go")
+		p, err := LoadByNameOrDefault(dir, "go")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p.Description == "Go backend stack" {
+			t.Errorf("got the factory profile, want the file on disk")
+		}
+	})
+	t.Run("missing file falls back to the factory profile", func(t *testing.T) {
+		p, err := LoadByNameOrDefault(filepath.Join(t.TempDir(), "no-such-dir"), "go")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p.Name != "go" || p.Description != "Go backend stack" {
+			t.Errorf("got %q (%q), want the factory go profile", p.Name, p.Description)
+		}
+	})
+	t.Run("unknown name is not found", func(t *testing.T) {
+		_, err := LoadByNameOrDefault(t.TempDir(), "nope")
+		if err == nil || !strings.Contains(err.Error(), "not found") {
+			t.Errorf("error = %v, want a not found error", err)
+		}
+	})
+	t.Run("a name that leaves the dir is still refused", func(t *testing.T) {
+		_, err := LoadByNameOrDefault(t.TempDir(), "../go")
+		if err == nil || !strings.Contains(err.Error(), "single path element") {
+			t.Errorf("error = %v, want a single path element error", err)
+		}
+	})
+}

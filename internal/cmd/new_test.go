@@ -242,3 +242,21 @@ func TestRunNewAbortsOnFailedCreateStepBeforeGitOrInitAI(t *testing.T) {
 		t.Error("CLAUDE.md should not exist: initai.Run must not run after a failed create step")
 	}
 }
+
+// `ray new --dry-run` numa máquina virgem usa os perfis de fábrica em memória e
+// não cria ~/.ray/profiles.
+func TestRunNewDryRunDoesNotCreateTheProfilesDir(t *testing.T) {
+	sandbox := t.TempDir()
+	t.Chdir(sandbox)
+	home := newTestHome(t)
+
+	initOpts := initai.Options{DryRun: true, Out: &bytes.Buffer{}}
+	if _, err := runNew(&runner.FakeRunner{}, allFound, home.ProfilesDir, "go", "myproj", true, true, initOpts, home); err != nil {
+		t.Fatalf("runNew() error = %v", err)
+	}
+	for name, path := range map[string]string{"ProfilesDir": home.ProfilesDir, "TemplatesDir": home.TemplatesDir, "StoreDir": home.StoreDir} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("%s exists after `new --dry-run` (stat err = %v)", name, err)
+		}
+	}
+}

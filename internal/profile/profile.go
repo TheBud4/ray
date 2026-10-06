@@ -158,6 +158,30 @@ func LoadByName(profilesDir, name string) (*Profile, error) {
 	return Load(path)
 }
 
+// LoadByNameOrDefault é LoadByName para quem não pode gravar o diretório de
+// receitas (dry-run): o arquivo em dir ganha, como sempre; se ele não existe e
+// name é de um perfil de fábrica, devolve uma cópia validada dele — o que
+// EnsureDir teria gravado. Sem nenhum dos dois, o mesmo erro de LoadByName.
+func LoadByNameOrDefault(dir, name string) (*Profile, error) {
+	path, err := PathFor(dir, name)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := os.Stat(path); err == nil || !os.IsNotExist(err) {
+		return LoadByName(dir, name)
+	}
+	for _, d := range Defaults() {
+		if d.Name == name {
+			p := d
+			if err := p.Validate(); err != nil {
+				return nil, err
+			}
+			return &p, nil
+		}
+	}
+	return LoadByName(dir, name)
+}
+
 // Load lê e valida a receita em path. Decodificação estrita (RF-03): uma
 // chave de topo desconhecida — "scaffhold" por "scaffold", por exemplo — vira
 // erro em vez de silenciosamente virar uma seção vazia. Sem isso a receita

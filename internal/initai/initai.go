@@ -140,9 +140,13 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		return Summary{}, fmt.Errorf("target %s is not writable: %w", target, err)
 	}
 
-	// 2. garante ~/.ray populado.
-	if err := profile.EnsureDir(home.ProfilesDir); err != nil {
-		return Summary{}, err
+	// 2. garante ~/.ray populado. Em dry-run nada de ~/.ray é gravado: os
+	// perfis de fábrica ausentes são lidos da memória (passo 3) e os templates
+	// só são comparados.
+	if !opts.DryRun {
+		if err := profile.EnsureDir(home.ProfilesDir); err != nil {
+			return Summary{}, err
+		}
 	}
 	// O overlay de templates é sincronizado, não só criado: sem isso ele
 	// sombreia o embed em silêncio, e atualizar o `ray` deixa de atualizar os
@@ -151,6 +155,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	st := store.New(home.StoreDir)
 	synced, err := scaffold.EnsureTemplates(home.TemplatesDir, scaffold.EnsureOptions{
 		Force:    opts.Force,
+		DryRun:   opts.DryRun,
 		Pristine: func(rel string) (string, bool) { return st.PristineHash(home.TemplatesDir, rel) },
 	})
 	if err != nil {
@@ -159,6 +164,9 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	for _, s := range synced {
 		switch s.Action {
 		case scaffold.TemplateCreated, scaffold.TemplateRefreshed:
+			if opts.DryRun {
+				continue
+			}
 			// Falha ao gravar a linha-base não derruba o `init ai`: sem
 			// pristino, DecideOverwrite já cai na degradação graciosa
 			// (disco == embed → atualiza; divergiu → preserva). Abortar aqui
@@ -172,7 +180,11 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	}
 
 	// 3. carrega a receita.
-	prof, err := profile.LoadByName(home.ProfilesDir, opts.Profile)
+	loadProfile := profile.LoadByName
+	if opts.DryRun {
+		loadProfile = profile.LoadByNameOrDefault
+	}
+	prof, err := loadProfile(home.ProfilesDir, opts.Profile)
 	if err != nil {
 		return Summary{}, err
 	}

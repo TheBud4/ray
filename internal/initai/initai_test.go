@@ -1043,3 +1043,56 @@ func TestRunKeepsTheUsersExistingSettings(t *testing.T) {
 		t.Errorf("settings.json = %s, want the user's model kept", data)
 	}
 }
+
+func homeIsUntouched(t *testing.T, home Home) {
+	t.Helper()
+	for name, path := range map[string]string{
+		"ProfilesDir": home.ProfilesDir, "TemplatesDir": home.TemplatesDir,
+		"StoreDir": home.StoreDir, "StatePath": home.StatePath, "ConfigPath": home.ConfigPath,
+	} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("%s (%s) exists after a dry-run (stat err = %v)", name, path, err)
+		}
+	}
+}
+
+// Um dry-run numa máquina virgem usa os perfis de fábrica em memória e não
+// deixa nada em ~/.ray nem no projeto — nem com --force.
+func TestRunDryRunLeavesTheRayHomeUntouchedOnAVirginMachine(t *testing.T) {
+	for _, force := range []bool{false, true} {
+		home := newHome(t)
+		target := t.TempDir()
+		var out bytes.Buffer
+		_, err := Run(&runner.FakeRunner{}, allFound, Options{Profile: "base", Target: target, DryRun: true, Force: force, Out: &out}, home)
+		if err != nil {
+			t.Fatalf("dry-run (force=%v) error = %v", force, err)
+		}
+		homeIsUntouched(t, home)
+		if entries, _ := os.ReadDir(target); len(entries) != 0 {
+			t.Errorf("force=%v: target has %d entries after a dry-run, want none", force, len(entries))
+		}
+		if !strings.Contains(out.String(), "+ ") {
+			t.Errorf("force=%v: dry-run printed no plan: %q", force, out.String())
+		}
+	}
+}
+
+// O overlay de templates é editável pelo usuário; um dry-run --force não pode
+// apagá-lo.
+func TestRunDryRunForceKeepsAnEditedTemplate(t *testing.T) {
+	home := newHome(t)
+	tmpl := filepath.Join(home.TemplatesDir, "claude", "handoff.md.tmpl")
+	if err := os.MkdirAll(filepath.Dir(tmpl), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(tmpl, []byte("# my custom template"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Run(&runner.FakeRunner{}, allFound, Options{Profile: "base", Target: t.TempDir(), DryRun: true, Force: true, Out: &bytes.Buffer{}}, home); err != nil {
+		t.Fatalf("dry-run error = %v", err)
+	}
+	if got, _ := os.ReadFile(tmpl); string(got) != "# my custom template" {
+		t.Errorf("template = %q, want the edit kept", got)
+	}
+}
