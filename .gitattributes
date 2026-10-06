@@ -1,0 +1,5 @@
+# Fim de linha LF em todo o texto, em qualquer sistema: o runner do Windows faz
+# checkout em CRLF por padrão, e isso quebra o `gofmt -l`, os hooks em bash e o
+# hash de conteúdo que separa "o usuário editou isto?" (CopyTree/HashTree).
+* text=auto eol=lf
+*.png binary
