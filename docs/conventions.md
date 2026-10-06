@@ -10,7 +10,7 @@ defasou.
   mensagens de teste e mensagens de commit em **inglês**. Os dois convivem de
   propósito — o comentário explica a decisão para quem mantém, o identificador
   segue o idioma do Go.
-- Todo pacote abre com `// Package <nome> <o que faz>`, uma frase. Os 20 pacotes
+- Todo pacote abre com `// Package <nome> <o que faz>`, uma frase. Os 21 pacotes
   de `internal/` seguem isso, sem exceção; um pacote novo sem doc destoa.
 - O comentário explica **decisão, invariante ou risco** — nunca repete o que a
   linha ao lado já diz.
@@ -33,6 +33,12 @@ defasou.
   razão no `t.Skip`, o que não existe lá (bit de execução, permissão de pasta).
   Pular não é corrigir: cada pulo está listado em `docs/features.md`, "Limites
   conhecidos no Windows".
+- **O binário tem um smoke test** (`make smoke`, `scripts/smoke.sh`, parte do `make
+  ci`): `init ai` numa pasta vazia, repetido, com edição local, dry-run sem
+  rastro e symlink para fora recusado. Roda o `ray` de verdade num `RAY_HOME`
+  descartável com uma receita sem integrações, então não instala nada — não é o
+  teste end-to-end de instalação que o projeto decidiu não ter. Comportamento
+  novo que um humano checaria rodando o binário entra como etapa dele.
 - **`CA-NN` não se aplica aqui.** É a convenção dos projetos que o `ray`
   scaffolda, onde o nome do teste liga o código à spec. O `ray` não trabalha por
   spec numerada; não force a convenção nos testes dele.

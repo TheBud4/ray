@@ -32,3 +32,6 @@ jobs:
           go-version-file: go.mod
       - run: go build ./...
       - run: go test ./...
+      # O smoke do binário também no macOS (o `ci` do Linux já o roda via make).
+      - run: bash scripts/smoke.sh
+        if: runner.os == 'macOS'
