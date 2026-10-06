@@ -293,7 +293,9 @@ func CopyTree(src, dst string) error {
 		}
 		target := filepath.Join(dst, rel)
 
-		info, err := d.Info()
+		// Stat segue symlink: o modo é o do alvo, que é o conteúdo que
+		// ReadFile abaixo copia. O d.Info() devolveria o do próprio link (0777).
+		info, err := os.Stat(path)
 		if err != nil {
 			return err
 		}

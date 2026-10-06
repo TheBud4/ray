@@ -3,6 +3,7 @@ package store
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -267,5 +268,38 @@ func TestPristineTreatsANullFileAsEmpty(t *testing.T) {
 	}
 	if got, ok := st.PristineHash("/proj", "s"); !ok || got != "abc" {
 		t.Errorf("PristineHash() = (%q, %v), want (abc, true)", got, ok)
+	}
+}
+
+// Um symlink dentro do componente é copiado como arquivo com o conteúdo do
+// alvo (é o que o HashTree também lê, então o hash e a cópia concordam). O
+// modo tem de ser o do alvo: o do próprio symlink é sempre 0777, e o projeto
+// receberia um arquivo executável por todos sem que ninguém o tenha pedido.
+func TestCopyTreeGivesASymlinkTheModeOfItsTarget(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("modos POSIX")
+	}
+	src := t.TempDir()
+	if err := os.WriteFile(filepath.Join(src, "real.md"), []byte("conteúdo"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("real.md", filepath.Join(src, "link.md")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	dst := filepath.Join(t.TempDir(), "out")
+
+	if err := CopyTree(src, dst); err != nil {
+		t.Fatalf("CopyTree() error = %v", err)
+	}
+
+	info, err := os.Lstat(filepath.Join(dst, "link.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Errorf("mode of the copied symlink = %o, want 600 (its target's)", got)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dst, "link.md")); string(got) != "conteúdo" {
+		t.Errorf("content = %q, want the target's", got)
 	}
 }
