@@ -1,8 +1,9 @@
 // Package economy modela "Token Economy" (design §8.1–§8.2): os mecanismos
-// que economizam tokens de IA — grafo de código, compressão de contexto, e
-// handoff entre sessões — como implementações plugáveis de um contrato
-// comum, em vez de flags soltas espalhadas pelo installer. Prepara o terreno
-// para `ray stats` (I5) ler MetricKey por mecanismo.
+// instalados que economizam tokens de IA — grafo de código e compressão de
+// contexto — como implementações plugáveis de um contrato comum, em vez de
+// flags soltas espalhadas pelo installer. O handoff entre sessões não está
+// aqui: é só scaffold (hook SessionStart + .claude/handoff.md, em
+// internal/scaffold), sem nada a instalar.
 package economy
 
 import (
@@ -16,12 +17,10 @@ import (
 // isso usa as chaves legadas ("headroom", "code_graph"), não os slugs
 // ilustrativos do design doc. Install é a instalação global, uma vez;
 // Commands é comando por-projeto, sempre roda (ex. reindexar o grafo);
-// Server, se o mecanismo expõe um MCP server. Um mecanismo builtin/hook
-// (handoff) deixa Install/Commands/Server vazios — já é modelado inteiramente
-// via scaffold (internal/scaffold/mode.go).
+// Server, se o mecanismo expõe um MCP server.
 type Mechanism struct {
 	Name      string
-	Kind      string // "mcp" | "hook"
+	Kind      string // "mcp"
 	Install   []runner.Command
 	Commands  []runner.Command
 	Server    *mcp.Server
@@ -52,16 +51,5 @@ func CodeGraph() Mechanism {
 		Commands:  []runner.Command{{Name: "graphify", Args: []string{"update", "."}}},
 		Server:    &mcp.Server{Name: "graphify", Command: "graphify-mcp"},
 		MetricKey: "graph_queries",
-	}
-}
-
-// Handoff é o mecanismo de continuidade entre sessões (design §8.1): sempre
-// presente, implementado inteiramente como scaffold (hook SessionStart +
-// .claude/handoff.md) — nenhuma instalação nem MCP server.
-func Handoff() Mechanism {
-	return Mechanism{
-		Name:      "handoff",
-		Kind:      "hook",
-		MetricKey: "handoffs",
 	}
 }

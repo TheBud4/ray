@@ -59,19 +59,3 @@ func TestCodeGraphFields(t *testing.T) {
 		t.Error("MetricKey is empty")
 	}
 }
-
-func TestHandoffFields(t *testing.T) {
-	m := Handoff()
-	if m.Name != "handoff" {
-		t.Errorf("Name = %q, want %q", m.Name, "handoff")
-	}
-	if m.Kind != "hook" {
-		t.Errorf("Kind = %q, want %q", m.Kind, "hook")
-	}
-	if m.Install != nil || m.Commands != nil || m.Server != nil {
-		t.Errorf("Install/Commands/Server = %#v/%#v/%#v, want all nil (handoff is scaffold-only)", m.Install, m.Commands, m.Server)
-	}
-	if m.MetricKey == "" {
-		t.Error("MetricKey is empty")
-	}
-}
