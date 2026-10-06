@@ -253,6 +253,31 @@ func TestRunUpgradesTools(t *testing.T) {
 	}
 }
 
+// Um upgrade de ferramenta da máquina não é um componente do projeto: listá-lo
+// em "Updated" ao lado das skills dizia que o projeto mudou quando só o uv
+// rodou. Ele tem lista própria.
+func TestRunReportsToolUpgradesApartFromComponents(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "# s")
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+	writeProfileRecord(t, target, "test")
+
+	sum, err := Run(&runner.FakeRunner{}, cleanGitCheck(), Options{Target: target}, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	for _, want := range []string{"uv tool upgrade headroom-ai", "uv tool upgrade graphifyy"} {
+		if !slices.Contains(sum.Tools, want) {
+			t.Errorf("Tools = %v, want it to include %q", sum.Tools, want)
+		}
+		if slices.Contains(sum.Updated, want) {
+			t.Errorf("Updated = %v, want the tool upgrade %q out of it", sum.Updated, want)
+		}
+	}
+}
+
 func TestRunNoGlobalSkipsToolUpgrades(t *testing.T) {
 	home := newHome(t)
 	seedComponent(t, home, "# s")

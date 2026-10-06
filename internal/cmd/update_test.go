@@ -161,3 +161,21 @@ func TestBuildUpdateOptionsMapsFlags(t *testing.T) {
 		t.Errorf("Force/NoGlobal/DryRun = %v/%v/%v, want all true", opts.Force, opts.NoGlobal, opts.DryRun)
 	}
 }
+
+// Só ferramenta atualizada: a seção aparece com nome próprio, e a linha de "sem
+// componentes" segue valendo — nenhum componente foi processado.
+func TestPrintUpdateSummaryListsToolsApartFromComponents(t *testing.T) {
+	var out bytes.Buffer
+	printUpdateSummary(&out, update.Summary{Tools: []string{"uv tool upgrade headroom-ai"}})
+
+	got := out.String()
+	if !strings.Contains(got, "Tools upgraded:\n  - uv tool upgrade headroom-ai") {
+		t.Errorf("output = %q, want the tool under its own heading", got)
+	}
+	if strings.Contains(got, "Updated:") {
+		t.Errorf("output = %q, want no Updated section for a tool", got)
+	}
+	if !strings.Contains(got, "no components to update") {
+		t.Errorf("output = %q, want the no-components line when only tools ran", got)
+	}
+}

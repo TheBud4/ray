@@ -43,6 +43,7 @@ type Options struct {
 
 // Summary é o resultado de Run.
 type Summary struct {
+	Tools      []string
 	Updated    []string
 	Skipped    []string
 	Failed     []string
@@ -90,7 +91,7 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 	if !opts.NoGlobal {
 		for _, cmd := range toolUpgradeCommands(prof.Integrations) {
 			if ok, reason := runOne(r, cmd); ok {
-				sum.Updated = append(sum.Updated, cmd.String())
+				sum.Tools = append(sum.Tools, cmd.String())
 			} else {
 				sum.Failed = append(sum.Failed, cmd.String())
 				sum.Warnings = append(sum.Warnings, fmt.Sprintf("`%s`: %s", cmd.String(), reason))
