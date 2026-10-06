@@ -93,6 +93,36 @@ func TestWriteNewAndRemove(t *testing.T) {
 	}
 }
 
+// Remove e WriteNew montam <dir>/<name>.yaml; um nome que escapa de dir não pode
+// apagar nem criar nada fora dele. A sentinela vive no diretório pai, onde fica,
+// por exemplo, o config.yaml do próprio ray.
+func TestRemoveAndWriteNewRefuseNamesOutsideTheirDir(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "profiles")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sentinel := filepath.Join(root, "config.yaml")
+	if err := os.WriteFile(sentinel, []byte("keep: me\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, name := range []string{"../config", "a/../../config", "..", filepath.Join(root, "config")} {
+		if err := Remove(dir, name); err == nil || !strings.Contains(err.Error(), "single path element") {
+			t.Errorf("Remove(%q) = %v, want an error mentioning a single path element", name, err)
+		}
+		if err := WriteNew(dir, Starter(name)); err == nil {
+			t.Errorf("WriteNew(Starter(%q)) = nil, want an error", name)
+		}
+	}
+	if got, err := os.ReadFile(sentinel); err != nil || string(got) != "keep: me\n" {
+		t.Errorf("sentinel outside the profiles dir = %q, %v; want it untouched", got, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "x.yaml")); !os.IsNotExist(err) {
+		t.Errorf("a file was created outside the profiles dir (stat err = %v)", err)
+	}
+}
+
 func TestList(t *testing.T) {
 	t.Run("nonexistent dir", func(t *testing.T) {
 		entries, err := List(filepath.Join(t.TempDir(), "missing"))

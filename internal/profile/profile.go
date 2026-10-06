@@ -131,18 +131,27 @@ func checkRelativeBelowRoot(v string) error {
 	return nil
 }
 
+// PathFor devolve o caminho do arquivo da receita name dentro de dir. É o
+// único ponto que transforma um nome digitado em caminho de disco: recusa o
+// nome que não seja um único elemento de caminho, para que nenhum comando
+// leia, grave ou apague fora de dir.
+func PathFor(dir, name string) (string, error) {
+	if err := checkSingleSegment(name); err != nil {
+		return "", fmt.Errorf("profile name %q %w", name, err)
+	}
+	return filepath.Join(dir, name+".yaml"), nil
+}
+
 // LoadByName lê e valida a receita chamada name em profilesDir. É o caminho
 // para quem tem um nome — que é todo mundo, já que nome é o que o usuário
 // digita. Existe para o erro falar de receita: o os.ReadFile fala de arquivo,
 // e devolver o caminho cru a quem digitou `--profile web` troca o vocabulário
 // no meio do caminho.
 func LoadByName(profilesDir, name string) (*Profile, error) {
-	if name != "" {
-		if err := checkSingleSegment(name); err != nil {
-			return nil, fmt.Errorf("profile name %q %w", name, err)
-		}
+	path, err := PathFor(profilesDir, name)
+	if err != nil {
+		return nil, err
 	}
-	path := filepath.Join(profilesDir, name+".yaml")
 	if _, err := os.Stat(path); err != nil && os.IsNotExist(err) {
 		return nil, fmt.Errorf("profile %q not found in %s", name, profilesDir)
 	}

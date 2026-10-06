@@ -176,3 +176,20 @@ func TestRunProfileRemoveDeletesAndErrorsOnMissing(t *testing.T) {
 		t.Fatal("runProfileRemove() = nil error, want error removing a missing profile")
 	}
 }
+
+// `profile edit` abre o editor sobre <dir>/<name>.yaml: um nome fora de dir não
+// pode chegar ao spawn, onde o editor abriria (e salvaria) um arquivo alheio.
+func TestRunProfileEditRefusesNameOutsideProfilesDir(t *testing.T) {
+	t.Setenv("EDITOR", "ed")
+	called := false
+	err := runProfileEdit(t.TempDir(), "../config", func(editor, path string) error {
+		called = true
+		return nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "single path element") {
+		t.Errorf("runProfileEdit() = %v, want an error mentioning a single path element", err)
+	}
+	if called {
+		t.Error("the editor was spawned for a name outside the profiles dir")
+	}
+}

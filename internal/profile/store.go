@@ -107,7 +107,10 @@ func WriteNew(dir string, p *Profile) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	path := filepath.Join(dir, p.Name+".yaml")
+	path, err := PathFor(dir, p.Name)
+	if err != nil {
+		return err
+	}
 	if _, err := os.Stat(path); err == nil {
 		return fmt.Errorf("profile %q already exists", p.Name)
 	}
@@ -120,5 +123,9 @@ func WriteNew(dir string, p *Profile) error {
 
 // Remove apaga <dir>/<name>.yaml.
 func Remove(dir, name string) error {
-	return os.Remove(filepath.Join(dir, name+".yaml"))
+	path, err := PathFor(dir, name)
+	if err != nil {
+		return err
+	}
+	return os.Remove(path)
 }

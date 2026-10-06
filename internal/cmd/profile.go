@@ -151,7 +151,10 @@ func runProfileEdit(dir, name string, spawn func(editor, path string) error) err
 	if editor == "" {
 		return fmt.Errorf("$EDITOR is not set")
 	}
-	path := filepath.Join(dir, name+".yaml")
+	path, err := profile.PathFor(dir, name)
+	if err != nil {
+		return err
+	}
 	return spawn(editor, path)
 }
 
