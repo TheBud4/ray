@@ -904,13 +904,6 @@ func TestGuardAddWarnsOnBlindAdd(t *testing.T) {
 }
 
 func TestGuardVocabWarnsOnDeliveredArtifacts(t *testing.T) {
-	// Os hooks comparam o caminho do payload com globs de barra (`*.claude/handoff.md`,
-	// `$PWD`, `*/test/*`). No Windows o caminho nativo tem `\` e `$PWD` é `/c/...`
-	// no Git bash, e o formato que o Claude Code põe no payload lá não está
-	// verificado: o hook pode ser um no-op silencioso. Ver docs/features.md.
-	if runtime.GOOS == "windows" {
-		t.Skip("hook path matching on Windows payloads is unverified")
-	}
 	if !hasJQ(t) {
 		t.Skip("jq ausente; o hook faz no-op por design")
 	}

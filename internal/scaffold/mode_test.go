@@ -189,13 +189,6 @@ func TestGuardHandoffSilentUnderBudget(t *testing.T) {
 }
 
 func TestGuardHandoffWarnsOverBudget(t *testing.T) {
-	// Os hooks comparam o caminho do payload com globs de barra (`*.claude/handoff.md`,
-	// `$PWD`, `*/test/*`). No Windows o caminho nativo tem `\` e `$PWD` é `/c/...`
-	// no Git bash, e o formato que o Claude Code põe no payload lá não está
-	// verificado: o hook pode ser um no-op silencioso. Ver docs/features.md.
-	if runtime.GOOS == "windows" {
-		t.Skip("hook path matching on Windows payloads is unverified")
-	}
 	requireBashAndJQ(t)
 
 	target := t.TempDir()
@@ -248,4 +241,72 @@ func TestGuardHandoffIgnoresOtherFiles(t *testing.T) {
 	if strings.TrimSpace(out.String()) != "" {
 		t.Errorf("guard-handoff.sh on docs/architecture.md = %q, want silent (not the handoff file)", out.String())
 	}
+}
+
+// No Windows o Claude Code manda o caminho do payload com `\`, mesmo sob Git
+// bash, e um glob de barra nunca casa um caminho assim: o hook vira um no-op
+// silencioso. Aqui o mesmo caminho real, com `/` trocado por `\`, tem de valer
+// como o original — o hook o normaliza antes de comparar.
+func TestHooksTreatABackslashPayloadPathLikeASlashOne(t *testing.T) {
+	requireBashAndJQ(t)
+	if runtime.GOOS == "windows" {
+		t.Skip("o caminho nativo do Windows já é o caso real, coberto pelos outros testes")
+	}
+	backslashed := func(p string) string { return strings.ReplaceAll(p, "/", `\`) }
+
+	target := t.TempDir()
+	if _, err := WriteFiles(SystemFiles(), Options{Target: target}); err != nil {
+		t.Fatal(err)
+	}
+	run := func(script, payloadPath, extra string) string {
+		t.Helper()
+		payload, err := json.Marshal(map[string]any{"tool_input": map[string]any{"file_path": payloadPath}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if extra != "" {
+			payload = []byte(strings.TrimSuffix(string(payload), "}}") + `,` + extra + `}}`)
+		}
+		cmd := exec.Command("bash", filepath.Join(target, ".claude/hooks/"+script))
+		cmd.Stdin = bytes.NewReader(payload)
+		cmd.Dir = target
+		var out bytes.Buffer
+		cmd.Stdout = &out
+		cmd.Stderr = &out
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("%s failed: %v\noutput: %s", script, err, out.String())
+		}
+		return out.String()
+	}
+
+	t.Run("guard-handoff", func(t *testing.T) {
+		handoff := filepath.Join(target, ".claude/handoff.md")
+		if err := os.WriteFile(handoff, []byte(strings.Repeat("linha\n", 355)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if out := run("guard-handoff.sh", backslashed(handoff), ""); !strings.Contains(out, "355") {
+			t.Errorf("guard-handoff.sh with a backslash path = %q, want the line count warning", out)
+		}
+	})
+
+	t.Run("guard-plans", func(t *testing.T) {
+		out := run("guard-plans.sh", backslashed(filepath.Join(target, "docs/superpowers/plans/x.md")), "")
+		if !strings.Contains(out, "systemMessage") {
+			t.Errorf("guard-plans.sh with a backslash path = %q, want a warning", out)
+		}
+	})
+
+	t.Run("guard-vocab warns and names the file with slashes", func(t *testing.T) {
+		out := run("guard-vocab.sh", backslashed(filepath.Join(target, "docs/latest/README.md")), `"new_string":"Ver spec 012.\n"`)
+		if !strings.Contains(out, "systemMessage") || !strings.Contains(out, "docs/latest/README.md") {
+			t.Errorf("guard-vocab.sh with a backslash path = %q, want a warning naming docs/latest/README.md", out)
+		}
+	})
+
+	t.Run("guard-vocab keeps its exemptions", func(t *testing.T) {
+		out := run("guard-vocab.sh", backslashed(filepath.Join(target, ".claude/commands/x.md")), `"new_string":"Ver spec 012.\n"`)
+		if strings.Contains(out, "systemMessage") {
+			t.Errorf("guard-vocab.sh on an exempt backslash path = %q, want silent", out)
+		}
+	})
 }

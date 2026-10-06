@@ -26,6 +26,16 @@ fi
 payload="$(cat || true)"
 file="$(jq -r '.tool_input.file_path // empty' <<<"$payload" 2>/dev/null || true)"
 
+# No Windows o caminho do payload chega com `\` e com letra de unidade
+# (`C:\Users\x\proj\a.md`), e o Git bash trabalha com `/c/Users/x/proj/a.md`:
+# um glob de barra nunca casaria o original e o hook viraria um no-op
+# silencioso. Normaliza antes de qualquer comparação.
+file="${file//\\//}"
+if [[ "$file" =~ ^([A-Za-z]):/ ]]; then
+  drive="$(printf '%s' "${BASH_REMATCH[1]}" | tr 'A-Z' 'a-z')"
+  file="/${drive}/${file:3}"
+fi
+
 if [[ -z "$file" ]]; then
   exit 0
 fi
