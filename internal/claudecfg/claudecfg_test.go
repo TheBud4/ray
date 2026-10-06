@@ -189,6 +189,39 @@ func TestMergeSettingsKeepsUsersHooksAndAddsTheRaysOwn(t *testing.T) {
 	}
 }
 
+// Projeto montado antes de o hook apontar para $CLAUDE_PROJECT_DIR tem o
+// comando em caminho relativo. Rodar o init ai de novo troca esse comando pelo
+// novo — sem deixar os dois, que fariam o aviso sair duplicado — e um hook do
+// ray já no formato novo, mas de nome que a versão atual não traz, também sai.
+func TestMergeSettingsMigratesRelativeHookCommands(t *testing.T) {
+	target := t.TempDir()
+	writeSettingsJSON(t, target, `{"hooks": {
+	  "SessionStart": [
+	    {"hooks": [{"type": "command", "command": "bash .claude/hooks/session-start.sh"}]},
+	    {"hooks": [{"type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/antigo.sh"}]},
+	    {"hooks": [{"type": "command", "command": "bash meu-script.sh"}]}
+	  ],
+	  "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "bash .claude/hooks/guard-add.sh"}]}]
+	}}`)
+	ray := map[string]any{"hooks": map[string]any{
+		"SessionStart": []any{hookEntry("", `bash "$CLAUDE_PROJECT_DIR"/.claude/hooks/session-start.sh`)},
+		"PreToolUse":   []any{hookEntry("Bash", `bash "$CLAUDE_PROJECT_DIR"/.claude/hooks/guard-add.sh`)},
+	}}
+
+	for run := 1; run <= 2; run++ {
+		if err := MergeSettings(target, ray, false, false, nil); err != nil {
+			t.Fatal(err)
+		}
+		m := readSettingsJSON(t, target)
+		if got, want := eventCommands(t, m, "SessionStart"), []string{"bash meu-script.sh", `bash "$CLAUDE_PROJECT_DIR"/.claude/hooks/session-start.sh`}; !slices.Equal(got, want) {
+			t.Errorf("run %d: SessionStart = %v, want %v", run, got, want)
+		}
+		if got, want := eventCommands(t, m, "PreToolUse"), []string{`bash "$CLAUDE_PROJECT_DIR"/.claude/hooks/guard-add.sh`}; !slices.Equal(got, want) {
+			t.Errorf("run %d: PreToolUse = %v, want %v", run, got, want)
+		}
+	}
+}
+
 // Um hook do ray com nome antigo (a versão nova não o traz mais) é retirado, e o
 // do usuário fica; rodar de novo não muda o arquivo.
 func TestMergeSettingsReplacesTheRaysOwnHooksAndIsIdempotent(t *testing.T) {

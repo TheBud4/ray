@@ -13,8 +13,15 @@ import (
 
 // RayHookPrefix é o começo do comando de todo hook que o ray instala. É por
 // ele que MergeSettings distingue um hook do ray (substituído a cada rodada)
-// de um hook do usuário (preservado).
-const RayHookPrefix = "bash .claude/hooks/"
+// de um hook do usuário (preservado). Aponta para $CLAUDE_PROJECT_DIR, que o
+// Claude Code exporta: um caminho relativo dependeria do diretório em que a
+// sessão abriu, e numa subpasta o script não seria achado.
+const RayHookPrefix = `bash "$CLAUDE_PROJECT_DIR"/.claude/hooks/`
+
+// legacyRayHookPrefix é o comando em caminho relativo que versões anteriores
+// escreviam. Continua valendo como "do ray" só para ser trocado pelo atual: o
+// projeto já montado migra no próximo `ray init ai`, sem ficar com os dois.
+const legacyRayHookPrefix = "bash .claude/hooks/"
 
 // MergeSettings aplica settings em <target>/.claude/settings.json. Sem force,
 // o que o usuário já tem vence: uma chave de topo só é gravada se o arquivo não
@@ -144,7 +151,7 @@ func dropRayEntries(entries []any) []any {
 		left := []any{}
 		for _, h := range hooks {
 			if hm, ok := h.(map[string]any); ok {
-				if cmd, _ := hm["command"].(string); strings.HasPrefix(cmd, RayHookPrefix) {
+				if cmd, _ := hm["command"].(string); strings.HasPrefix(cmd, RayHookPrefix) || strings.HasPrefix(cmd, legacyRayHookPrefix) {
 					continue
 				}
 			}

@@ -1,6 +1,9 @@
 package scaffold
 
-import "github.com/TheBud4/ray/internal/profile"
+import (
+	"github.com/TheBud4/ray/internal/claudecfg"
+	"github.com/TheBud4/ray/internal/profile"
+)
 
 // SystemFiles são os arquivos "de sistema" que o ray sempre escreve, fora da
 // receita — garante que todo hook referenciado em settings.json exista no
@@ -30,7 +33,7 @@ func HookSettings() map[string]any {
 		"SessionStart": []any{
 			map[string]any{
 				"hooks": []any{
-					map[string]any{"type": "command", "command": "bash .claude/hooks/session-start.sh"},
+					map[string]any{"type": "command", "command": hookCommand("session-start.sh")},
 				},
 			},
 		},
@@ -38,19 +41,19 @@ func HookSettings() map[string]any {
 			map[string]any{
 				"matcher": "Bash",
 				"hooks": []any{
-					map[string]any{"type": "command", "command": "bash .claude/hooks/guard-add.sh"},
+					map[string]any{"type": "command", "command": hookCommand("guard-add.sh")},
 				},
 			},
 			map[string]any{
 				"matcher": "Edit|Write|MultiEdit",
 				"hooks": []any{
-					map[string]any{"type": "command", "command": "bash .claude/hooks/guard-plans.sh"},
+					map[string]any{"type": "command", "command": hookCommand("guard-plans.sh")},
 				},
 			},
 			map[string]any{
 				"matcher": "Edit|Write|MultiEdit",
 				"hooks": []any{
-					map[string]any{"type": "command", "command": "bash .claude/hooks/guard-vocab.sh"},
+					map[string]any{"type": "command", "command": hookCommand("guard-vocab.sh")},
 				},
 			},
 		},
@@ -58,10 +61,16 @@ func HookSettings() map[string]any {
 			map[string]any{
 				"matcher": "Write|Edit|MultiEdit",
 				"hooks": []any{
-					map[string]any{"type": "command", "command": "bash .claude/hooks/guard-handoff.sh"},
+					map[string]any{"type": "command", "command": hookCommand("guard-handoff.sh")},
 				},
 			},
 		},
 	}
 	return map[string]any{"hooks": hooks}
+}
+
+// hookCommand é o comando de settings.json que roda o hook name. O prefixo vem
+// do claudecfg, que é quem reconhece, ao mesclar, um hook como "do ray".
+func hookCommand(name string) string {
+	return claudecfg.RayHookPrefix + name
 }

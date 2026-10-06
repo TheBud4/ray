@@ -13,6 +13,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/TheBud4/ray/internal/claudecfg"
 	"github.com/TheBud4/ray/internal/preflight"
 	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/rayconfig"
@@ -1009,7 +1010,7 @@ func TestRunKeepsRecipeHooksAlongsideTheRaysAndDoesNotDuplicateThem(t *testing.T
 			switch c {
 			case "bash my-recipe-hook.sh":
 				recipe++
-			case "bash .claude/hooks/session-start.sh":
+			case claudecfg.RayHookPrefix + "session-start.sh":
 				ray++
 			}
 		}

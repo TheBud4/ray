@@ -1218,6 +1218,27 @@ func TestHookSettingsCommandsAllStartWithTheRayPrefix(t *testing.T) {
 	}
 }
 
+// Um caminho relativo (`bash .claude/hooks/x.sh`) depende do diretório em que a
+// sessão do Claude abriu: numa subpasta o script não é achado e o aviso some em
+// silêncio. O hook aponta para a raiz do projeto, que o Claude Code exporta.
+func TestHookSettingsCommandsPointAtTheProjectRoot(t *testing.T) {
+	const want = `bash "$CLAUDE_PROJECT_DIR"/.claude/hooks/`
+	hooks, _ := HookSettings()["hooks"].(map[string]any)
+	if len(hooks) == 0 {
+		t.Fatal("HookSettings() has no hooks")
+	}
+	for event, v := range hooks {
+		for _, e := range v.([]any) {
+			for _, h := range e.(map[string]any)["hooks"].([]any) {
+				cmd := h.(map[string]any)["command"].(string)
+				if !strings.HasPrefix(cmd, want) {
+					t.Errorf("%s hook %q does not start with %q", event, cmd, want)
+				}
+			}
+		}
+	}
+}
+
 // Simular não pode gravar: o overlay virgem não vira diretório, e um template
 // editado sobrevive mesmo com Force. O resultado, porém, é o do dia em que a
 // execução for real.

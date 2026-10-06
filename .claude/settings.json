@@ -5,7 +5,7 @@
       {
         "hooks": [
           {
-            "command": "bash .claude/hooks/guard-handoff.sh",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-handoff.sh",
             "type": "command"
           }
         ],
@@ -16,7 +16,7 @@
       {
         "hooks": [
           {
-            "command": "bash .claude/hooks/guard-add.sh",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-add.sh",
             "type": "command"
           }
         ],
@@ -25,7 +25,7 @@
       {
         "hooks": [
           {
-            "command": "bash .claude/hooks/guard-plans.sh",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-plans.sh",
             "type": "command"
           }
         ],
@@ -34,7 +34,7 @@
       {
         "hooks": [
           {
-            "command": "bash .claude/hooks/guard-vocab.sh",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-vocab.sh",
             "type": "command"
           }
         ],
@@ -45,7 +45,7 @@
       {
         "hooks": [
           {
-            "command": "bash .claude/hooks/session-start.sh",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-start.sh",
             "type": "command"
           }
         ]

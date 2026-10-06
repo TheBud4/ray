@@ -330,7 +330,10 @@ deduplicados por path (receita ganha).
 
 `scaffold.HookSettings()` devolve o bloco `hooks` que o ray instala em
 `settings.json`: `SessionStart` (sempre, injeta o handoff) + `PreToolUse` (os
-três guards de aviso) + `PostToolUse` (`guard-handoff`).
+três guards de aviso) + `PostToolUse` (`guard-handoff`). Cada comando é
+`bash "$CLAUDE_PROJECT_DIR"/.claude/hooks/<nome>.sh`: um caminho relativo
+dependeria do diretório em que a sessão do Claude abriu, e numa subpasta o
+script não seria achado — o aviso sumiria em silêncio.
 
 **Como o `init ai` aplica isso a um `settings.json` que já existe.** O que é seu
 vence, e `--force` é a única forma de o ray impor o dele:
@@ -338,16 +341,18 @@ vence, e `--force` é a única forma de o ray impor o dele:
 - `model`, `effortLevel` e qualquer outra chave de topo que o arquivo já tem
   ficam como estão; só as que faltam são preenchidas.
 - `hooks` é unido por evento. Os seus ficam. Os do ray — todo comando que começa
-  com `bash .claude/hooks/` — são retirados e reinseridos a cada execução, de
-  modo que um guard renomeado ou removido numa versão nova do `ray` não fica
-  órfão apontando para um script que sumiu. Os hooks que a receita declara em
+  com `bash "$CLAUDE_PROJECT_DIR"/.claude/hooks/` — são retirados e reinseridos
+  a cada execução, de modo que um guard renomeado ou removido numa versão nova
+  do `ray` não fica órfão apontando para um script que sumiu. O mesmo vale para
+  o formato antigo, `bash .claude/hooks/` (caminho relativo): um projeto montado
+  antes da troca migra no próximo `ray init ai`, sem ficar com os dois. Os hooks que a receita declara em
   `scaffold.settings.hooks` convivem com os do ray.
 - Rodar de novo não muda o arquivo, byte a byte.
 - Com `--force`, o bloco `hooks` e as chaves de topo são substituídos; chaves que
   o ray não gerencia (ex.: `env`) continuam preservadas.
 
-Um hook seu cujo comando comece com `bash .claude/hooks/` é tratado como do ray e
-será reescrito: esse diretório é o que o ray gerencia.
+Um hook seu cujo comando comece com um desses dois prefixos é tratado como do
+ray e será reescrito: esse diretório é o que o ray gerencia.
 
 ## Os quatro hooks de aviso
 
