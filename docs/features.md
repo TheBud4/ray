@@ -186,6 +186,8 @@ execução escreveu e que precisa ser versionado, seguido do commit e do `claude
 - **Fora de um repositório git, as duas linhas de git somem** e sobra o `claude`.
 - **Se a execução falhou pela metade, o rodapé inteiro some.** Mandar commitar um
   ambiente quebrado é pior que não dizer nada, porque grava o estado quebrado.
+- **Em `--dry-run` o rodapé também some.** Nada foi escrito, e o `git add` de
+  caminhos que não existem contradiria o "Would create" do resumo.
 
 O `.gitignore` entra na lista, e é o caso que mais importa: ele não está na
 whitelist do próprio bloco porque *é* o arquivo que a contém — sem ele
