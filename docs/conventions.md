@@ -99,10 +99,11 @@ bastante pra valer registrar em vez de deixar pra descobrir de novo:
   abandonado por perfil inválido já foi bug (corrigido, ver `internal/cmd/new.go`).
 - **Sem hash pristino, não se afirma "intocado".** `store.DecideOverwrite`
   precisa do hash *upstream* para decidir sem linha-base, e obtê-lo exigiria
-  rede. Um diagnóstico offline que chamasse a função com o upstream vazio
-  receberia "não é fork" — errado, e errado na direção que faz o usuário
-  confiar que a edição dele sobrevive. Por isso `ray status` reporta
-  *procedência desconhecida* nesse caso, em vez de palpitar.
+  ler `~/.ray/components/`, que o `status` não lê. Um diagnóstico que
+  chamasse a função com o upstream vazio receberia "não é fork" — errado, e
+  errado na direção que faz o usuário confiar que a edição dele sobrevive. Por
+  isso `ray status` reporta *procedência desconhecida* nesse caso, em vez de
+  palpitar.
 
 ## Artefatos que andam juntos
 

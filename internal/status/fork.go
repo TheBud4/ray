@@ -13,10 +13,10 @@ import (
 // gravada pelo `ray init ai`, e diz o que o `ray update` faria com ele.
 //
 // Não chama store.DecideOverwrite: ela pede o hash upstream, que só se obtém
-// re-adquirindo o componente — isto é, indo à rede. Com pristino presente a
-// decisão dela é exatamente `disco == pristino`, que é o que fazemos aqui;
-// sem pristino ela precisaria do upstream, e é por isso que esse caso vira
-// ForkUnknown em vez de um palpite.
+// lendo o componente em ~/.ray/components, e o status só lê o projeto. Com
+// pristino presente a decisão dela é exatamente `disco == pristino`, que é o
+// que fazemos aqui; sem pristino ela precisaria do upstream, e é por isso que
+// esse caso vira ForkUnknown em vez de um palpite.
 //
 // O terceiro retorno são problemas para o Report, não erros: falhar o comando
 // por causa de uma receita ilegível contradiria o exit code 0 do status.

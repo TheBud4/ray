@@ -85,8 +85,10 @@ contra o hash pristino guardado no `store`.
 
 O terceiro estado não é conservadorismo decorativo. A decisão de sobrescrita só
 é respondível offline **quando há linha-base**: com pristino presente, a resposta
-é `disco == pristino` e nada mais. Sem pristino, decidir exigiria re-adquirir o
-componente — ou seja, ir à rede. Então o comando não decide, e diz que não sabe.
+é `disco == pristino` e nada mais. Sem pristino, decidir exigiria comparar com o
+componente em `~/.ray/components/`, que o `status` não lê — e, mesmo lendo,
+`disco != componente` não separa edição local de componente que mudou na pasta.
+Então o comando não decide, e diz que não sabe.
 
 **Git** — duas chamadas, zero heurística, sobre `.claude/` e `.mcp.json`. Não
 inclui `docs/` nem `CLAUDE.md`: são do usuário, e tratar edição deles como desvio
@@ -142,9 +144,9 @@ do porquê.
   vazias.
 
 **Recusado de propósito:** reusar o `update` em modo de simulação para
-diagnosticar. Seria zero lógica nova, mas ele re-adquire por referência para
-comparar, o que vai à rede — e um status que precisa de internet para dizer se o
-`.claude/` está são não é um status.
+diagnosticar. Seria zero lógica nova, mas ele lê `~/.ray/components/` para
+comparar — e um status que depende de uma pasta que num clone novo pode nem
+existir, para dizer se o `.claude/` está são, não é um status.
 
 ## Dependência ausente
 
