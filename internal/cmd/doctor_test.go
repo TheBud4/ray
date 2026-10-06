@@ -3,6 +3,9 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -207,8 +210,26 @@ func TestRunDoctorFixRunsDependentsWhenUVWasAlreadyPresent(t *testing.T) {
 	}
 }
 
+// O ExecRunner em DryRun só imprime. A prova de que nenhum processo nasceu não
+// pode ser o erro de runDoctor — ele também ocorreria se o `curl | sh` do uv
+// rodasse de verdade, já que o looker de teste não muda. Por isso o PATH aponta
+// só para executáveis que registram quem os chamou, e o log tem de ficar vazio.
 func TestRunDoctorFixDryRunDoesNotExecute(t *testing.T) {
-	dryRunner := runner.ExecRunner{DryRun: true, Out: &bytes.Buffer{}}
+	if runtime.GOOS == "windows" {
+		t.Skip("executáveis falsos são scripts sh")
+	}
+	bin := t.TempDir()
+	log := filepath.Join(t.TempDir(), "spawned")
+	script := "#!/bin/sh\necho \"$0 $*\" >> " + log + "\n"
+	for _, name := range []string{"sh", "uv", "curl", "headroom", "graphify"} {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", bin)
+
+	var plan bytes.Buffer
+	dryRunner := runner.ExecRunner{DryRun: true, Out: &plan}
 	l := stubLooker{"npx": true, "node": true}
 	var out bytes.Buffer
 
@@ -217,6 +238,15 @@ func TestRunDoctorFixDryRunDoesNotExecute(t *testing.T) {
 	err := runDoctor(l, dryRunner, true, &out)
 	if err == nil {
 		t.Fatal("runDoctor() = nil error, want error: python3.10+/uv still missing after a dry-run fix")
+	}
+
+	if got, _ := os.ReadFile(log); len(got) > 0 {
+		t.Errorf("a dry-run fix spawned processes:\n%s", got)
+	}
+	// E o dry-run tem de ter dito o que faria, senão o teste passaria também
+	// com um doctor que não tentasse consertar nada.
+	if !strings.Contains(plan.String(), "+ sh -c") {
+		t.Errorf("dry-run plan = %q, want the uv install printed as a `+ sh -c …` line", plan.String())
 	}
 }
 
