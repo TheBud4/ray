@@ -86,8 +86,8 @@ ignorasse.
 **Nunca commitado** — runtime, segredo e material pessoal:
 
 `.claude/.local/` (escrita local reservada, sem produtor hoje) ·
-`.claude/.ray-metrics/` · `.claude/handoff.md` · `graphify-out/` · `.env` ·
-`*.local`
+`.claude/.ray-metrics/` · `.claude/handoff.md` · `.claude/settings.local.json` ·
+`graphify-out/` · `.env` · `*.local`
 
 Ao terminar, o `ray init ai` imprime o `git add` com os caminhos que aquela
 execução criou.

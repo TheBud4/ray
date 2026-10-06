@@ -342,8 +342,11 @@ func TestMergeGitignoreCreatesWhitelistAndBlacklist(t *testing.T) {
 			t.Errorf(".gitignore missing whitelist entry %q\n---\n%s", want, content)
 		}
 	}
+	// `*.local` não casa settings.local.json (o sufixo é `.json`, não `.local`):
+	// o arquivo de preferência pessoal do Claude Code precisa de linha própria.
 	for _, want := range []string{
 		"graphify-out/", ".claude/.ray-metrics/", ".claude/.local/", ".claude/handoff.md", ".env", "*.local",
+		".claude/settings.local.json",
 	} {
 		if !strings.Contains(content, want) {
 			t.Errorf(".gitignore missing blacklist entry %q\n---\n%s", want, content)

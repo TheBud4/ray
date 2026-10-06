@@ -230,6 +230,7 @@ var gitignoreBaseLines = []string{
 	".claude/handoff.md",
 	".env",
 	"*.local",
+	".claude/settings.local.json",
 }
 
 // GitignoreBaseLines devolve uma cópia das linhas do bloco que o ray escreve
