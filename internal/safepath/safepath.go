@@ -35,14 +35,24 @@ func ResolveInside(root, path string) error {
 	cleanRoot := filepath.Clean(root)
 	cleanPath := filepath.Clean(path)
 
-	rel, err := filepath.Rel(cleanRoot, cleanPath)
-	if err != nil || !within(rel) {
-		return fmt.Errorf("%s is not under the project %s", path, root)
-	}
-
 	resolvedRoot := cleanRoot
 	if r, err := filepath.EvalSymlinks(cleanRoot); err == nil {
 		resolvedRoot = r
+	}
+
+	// O projeto pode ser alcançado por mais de um nome (/var → /private/var no
+	// macOS, nome 8.3 no Windows), e quem chama pode ter passado a raiz por um e
+	// o caminho por outro. Vale o nome que o caminho de fato usa; só se nenhum
+	// dos dois serve é que se canonicaliza o caminho.
+	rel, ok := relUnder(cleanRoot, cleanPath)
+	if !ok {
+		rel, ok = relUnder(resolvedRoot, cleanPath)
+	}
+	if !ok {
+		rel, ok = relUnder(resolvedRoot, canonical(cleanPath))
+	}
+	if !ok {
+		return fmt.Errorf("%s is not under the project %s", path, root)
 	}
 
 	// cur é sempre um caminho já resolvido; pending, o que falta andar.
@@ -96,8 +106,9 @@ func ResolveInside(root, path string) error {
 		pending = append(splitPath(target), pending...)
 	}
 
-	rel, err = filepath.Rel(resolvedRoot, cur)
-	if err != nil || !within(rel) {
+	// cur pode ter cauda que não existe (link pendente) e, por isso, o nome do
+	// projeto que o link guardou; canonicaliza o que existe antes de comparar.
+	if _, ok := relUnder(resolvedRoot, canonical(cur)); !ok {
 		if lastLink != "" {
 			if lastLink == cleanPath {
 				return fmt.Errorf("%s is a symlink to %s, outside the project %s", lastLink, lastTarget, root)
@@ -107,6 +118,32 @@ func ResolveInside(root, path string) error {
 		return fmt.Errorf("%s resolves to %s, outside the project %s", path, cur, root)
 	}
 	return nil
+}
+
+// relUnder devolve path relativo a root e se ele fica na própria raiz ou abaixo.
+func relUnder(root, path string) (string, bool) {
+	rel, err := filepath.Rel(root, path)
+	if err != nil || !within(rel) {
+		return "", false
+	}
+	return rel, true
+}
+
+// canonical resolve os symlinks (e normaliza o nome) da parte de p que existe
+// e acrescenta a cauda que ainda não existe, que o EvalSymlinks não aceita.
+func canonical(p string) string {
+	tail := ""
+	for cur := filepath.Clean(p); ; {
+		if r, err := filepath.EvalSymlinks(cur); err == nil {
+			return filepath.Join(r, tail)
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return filepath.Clean(p)
+		}
+		tail = filepath.Join(filepath.Base(cur), tail)
+		cur = parent
+	}
 }
 
 // within informa se um caminho relativo (resultado de filepath.Rel) não sai

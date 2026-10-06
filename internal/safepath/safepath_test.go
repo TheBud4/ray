@@ -124,3 +124,39 @@ func TestResolveInsideRefusesPathOutsideRootLexically(t *testing.T) {
 		t.Fatal("ResolveInside() = nil, want error for a path not under root")
 	}
 }
+
+// O projeto pode ser alcançado por mais de um nome: /var → /private/var no
+// macOS, RUNNER~1 → runneradmin (nome 8.3) no Windows. Quem chama pode passar a
+// raiz por um nome e o caminho por outro, e um link pendente carrega o nome que
+// o criou; nada disso é fuga, e recusar quebraria `update` e `init ai` em quem
+// tem a pasta atrás de um link.
+func TestResolveInsideAcceptsTheSameProjectReachedByAnotherName(t *testing.T) {
+	base, _ := newRoot(t)
+	base = filepath.Dir(base) // o pai que contém project/ e outside/
+	alias := filepath.Join(base, "alias")
+	link(t, base, alias)
+	real := filepath.Join(base, "project")
+	viaAlias := filepath.Join(alias, "project")
+
+	t.Run("root by alias, path by the resolved name", func(t *testing.T) {
+		if err := ResolveInside(viaAlias, filepath.Join(real, "a", "x.json")); err != nil {
+			t.Errorf("ResolveInside() = %v, want nil", err)
+		}
+	})
+	t.Run("root resolved, path by alias", func(t *testing.T) {
+		if err := ResolveInside(real, filepath.Join(viaAlias, "a", "x.json")); err != nil {
+			t.Errorf("ResolveInside() = %v, want nil", err)
+		}
+	})
+	t.Run("dangling link whose target names the project by alias", func(t *testing.T) {
+		link(t, filepath.Join(viaAlias, "no-such-target"), filepath.Join(real, "dangling"))
+		if err := ResolveInside(real, filepath.Join(real, "dangling")); err != nil {
+			t.Errorf("ResolveInside() = %v, want nil", err)
+		}
+	})
+	t.Run("an alias still does not let a path out", func(t *testing.T) {
+		if err := ResolveInside(viaAlias, filepath.Join(alias, "outside", "x")); err == nil {
+			t.Error("ResolveInside() = nil, want error for a sibling of the project")
+		}
+	})
+}
