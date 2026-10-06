@@ -182,7 +182,7 @@ func LoadByNameOrDefault(dir, name string) (*Profile, error) {
 	return LoadByName(dir, name)
 }
 
-// Load lê e valida a receita em path. Decodificação estrita (RF-03): uma
+// Load lê e valida a receita em path. Decodificação estrita: uma
 // chave de topo desconhecida — "scaffhold" por "scaffold", por exemplo — vira
 // erro em vez de silenciosamente virar uma seção vazia. Sem isso a receita
 // "funcionava" e simplesmente não escrevia nenhum arquivo, sem nada indicando

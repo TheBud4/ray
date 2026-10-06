@@ -86,8 +86,8 @@ func runNew(r runner.Runner, l preflight.Looker, profilesDir, profileName, proje
 	}
 
 	// Renderizado (não executado) antes do MkdirAll: um create: com template
-	// inválido é erro cedo o bastante para não deixar rastro no disco — RF-02,
-	// mesmo raciocínio do f1520b1 aplicado a outro gatilho.
+	// inválido é erro cedo o bastante para não deixar rastro no disco — mesmo
+	// raciocínio do f1520b1 aplicado a outro gatilho.
 	renderedSteps := make([]string, len(prof.Create))
 	for i, step := range prof.Create {
 		rendered, err := renderCreateStep(step, projectName)
@@ -160,7 +160,7 @@ func runNew(r runner.Runner, l preflight.Looker, profilesDir, profileName, proje
 }
 
 // renderCreateStep usa o mesmo vocabulário de template do resto da receita
-// (scaffold.Data, {{.ProjectName}}) — RF-01: um struct à parte com {{.Name}}
+// (scaffold.Data, {{.ProjectName}}): um struct à parte com {{.Name}}
 // convivia, no mesmo perfil, com {{.ProjectName}} nos arquivos de scaffold e
 // no gitignore_stack, e ensinava a variável errada a quem copiava o padrão
 // mais comum do arquivo.

@@ -55,7 +55,7 @@ func newInitAICmd() *cobra.Command {
 }
 
 // buildInitAIOptions traduz os flags do comando em initai.Options. Sem
-// --profile, cai no perfil `base` (RF-07) — init ai não exige mais escolher
+// --profile, cai no perfil `base` — init ai não exige mais escolher
 // uma stack para provisionar o ambiente de IA.
 func buildInitAIOptions(target string, out io.Writer) initai.Options {
 	name := flagProfile

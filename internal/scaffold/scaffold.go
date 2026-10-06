@@ -179,7 +179,7 @@ func render(tmplName, templatesDir string, data Data) ([]byte, error) {
 }
 
 // readTemplate prefere o overlay e cai para o embed. Um nome ausente dos dois
-// nomeia o overlay esperado no erro (RF-05) — sem isso, um template
+// nomeia o overlay esperado no erro — sem isso, um template
 // customizado nunca criado vazava o erro cru do embed.FS, sem indicar que o
 // arquivo precisa existir em templatesDir.
 func readTemplate(tmplName, templatesDir string) ([]byte, error) {

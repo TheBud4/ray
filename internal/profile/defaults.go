@@ -81,8 +81,8 @@ func flutterProfile() Profile {
 // esta constante, em vez de repetir o literal.
 const BaseName = "base"
 
-// baseProfile é o default de `ray init ai` quando --profile não é passado
-// (RF-07): o ambiente de IA por si só, sem scaffold de nenhuma stack — sem
+// baseProfile é o default de `ray init ai` quando --profile não é passado: o
+// ambiente de IA por si só, sem scaffold de nenhuma stack — sem
 // create: (isso é trabalho de `ray new`) e sem linhas extras de gitignore.
 func baseProfile() Profile {
 	return build(BaseName, "Base AI environment, no stack scaffolding", nil, nil)

@@ -115,10 +115,12 @@ e os invariantes dela: `docs/features.md`. Não repita aqui o que está lá.
   mensagem de commit em inglês. Não troque o padrão existente sem perguntar.
 - **Sem vocabulário de processo em artefato entregue.** Nada que é entregue —
   README, comentários do código de produção, docs públicas — pode citar "spec",
-  número de spec, `CA-NN`, "critério de aceite", nem referenciar o cérebro ou o
-  workflow. Decisão de arquitetura entra como **fato** ("o runner é a única
-  fronteira"), nunca "por causa da spec Y". Não se aplica a este arquivo nem a
-  mensagens de commit — esses são processo interno.
+  número de spec, `CA-NN`, `RF-NN` nem "critério de aceite". Decisão de
+  arquitetura entra como **fato** ("o runner é a única fronteira"), nunca "por
+  causa da spec Y". Apontar para onde o porquê mora é permitido: um doc do
+  repositório (`docs/features.md`) ou uma seção de design (`design §8.1`).
+  Não se aplica a este arquivo nem a mensagens de commit — esses são processo
+  interno.
 - Em dúvida sobre um padrão que não está escrito em lugar nenhum: procure um
   exemplo já existente no código e siga-o. Consistência com o que está lá vale
   mais que a sua preferência.
