@@ -3,6 +3,10 @@
 package runfile
 
 import (
+	"bytes"
+	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -75,9 +79,17 @@ func loadFileOrEmpty(path string) (*File, error) {
 		}
 		return nil, err
 	}
+	// Decodificação estrita: chave desconhecida ("step:" por "steps:") é erro
+	// de digitação, não um alias sem passos que "roda" e não faz nada. Arquivo
+	// vazio ou só com comentário devolve io.EOF e vale como arquivo vazio.
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
 	var f File
-	if err := yaml.Unmarshal(data, &f); err != nil {
-		return nil, err
+	if err := dec.Decode(&f); err != nil {
+		if errors.Is(err, io.EOF) {
+			return &File{}, nil
+		}
+		return nil, fmt.Errorf("parsing %s: %w", path, err)
 	}
 	return &f, nil
 }
