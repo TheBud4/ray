@@ -199,7 +199,9 @@ O `update` recopia o conteúdo declarado na receita a partir de
 conteúdo**, não por estado do git. É a decisão que sustenta a promessa do
 vendoring: você pode editar uma skill vendorizada, commitar, e o `update`
 seguinte preserva sua edição — porque compara contra a linha-base pristina
-guardada no `store`, e o commit não muda o conteúdo do arquivo. Rodar `init ai`
+guardada em `.claude/.ray-pristine.yaml` (no projeto, versionada), e o commit não
+muda o conteúdo do arquivo. Por morar no projeto, ela viaja: mover a pasta ou
+clonar o repositório não faz os componentes virarem "procedência desconhecida". Rodar `init ai`
 de novo no mesmo alvo segue a mesma política: componente editado é preservado
 (entra em `Skipped`, com aviso) e a linha-base não se move; só `--force`
 sobrescreve.
@@ -209,8 +211,10 @@ sobrescreve.
 - **Edição local nunca é sobrescrita em silêncio.** Componente divergente entra
   no resumo como preservado, com o motivo.
 - **Linha-base ilegível para tudo, antes de qualquer efeito.** Com o
-  `pristine.yaml` corrompido o `update` e o `init ai` recusam, com o caminho e a
-  saída (apagar o arquivo; os componentes passam a "procedência desconhecida"),
+  `.ray-pristine.yaml` do projeto (ou o `pristine.yaml` da máquina, enquanto o
+  projeto ainda depende dele) corrompido, o `update` e o `init ai` recusam, com o
+  caminho e a saída (apagar o arquivo; os componentes passam a "procedência
+  desconhecida"),
   em vez de instalar, copiar e só falhar ao gravar. O `status` lista o arquivo
   como problema. Ausente é normal; só ilegível é erro. O arquivo é gravado de
   forma atômica, para um leitor concorrente nunca ver o meio.
@@ -303,6 +307,7 @@ A árvore que `ray init ai` produz na pasta-alvo:
 │   └── architecture.md  conventions.md
 └── .claude/
     ├── .ray-profile           # perfil usado; é o que o `ray update` lê
+    ├── .ray-pristine.yaml     # hash do que o ray escreveu em cada componente (versionado)
     ├── settings.json          # model, effortLevel, hooks
     ├── handoff.md              # estado vivo (gerido pela IA; NUNCA tocado por --force)
     ├── commands/{destilar,document,handoff,revisar}.md

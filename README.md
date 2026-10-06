@@ -80,7 +80,8 @@ ignorasse.
 **Commitado:**
 
 `.claude/skills/` · `.claude/agents/` · `.claude/commands/` ·
-`.claude/settings.json` · `.claude/.ray-profile` · `.mcp.json` · `docs/` ·
+`.claude/settings.json` · `.claude/.ray-profile` · `.claude/.ray-pristine.yaml` ·
+`.mcp.json` · `docs/` ·
 `**/.ray-origin` · `**/LICENSE`
 
 **Nunca commitado** — runtime, segredo e material pessoal:

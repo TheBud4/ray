@@ -54,7 +54,8 @@ internal/
 ├── scaffold/     # escreve a árvore de orientação; templates embutidos
 ├── update/       # `ray update`: recópia local protegendo edição
 │
-├── store/        # linha-base pristina (hash) para decidir "foi editado?"
+├── store/        # linha-base pristina (hash) para decidir "foi editado?":
+│                 #   a do projeto (versionada) e a do overlay de templates
 │
 ├── claudecfg/    # merge idempotente de .claude/settings.json
 ├── mcp/          # modelo de servidor MCP + merge idempotente de .mcp.json
@@ -152,16 +153,24 @@ de lá para `<projeto>/<Dest>/<Name>` pela mesma política de sobrescrita
 ├── profiles/*.yaml      # receitas editáveis (defaults escritos na 1ª leitura)
 ├── templates/*.tmpl     # overlay editável dos templates de scaffold
 ├── components/<Name>/   # skills/agents/comandos que o usuário mantém à mão
-├── store/                # linha-base pristina (hash) — decide "foi editado?"
+├── store/                # linha-base do overlay de templates (e a antiga dos projetos)
 ├── config.yaml           # brain
 ├── state.yaml            # installed_globals[]
 └── commands.yaml         # aliases globais do `ray run`
 ```
 
-`store/` é a linha-base pristina: é contra ela que `ray update` decide entre
-atualizar e preservar, e que `ray status` diz se um componente foi editado
-localmente. Apagá-lo não quebra nada, mas os dois passam a dizer *procedência
-desconhecida* em vez de responder.
+A linha-base pristina de cada **projeto** mora no próprio projeto, em
+`.claude/.ray-pristine.yaml`, e é versionada com ele (`store.ProjectBaseline`):
+é contra ela que `ray update` decide entre atualizar e preservar, e que
+`ray status` diz se um componente foi editado localmente. Como viaja com o
+repositório, mover a pasta ou clonar não a perde. Sem ela, os dois passam a dizer
+*procedência desconhecida* em vez de responder.
+
+`~/.ray/store/pristine.yaml` guarda só a do overlay de templates, que é da máquina.
+Também é onde projetos montados antes dessa mudança têm a deles, por caminho
+absoluto: enquanto o projeto não tem arquivo próprio ela ainda é lida, e o
+próximo `ray init ai` ou `ray update` a leva para o projeto. Um dos dois arquivos
+ilegível faz o comando recusar antes de qualquer efeito.
 
 ## Onde entra código novo
 
