@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 // seedTree escreve files (path relativo → conteúdo) sob dir e devolve dir.
@@ -276,6 +277,101 @@ func TestVerifyTellsAnUnreadablePristineFileFromAMissingOne(t *testing.T) {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error = %q, want it to mention %q", err, want)
 			}
+		}
+	})
+}
+
+// ---- Baseline: a linha-base que mora no projeto -------------------------
+
+func TestBaselineRoundTripsInsideTheProject(t *testing.T) {
+	target := t.TempDir()
+	b := ProjectBaseline(target)
+
+	if _, ok := b.PristineHash("tdd"); ok {
+		t.Fatal("PristineHash() ok = true before anything was written")
+	}
+	if err := b.SetPristine("tdd", "h-tdd"); err != nil {
+		t.Fatalf("SetPristine() error = %v", err)
+	}
+	if err := b.SetPristine("review", "h-review"); err != nil {
+		t.Fatalf("SetPristine() error = %v", err)
+	}
+
+	// Outro objeto sobre o mesmo projeto enxerga o que foi gravado: o estado
+	// está no arquivo, não na memória.
+	got, ok := ProjectBaseline(target).PristineHash("tdd")
+	if !ok || got != "h-tdd" {
+		t.Errorf("PristineHash(tdd) = (%q, %v), want (h-tdd, true)", got, ok)
+	}
+	if _, err := os.Stat(filepath.Join(target, ".claude", ".ray-pristine.yaml")); err != nil {
+		t.Errorf("the baseline file is not where the project versions it: %v", err)
+	}
+}
+
+// O arquivo é commitado: chaves em ordem (diff estável) e regravar o mesmo valor
+// não muda um byte (nem o mtime que acorda quem observa o diretório).
+func TestBaselineFileIsStableAcrossWrites(t *testing.T) {
+	target := t.TempDir()
+	b := ProjectBaseline(target)
+	for _, c := range []string{"zeta", "alpha", "mid"} {
+		if err := b.SetPristine(c, "h-"+c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	path := filepath.Join(target, ".claude", ".ray-pristine.yaml")
+	first, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(first)
+	if !(strings.Index(text, "alpha") < strings.Index(text, "mid") && strings.Index(text, "mid") < strings.Index(text, "zeta")) {
+		t.Errorf("keys are not sorted:\n%s", text)
+	}
+
+	old := time.Now().Add(-48 * time.Hour).Truncate(time.Second)
+	if err := os.Chtimes(path, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.SetPristine("mid", "h-mid"); err != nil {
+		t.Fatal(err)
+	}
+	second, _ := os.ReadFile(path)
+	if string(second) != text {
+		t.Errorf("rewriting the same value changed the file:\n%s", second)
+	}
+	if info, _ := os.Stat(path); !info.ModTime().Equal(old) {
+		t.Errorf("mtime = %v, want it untouched (%v): an unchanged baseline must not be rewritten", info.ModTime(), old)
+	}
+}
+
+func TestBaselineVerifyTellsUnreadableFromMissing(t *testing.T) {
+	t.Run("missing is fine", func(t *testing.T) {
+		if err := ProjectBaseline(t.TempDir()).Verify(); err != nil {
+			t.Errorf("Verify() = %v, want nil", err)
+		}
+	})
+	t.Run("corrupt names the project file and how to start over", func(t *testing.T) {
+		target := t.TempDir()
+		path := filepath.Join(target, ".claude", ".ray-pristine.yaml")
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("{{{ not yaml"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		err := ProjectBaseline(target).Verify()
+		if err == nil {
+			t.Fatal("Verify() = nil, want an error")
+		}
+		for _, want := range []string{path, "delete"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error = %q, want it to mention %q", err, want)
+			}
+		}
+		// E gravar em cima de um arquivo ilegível não pode "consertá-lo" em
+		// silêncio, perdendo o que havia.
+		if err := ProjectBaseline(target).SetPristine("c", "h"); err == nil {
+			t.Error("SetPristine() over an unreadable file = nil error, want it refused")
 		}
 	})
 }
