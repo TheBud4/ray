@@ -28,17 +28,17 @@ const maxHops = 40
 // completo nunca vai ao EvalSymlinks nem ao os.Root, pois ambos falham quando
 // a cauda ainda não existe.
 //
-// A raiz é comparada já resolvida (EvalSymlinks), para que um projeto atrás de
-// um symlink — como /tmp em alguns sistemas — não conte como fuga; se ela não
-// existe, vale o caminho limpo.
+// A raiz é comparada já resolvida, para que um projeto atrás de um symlink —
+// como /tmp em alguns sistemas — não conte como fuga; a parte dela que ainda não
+// existe fica como está.
 func ResolveInside(root, path string) error {
 	cleanRoot := filepath.Clean(root)
 	cleanPath := filepath.Clean(path)
 
-	resolvedRoot := cleanRoot
-	if r, err := filepath.EvalSymlinks(cleanRoot); err == nil {
-		resolvedRoot = r
-	}
+	// A raiz pode ainda não existir (`ray new`, `init ai` numa pasta nova): o
+	// EvalSymlinks falharia, então canonicaliza a parte que existe, do mesmo
+	// jeito que o caminho é canonicalizado mais abaixo.
+	resolvedRoot := canonical(cleanRoot)
 
 	// O projeto pode ser alcançado por mais de um nome (/var → /private/var no
 	// macOS, nome 8.3 no Windows), e quem chama pode ter passado a raiz por um e

@@ -160,3 +160,28 @@ func TestResolveInsideAcceptsTheSameProjectReachedByAnotherName(t *testing.T) {
 		}
 	})
 }
+
+// Alvo que ainda não existe (`ray new`, `init ai` numa pasta nova) atrás de um
+// nome alternativo da pasta pai: o EvalSymlinks da raiz falha por ela não
+// existir, e a raiz tem de ser canonicalizada pela parte que existe, igual ao
+// caminho, senão todo destino dela parece fugir.
+func TestResolveInsideAcceptsANewProjectBehindAnAlias(t *testing.T) {
+	base, _ := newRoot(t)
+	base = filepath.Dir(base)
+	alias := filepath.Join(base, "alias")
+	link(t, base, alias)
+	root := filepath.Join(alias, "novo-projeto") // não existe
+
+	for _, p := range []string{
+		filepath.Join(root, ".mcp.json"),
+		filepath.Join(root, ".claude", "skills", "s", "SKILL.md"),
+		root,
+	} {
+		if err := ResolveInside(root, p); err != nil {
+			t.Errorf("ResolveInside(%s, %s) = %v, want nil", root, p, err)
+		}
+	}
+	if err := ResolveInside(root, filepath.Join(alias, "outside", "x")); err == nil {
+		t.Error("ResolveInside() = nil, want error for a sibling of the new project")
+	}
+}
