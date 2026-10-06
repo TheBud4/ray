@@ -36,12 +36,12 @@ que já existe: nome do perfil, inventário, e os dois próximos passos plausív
 
 - **Só fatos baratos.** Perfil e inventário saem de leitura de arquivo. Sem git,
   sem MCP, sem carregar receita — a tela orienta, não diagnostica.
-- **O preflight checa só os `required`.** Um processo externo, não sete. A
-  pergunta que a tela responde é "dá para começar?".
-- **Não existe linha `deps: ok`.** A linha de dependências só aparece quando
-  falta algo. Uma linha de confirmação fixa na tela mais vista do CLI gasta a
-  mesma atenção que o alerta precisa para significar alguma coisa.
-- **Dependência faltando alerta e sai 0.** É orientação, não falha.
+- **Nenhum processo é criado.** Sem receita carregada nada é obrigatório, então
+  a tela não tem dependência a avisar e não paga `--version` por ferramenta. A
+  dependência é assunto do `ray doctor`.
+- **Não existe linha `deps: ok`.** Uma linha de confirmação fixa na tela mais
+  vista do CLI gasta a mesma atenção que um alerta precisaria para significar
+  alguma coisa.
 - Falha de leitura do `.claude/` (permissão) é erro de verdade: exit 1.
 
 A contagem de inventário é **compartilhada** com o `ray status`, e isso é

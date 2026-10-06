@@ -6,9 +6,6 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-
-	"github.com/TheBud4/ray/internal/preflight"
-	"github.com/TheBud4/ray/internal/runner"
 )
 
 // Global flags, shared between subcommands.
@@ -49,9 +46,7 @@ func newRootCmd() *cobra.Command {
 			// Sempre o diretório corrente: `ray` sem subcomando não aceita
 			// caminho — quem quer diagnosticar outro projeto usa
 			// `ray status <path>`.
-			return runFirstRun(
-				preflight.RunnerLooker{Runner: runner.ExecRunner{}},
-				".", cmd.OutOrStdout())
+			return runFirstRun(".", cmd.OutOrStdout())
 		},
 	}
 

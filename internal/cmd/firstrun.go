@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/TheBud4/ray/internal/preflight"
 	"github.com/TheBud4/ray/internal/status"
 )
 
@@ -15,16 +14,19 @@ import (
 // mesma do `ray status`, inventário incluído — duas contagens diferentes para
 // o mesmo projeto seria pior que não contar.
 //
-// Devolve erro só em falha de leitura. Dependência required faltando é alerta
-// na tela, não exit ≠ 0 — quem erra por dependência é o doctor.
-func runFirstRun(l preflight.Looker, target string, out io.Writer) error {
+// Não checa dependência: sem receita carregada nada é obrigatório, então não
+// haveria o que avisar, e criar um processo por ferramenta na tela mais vista
+// do CLI seria custo sem retorno. Quem diagnostica dependência é o `ray
+// doctor`.
+//
+// Devolve erro só em falha de leitura.
+func runFirstRun(target string, out io.Writer) error {
 	facts, err := status.ReadFacts(target)
 	if err != nil {
 		return err
 	}
 
 	fmt.Fprintln(out, "ray — versioned AI environments")
-	printMissingRequired(out, l)
 
 	if facts.HasEnvironment {
 		fmt.Fprintln(out)
@@ -40,21 +42,4 @@ func runFirstRun(l preflight.Looker, target string, out io.Writer) error {
 
 	fmt.Fprintln(out, "\n`ray --help` lists every command")
 	return nil
-}
-
-// printMissingRequired é a única linha de dependência da tela, e só existe
-// quando falta required — silêncio é o normal.
-//
-// needPython é false: sem receita carregada não há como saber se o perfil usa
-// Python, e chutar que usa produziria alerta falso na tela mais vista do CLI.
-// O `ray doctor` continua dono da tabela completa.
-func printMissingRequired(out io.Writer, l preflight.Looker) {
-	for _, c := range preflight.MissingRequired(preflight.Run(l, false)) {
-		fmt.Fprintf(out, "\n⚠ missing %s", c.Name)
-		if c.Hint != "" {
-			fmt.Fprintf(out, " — %s", c.Hint)
-		}
-		fmt.Fprintln(out)
-		fmt.Fprintln(out, "  run `ray doctor` for the full table")
-	}
 }

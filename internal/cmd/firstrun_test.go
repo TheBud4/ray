@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -33,7 +34,7 @@ func newEnv(t *testing.T, profileName string) string {
 func TestFirstRunInsideAProjectPointsAtTheSession(t *testing.T) {
 	var out bytes.Buffer
 
-	if err := runFirstRun(stubLooker{"npx": true}, newEnv(t, "go-backend"), &out); err != nil {
+	if err := runFirstRun(newEnv(t, "go-backend"), &out); err != nil {
 		t.Fatalf("runFirstRun() error = %v", err)
 	}
 	got := out.String()
@@ -52,7 +53,7 @@ func TestFirstRunInsideAProjectPointsAtTheSession(t *testing.T) {
 func TestFirstRunInsideAProjectWithoutARecordedProfile(t *testing.T) {
 	var out bytes.Buffer
 
-	if err := runFirstRun(stubLooker{"npx": true}, newEnv(t, ""), &out); err != nil {
+	if err := runFirstRun(newEnv(t, ""), &out); err != nil {
 		t.Fatalf("runFirstRun() error = %v", err)
 	}
 	got := out.String()
@@ -70,7 +71,7 @@ func TestFirstRunInsideAProjectWithoutARecordedProfile(t *testing.T) {
 func TestFirstRunOutsideAProjectSuggestsCreatingOne(t *testing.T) {
 	var out bytes.Buffer
 
-	if err := runFirstRun(stubLooker{"npx": true}, t.TempDir(), &out); err != nil {
+	if err := runFirstRun(t.TempDir(), &out); err != nil {
 		t.Fatalf("runFirstRun() error = %v", err)
 	}
 	got := out.String()
@@ -90,40 +91,8 @@ func TestFirstRunOutsideAProjectSuggestsCreatingOne(t *testing.T) {
 	}
 }
 
-// Sem required faltando não há linha de dependência nenhuma. O ⚠ só significa
-// alguma coisa porque o silêncio é o normal — é a regra que o ray status já
-// segue, e uma linha "ok" fixa na tela mais vista do CLI gastaria a mesma
-// atenção que o alerta precisa.
-func TestFirstRunSaysNothingWhenDepsAreFine(t *testing.T) {
-	var out bytes.Buffer
-
-	if err := runFirstRun(stubLooker{"npx": true}, t.TempDir(), &out); err != nil {
-		t.Fatalf("runFirstRun() error = %v", err)
-	}
-	if strings.Contains(out.String(), "⚠") {
-		t.Errorf("output = %q, want no warning marker when nothing is missing", out.String())
-	}
-}
-
-// Required faltando é alerta na tela, não exit ≠ 0: quem erra por dependência
-// é o doctor, porque ali o próximo comando quebra de verdade.
-// Sem receita carregada nada é obrigatório (needPython=false, e o npx deixou de
-// ser), então a tela de abertura fica em silêncio mesmo numa máquina sem nada: o
-// alerta só existe quando algo é de fato necessário. Quem diagnostica é o doctor.
-func TestFirstRunIsSilentAboutDependenciesWhenNothingIsRequired(t *testing.T) {
-	var out bytes.Buffer
-
-	if err := runFirstRun(stubLooker{}, t.TempDir(), &out); err != nil { // nada instalado
-		t.Fatalf("runFirstRun() error = %v, want nil", err)
-	}
-	if got := out.String(); strings.Contains(got, "⚠") || strings.Contains(got, "missing") {
-		t.Errorf("output = %q, want no dependency warning when nothing is required", got)
-	}
-}
-
 // O CA que o I8 pede literalmente: `ray` sem args não pode mais cair no help
-// cru do Cobra. Roda o preflight real (só o npx), e a asserção vale com ou sem
-// ele instalado.
+// cru do Cobra.
 func TestRootWithoutArgsPrintsTheScreenNotTheRawHelp(t *testing.T) {
 	var out bytes.Buffer
 	root := newRootCmd()
@@ -159,5 +128,37 @@ func TestRootHelpStillListsEveryCommand(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("help = %q, want it to contain %q", got, want)
 		}
+	}
+}
+
+// A tela de abertura é a mais vista do CLI e não tem dependência obrigatória
+// para avisar, então não pode pagar por checagem alguma: nenhum processo é
+// criado. O PATH aponta só para executáveis que registram quem os chamou —
+// qualquer `--version` disparado pela tela deixa rastro no log.
+func TestRootWithoutArgsSpawnsNoProcess(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executáveis falsos são scripts sh")
+	}
+	bin := t.TempDir()
+	log := filepath.Join(t.TempDir(), "spawned")
+	script := "#!/bin/sh\necho \"$0 $*\" >> " + log + "\n"
+	for _, name := range []string{"npx", "node", "jq", "python3", "python", "uv", "headroom", "graphify", "git"} {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", bin)
+
+	var out bytes.Buffer
+	root := newRootCmd()
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if got, _ := os.ReadFile(log); len(got) > 0 {
+		t.Errorf("a tela de abertura criou processos:\n%s", got)
 	}
 }
