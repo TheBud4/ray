@@ -153,7 +153,8 @@ make test        # go test ./...
 make vet         # go vet ./...
 make fmt         # gofmt -w .
 make fmt-check   # falha se algo precisar de gofmt
-make ci          # fmt-check + vet + test (o que o CI roda)
+make smoke       # roda o binário num RAY_HOME descartável (não instala nada)
+make ci          # fmt-check + vet + test + smoke (o que o CI roda)
 ```
 
 CI: GitHub Actions roda `make ci` em push na `main` e em todo PR.

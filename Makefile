@@ -1,4 +1,4 @@
-.PHONY: build install test vet fmt fmt-check ci
+.PHONY: build install test vet fmt fmt-check smoke ci
 
 build:
 	go build ./...
@@ -23,4 +23,8 @@ fmt-check:
 		exit 1; \
 	fi
 
-ci: fmt-check vet test
+# Roda o binário de verdade num RAY_HOME descartável (não instala nada).
+smoke:
+	bash scripts/smoke.sh
+
+ci: fmt-check vet test smoke
