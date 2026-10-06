@@ -980,3 +980,77 @@ func TestRunKnowsTheBaselineAfterTheProjectIsCopiedElsewhere(t *testing.T) {
 		t.Errorf("Warnings = %q, want the decision made from the baseline that travelled (\"differs from last pristine\"), not the no-baseline fallback", reasons)
 	}
 }
+
+// Projeto montado antes da linha-base ir para o projeto: a dele está no store da
+// máquina, por caminho absoluto. O update continua a enxergá-la — sem isso, a
+// atualização do binário faria todo componente parecer editado — e a leva para o
+// arquivo do projeto, de onde ela passa a viajar.
+func TestRunKeepsUsingALegacyStoreBaselineAndPromotesIt(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "# v2 upstream")
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+	writeProfileRecord(t, target, "test")
+
+	skillDir := filepath.Join(target, ".claude", "skills", "s")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# v1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	v1, err := store.HashTree(skillDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.New(home.StoreDir).SetPristine(target, coordS, v1); err != nil {
+		t.Fatal(err)
+	}
+
+	sum, err := Run(&runner.FakeRunner{}, cleanGitCheck(), Options{Target: target, NoGlobal: true}, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !slices.Contains(sum.Updated, coordS) {
+		t.Fatalf("Updated = %v, Skipped = %v, want the unedited component updated using the legacy baseline", sum.Updated, sum.Skipped)
+	}
+	if got, ok := store.ProjectBaseline(target).PristineHash(coordS); !ok || got == v1 {
+		t.Errorf("project baseline = (%q, %v), want the new hash recorded in the project's own file", got, ok)
+	}
+}
+
+// Nada para atualizar, mas o projeto ainda depende do store da máquina: o update
+// promove a linha-base mesmo assim, para a próxima cópia da pasta já levá-la.
+func TestRunPromotesALegacyBaselineEvenWhenNothingChanges(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "# same")
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+	writeProfileRecord(t, target, "test")
+
+	skillDir := filepath.Join(target, ".claude", "skills", "s")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# same"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h, err := store.HashTree(skillDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.New(home.StoreDir).SetPristine(target, coordS, h); err != nil {
+		t.Fatal(err)
+	}
+
+	sum, err := Run(&runner.FakeRunner{}, cleanGitCheck(), Options{Target: target, NoGlobal: true}, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if !slices.Contains(sum.Unchanged, coordS) {
+		t.Fatalf("Unchanged = %v, want the identical component", sum.Unchanged)
+	}
+	if got, ok := store.ProjectBaseline(target).PristineHash(coordS); !ok || got != h {
+		t.Errorf("project baseline = (%q, %v), want the legacy entry promoted even though nothing changed", got, ok)
+	}
+}

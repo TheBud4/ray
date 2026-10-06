@@ -38,7 +38,7 @@ func checkForks(target string, home Home) (string, []ComponentState, []string, e
 		return "", nil, []string{fmt.Sprintf("recorded profile could not be loaded: %v", err)}, nil
 	}
 
-	baseline := store.ProjectBaseline(target)
+	baseline := store.ProjectBaseline(target).WithLegacy(store.New(home.StoreDir))
 	// Sem linha-base legível, "procedência desconhecida" em cada componente
 	// culparia o componente por um defeito do arquivo.
 	if err := baseline.Verify(); err != nil {

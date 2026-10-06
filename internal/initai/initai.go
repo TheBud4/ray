@@ -152,7 +152,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	if err := st.Verify(); err != nil {
 		return Summary{}, err
 	}
-	baseline := store.ProjectBaseline(target)
+	baseline := store.ProjectBaseline(target).WithLegacy(st)
 	if err := baseline.Verify(); err != nil {
 		return Summary{}, err
 	}
@@ -417,6 +417,14 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 			}
 		}
 		sum.Created = append(sum.Created, ".claude/.ray-profile")
+	}
+
+	// Projeto montado antes de a linha-base ir para o projeto: leva para o arquivo
+	// dele o que o store da máquina tem, mesmo que nenhum componente tenha mudado.
+	if !opts.DryRun {
+		if err := baseline.Promote(); err != nil {
+			return Summary{}, err
+		}
 	}
 
 	sum.Target = target

@@ -809,3 +809,26 @@ func TestForksSurviveCopyingTheProjectElsewhere(t *testing.T) {
 		t.Errorf("Forks = %+v, want ForkEdited after editing the copy", rep.Forks)
 	}
 }
+
+// Projeto montado antes de a linha-base ir para o projeto: a dele está no store
+// da máquina, e o status continua a lê-la em vez de dar tudo por desconhecido.
+// Só leitura: o status não promove nada.
+func TestForksReadALegacyStoreBaselineWithoutPromotingIt(t *testing.T) {
+	target := t.TempDir()
+	home := writeEnv(t, target, []profile.Component{skillComponent()})
+	h := seedVendored(t, target, "original\n")
+	if err := store.New(home.StoreDir).SetPristine(target, "tdd", h); err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := Run(nil, Options{Target: target}, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if len(rep.Forks) != 1 || rep.Forks[0].State != ForkPristine {
+		t.Errorf("Forks = %+v, want ForkPristine from the legacy baseline", rep.Forks)
+	}
+	if _, err := os.Stat(store.ProjectBaseline(target).Path()); !os.IsNotExist(err) {
+		t.Errorf("the status wrote the project baseline (stat err = %v); it only reads", err)
+	}
+}

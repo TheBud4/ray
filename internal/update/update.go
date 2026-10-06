@@ -76,7 +76,7 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 
 	// A linha-base é o que separa "intocado" de "editado": ilegível, nada abaixo
 	// pode decidir sobre sobrescrita, então para antes de qualquer efeito.
-	baseline := store.ProjectBaseline(target)
+	baseline := store.ProjectBaseline(target).WithLegacy(store.New(home.StoreDir))
 	if err := baseline.Verify(); err != nil {
 		return Summary{}, err
 	}
@@ -170,6 +170,14 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 			return Summary{}, err
 		}
 		sum.Updated = append(sum.Updated, c.Name)
+	}
+
+	// Projeto montado antes de a linha-base ir para o projeto: leva para o arquivo
+	// dele o que o store da máquina tem, mesmo que nenhum componente tenha mudado.
+	if !opts.DryRun {
+		if err := baseline.Promote(); err != nil {
+			return Summary{}, err
+		}
 	}
 
 	sum.HadFailure = len(sum.Failed) > 0

@@ -375,3 +375,130 @@ func TestBaselineVerifyTellsUnreadableFromMissing(t *testing.T) {
 		}
 	})
 }
+
+// ---- Baseline: fallback para a linha-base antiga, por caminho absoluto ------
+
+func TestBaselineFallsBackToTheLegacyStoreEntryForTheSamePath(t *testing.T) {
+	target := t.TempDir()
+	legacy := New(t.TempDir())
+	if err := legacy.SetPristine(target, "old", "h-old"); err != nil {
+		t.Fatal(err)
+	}
+	if err := legacy.SetPristine(target, "both", "h-legacy"); err != nil {
+		t.Fatal(err)
+	}
+	if err := legacy.SetPristine("/some/other/project", "old", "h-other"); err != nil {
+		t.Fatal(err)
+	}
+
+	b := ProjectBaseline(target).WithLegacy(legacy)
+	if got, ok := b.PristineHash("old"); !ok || got != "h-old" {
+		t.Errorf("PristineHash(old) = (%q, %v), want the legacy entry (h-old, true)", got, ok)
+	}
+	if _, ok := b.PristineHash("never"); ok {
+		t.Error("PristineHash(never) ok = true, want false")
+	}
+
+	// A do projeto vence a antiga.
+	if err := b.SetPristine("both", "h-project"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := b.PristineHash("both"); got != "h-project" {
+		t.Errorf("PristineHash(both) = %q, want the project's entry to win", got)
+	}
+}
+
+// Gravar uma entrada promove as do mesmo projeto para o arquivo dele, e só as
+// dele: depois disso o projeto não depende mais do store da máquina.
+func TestBaselineWritePromotesTheProjectsLegacyEntries(t *testing.T) {
+	target := t.TempDir()
+	legacy := New(t.TempDir())
+	for coord, h := range map[string]string{"a": "h-a", "b": "h-b"} {
+		if err := legacy.SetPristine(target, coord, h); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := legacy.SetPristine("/some/other/project", "z", "h-z"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ProjectBaseline(target).WithLegacy(legacy).SetPristine("c", "h-c"); err != nil {
+		t.Fatal(err)
+	}
+
+	alone := ProjectBaseline(target) // sem o store: só o arquivo do projeto
+	for coord, want := range map[string]string{"a": "h-a", "b": "h-b", "c": "h-c"} {
+		if got, ok := alone.PristineHash(coord); !ok || got != want {
+			t.Errorf("project file PristineHash(%s) = (%q, %v), want (%s, true)", coord, got, ok, want)
+		}
+	}
+	if _, ok := alone.PristineHash("z"); ok {
+		t.Error("another project's legacy entry leaked into this project's file")
+	}
+}
+
+// Promote existe para o caso em que nada é gravado (todo componente já estava
+// igual): o arquivo do projeto passa a existir mesmo assim, e só uma vez.
+func TestBaselinePromoteWritesOnceAndOnlyWhenThereIsSomething(t *testing.T) {
+	target := t.TempDir()
+	legacy := New(t.TempDir())
+	b := ProjectBaseline(target).WithLegacy(legacy)
+
+	if err := b.Promote(); err != nil {
+		t.Fatalf("Promote() error = %v", err)
+	}
+	if _, err := os.Stat(b.Path()); !os.IsNotExist(err) {
+		t.Fatalf("Promote() with nothing to promote created %s (stat err = %v)", b.Path(), err)
+	}
+
+	if err := legacy.SetPristine(target, "a", "h-a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Promote(); err != nil {
+		t.Fatalf("Promote() error = %v", err)
+	}
+	first, err := os.ReadFile(b.Path())
+	if err != nil {
+		t.Fatalf("Promote() did not create the project file: %v", err)
+	}
+	old := time.Now().Add(-48 * time.Hour).Truncate(time.Second)
+	if err := os.Chtimes(b.Path(), old, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Promote(); err != nil {
+		t.Fatal(err)
+	}
+	second, _ := os.ReadFile(b.Path())
+	if string(first) != string(second) {
+		t.Error("a second Promote() changed the file")
+	}
+	if info, _ := os.Stat(b.Path()); !info.ModTime().Equal(old) {
+		t.Error("a second Promote() rewrote the file")
+	}
+}
+
+// A store antigo só é consultado enquanto o projeto não tem arquivo próprio; um
+// store ilegível não pode bloquear um projeto que já não depende dele.
+func TestBaselineVerifyChecksTheLegacyStoreOnlyWhileItIsNeeded(t *testing.T) {
+	storeRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(storeRoot, "pristine.yaml"), []byte("{{{ not yaml"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	legacy := New(storeRoot)
+
+	t.Run("no project file yet: the unreadable store is reported", func(t *testing.T) {
+		err := ProjectBaseline(t.TempDir()).WithLegacy(legacy).Verify()
+		if err == nil || !strings.Contains(err.Error(), "pristine.yaml") {
+			t.Errorf("Verify() = %v, want the store's unreadable file reported", err)
+		}
+	})
+	t.Run("project file present: the store is not consulted", func(t *testing.T) {
+		target := t.TempDir()
+		if err := ProjectBaseline(target).SetPristine("a", "h"); err != nil {
+			t.Fatal(err)
+		}
+		if err := ProjectBaseline(target).WithLegacy(legacy).Verify(); err != nil {
+			t.Errorf("Verify() = %v, want nil: this project no longer depends on the store", err)
+		}
+	})
+}

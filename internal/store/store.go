@@ -165,6 +165,17 @@ func (s *Store) Verify() error {
 	return nil
 }
 
+// ProjectEntries devolve as linhas-base gravadas para proj (coordenada → hash),
+// ou nenhuma se não há. É a leitura que permite levar a de um projeto antigo
+// para o arquivo dele.
+func (s *Store) ProjectEntries(proj string) map[string]string {
+	index, err := s.loadPristine()
+	if err != nil {
+		return nil
+	}
+	return index[proj]
+}
+
 // SetPristine grava o hash pristino de proj×coord, sobrescrevendo qualquer
 // valor anterior.
 func (s *Store) SetPristine(proj, coord, hash string) error {
