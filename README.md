@@ -49,8 +49,8 @@ ray doctor --fix    # instala o que o ray consegue instalar sozinho
 | `headroom` | não | `uv tool install headroom-ai[mcp]` |
 | `graphify` | não | `uv tool install graphifyy` |
 
-`ray new`/`ray init ai` com um perfil default (`go`/`web`/`flutter`) liga
-`headroom` e `code_graph` — por isso rodar `ray doctor --fix` antes é o que
+`ray new`/`ray init ai` com um perfil de fábrica (`base`/`go`/`web`/`flutter`)
+liga `headroom` e `code_graph` — por isso rodar `ray doctor --fix` antes é o que
 evita a primeira execução falhar por dependência ausente.
 
 ## Quick start
@@ -61,7 +61,8 @@ ray new go meuprojeto
 
 # ambiente de IA numa pasta que já existe
 cd algum-projeto-existente
-ray init ai --profile go
+ray init ai                 # perfil `base`: só o ambiente de IA, sem stack
+ray init ai --profile go    # ou o ambiente de um stack
 ```
 
 ## O ambiente de IA é versionado
@@ -95,7 +96,7 @@ execução criou.
 | Comando | O que faz |
 |---|---|
 | `ray new <perfil> <nome>` | Cria um projeto do stack (`create` da receita + `git init`) e monta a IA nele. |
-| `ray init ai --profile <n> [path]` | Monta o ambiente de IA numa pasta existente (default: diretório atual). |
+| `ray init ai [--profile <n>] [path]` | Monta o ambiente de IA numa pasta existente (default: diretório atual). Sem `--profile`, usa o perfil `base`: o ambiente de IA sem scaffold de stack. |
 | `ray run [alias] [-- extra]` | Roda um alias de `ray.yaml` (projeto) ou `~/.ray/commands.yaml` (global); sem alias, lista os disponíveis. Cada passo é dividido como um shell divide a linha (aspas e `\`, **sem** expansão de variável nem de curinga), roda com stdin, stdout e stderr ligados ao terminal (servidor de dev e comando interativo funcionam) e os argumentos extras vão **depois** do `--`. Chave desconhecida no `ray.yaml` (`step:` por `steps:`) é erro. |
 | `ray profile list\|show\|add\|edit\|remove\|path` | Gerencia as receitas em `~/.ray/profiles`. |
 | `ray brain set\|status\|open\|path` | Grava/consulta o caminho da sua vault Obsidian em `~/.ray/config.yaml`. Valida o caminho; nunca cria nem reorganiza, e não expõe nada por MCP — o agente lê a vault por filesystem direto. |

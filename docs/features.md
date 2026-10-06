@@ -236,6 +236,15 @@ em silêncio. Não é: entra no resumo (`Failed` no `init ai`, `Skipped` no
 `update`) nomeando o caminho que faltou — receita com componente inexistente é
 situação a relatar, não erro a engolir.
 
+## Perfis de fábrica
+
+Na primeira leitura de `~/.ray/profiles/` o ray escreve quatro receitas: `go`,
+`web` e `flutter` (cada uma com o `create:` do seu stack) e `base`. O `base` é o
+ambiente de IA sem stack — sem `create:` e sem linhas extras de `.gitignore` — e
+é o perfil que `ray init ai` usa quando `--profile` não é passado. Todas ligam
+`headroom` e `code_graph`. `ray new base <nome>` também funciona: cria a pasta e
+o `git init`, sem passo de criação de projeto.
+
 ## Integrações
 
 Um servidor MCP (`headroom`, `code_graph`) se declara em `integrations`, nunca
