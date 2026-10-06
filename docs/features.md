@@ -466,6 +466,25 @@ estado derivado.
 ao trecho e não corresponderia a nada que se possa abrir. Número errado é pior
 que número nenhum, e quem acabou de escrever a linha não precisa de coordenada.
 
+## Limites conhecidos no Windows
+
+Verificado só pelo CI (`go test ./...` em `windows-latest`); nenhum uso real
+medido. Três coisas estão fora do que a suíte afirma lá, e cada uma é um pulo
+declarado em teste, não uma garantia:
+
+- **Os hooks de aviso podem ser um no-op silencioso.** Eles casam o caminho do
+  payload com globs de barra (`*.claude/handoff.md`, `*/test/*`, `$PWD`). No
+  Windows o caminho nativo tem `\` e o `$PWD` do Git bash é `/c/...`, e o formato
+  que o Claude Code põe no payload lá não está verificado. Quem decidir dar
+  suporte aos hooks no Windows normaliza `\` e a letra de unidade no próprio hook.
+- **Leitura concorrente da linha-base.** O `rename` atômico por cima de um arquivo
+  que outro handle abre falha por instantes no Windows. A gravação repete o
+  `rename` por até ~130 ms (`internal/fsutil`), mas um leitor que chega nesse
+  instante vê o arquivo como ilegível, não pela metade. Só importa com dois `ray`
+  mexendo no mesmo estado.
+- **Bit de execução e permissão de pasta não existem**; os testes que os
+  afirmam valem em Linux e macOS.
+
 ## `/destilar`
 
 Um comando in-session que leva para a documentação do projeto o que um trabalho

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -188,6 +189,13 @@ func TestGuardHandoffSilentUnderBudget(t *testing.T) {
 }
 
 func TestGuardHandoffWarnsOverBudget(t *testing.T) {
+	// Os hooks comparam o caminho do payload com globs de barra (`*.claude/handoff.md`,
+	// `$PWD`, `*/test/*`). No Windows o caminho nativo tem `\` e `$PWD` é `/c/...`
+	// no Git bash, e o formato que o Claude Code põe no payload lá não está
+	// verificado: o hook pode ser um no-op silencioso. Ver docs/features.md.
+	if runtime.GOOS == "windows" {
+		t.Skip("hook path matching on Windows payloads is unverified")
+	}
 	requireBashAndJQ(t)
 
 	target := t.TempDir()
