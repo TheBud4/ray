@@ -4,7 +4,9 @@ package openutil
 
 import (
 	"context"
+	"fmt"
 	"runtime"
+	"strings"
 
 	"github.com/TheBud4/ray/internal/runner"
 )
@@ -12,8 +14,15 @@ import (
 // Open abre path no app default, rodando o comando através de r — a mesma
 // fronteira de processos usada em todo o ray (docs/architecture.md).
 func Open(r runner.Runner, path string) error {
-	_, err := r.Run(context.Background(), commandForGOOS(runtime.GOOS, path))
-	return err
+	c := commandForGOOS(runtime.GOOS, path)
+	res, err := r.Run(context.Background(), c)
+	if err != nil {
+		return err
+	}
+	if res.ExitCode != 0 {
+		return fmt.Errorf("%s exited with code %d: %s", c, res.ExitCode, strings.TrimSpace(res.Stderr))
+	}
+	return nil
 }
 
 // commandForGOOS isola a escolha de comando do runtime.GOOS real da máquina,
