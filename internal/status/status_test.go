@@ -545,6 +545,51 @@ func TestGitignoreMissingNegationIsAProblemNamingIt(t *testing.T) {
 	}
 }
 
+// O bloco é conferido linha a linha: uma negação comentada ("# !docs/") ou
+// que só aparece como prefixo de outra linha não desfaz o ignore, e a conferência
+// por substring a dava como presente.
+func TestGitignoreNegationMustBeALineOfItsOwn(t *testing.T) {
+	const want = "!.claude/skills/"
+	cases := []struct {
+		name        string
+		replacement string
+		wantProblem bool
+	}{
+		{"commented out", "# " + want, true},
+		{"only a prefix of another line", want + "extra", true},
+		// No formato do git, espaço à esquerda é parte do padrão; à direita, e o
+		// \r do CRLF, são ignorados.
+		{"leading spaces make it another pattern", "  " + want, true},
+		{"trailing spaces are ignored by git", want + "  ", false},
+		{"CRLF line ending is still the line", want + "\r", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
+			home := writeEnv(t, target, nil)
+			writeGitignore(t, target, want)
+			path := filepath.Join(target, ".gitignore")
+			body, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, end := scaffold.GitignoreMarkers()
+			body = []byte(strings.Replace(string(body), end, tc.replacement+"\n"+end, 1))
+			if err := os.WriteFile(path, body, 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			rep, err := Run(nil, Options{Target: target}, home)
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if got := len(rep.Problems) > 0; got != tc.wantProblem {
+				t.Errorf("Problems = %v, want a problem = %v", rep.Problems, tc.wantProblem)
+			}
+		})
+	}
+}
+
 func TestGitignoreMissingBlockIsAProblem(t *testing.T) {
 	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
 	home := writeEnv(t, target, nil)

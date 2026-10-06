@@ -49,12 +49,20 @@ func checkGitignore(target string) ([]string, error) {
 	}
 	block := body[b : b+e]
 
+	// Linha a linha, como o git lê: espaço à direita e o \r do CRLF não contam,
+	// espaço à esquerda sim. Substring daria por presente uma negação comentada
+	// ("# !docs/") ou prefixo de outra linha — e nenhuma das duas desfaz o ignore.
+	present := map[string]bool{}
+	for _, l := range strings.Split(block, "\n") {
+		present[strings.TrimRight(l, " \r")] = true
+	}
+
 	var problems []string
 	for _, want := range scaffold.GitignoreBaseLines() {
 		if strings.TrimSpace(want) == "" || strings.HasPrefix(want, "#") {
 			continue
 		}
-		if !strings.Contains(block, want) {
+		if !present[want] {
 			problems = append(problems, fmt.Sprintf(".gitignore: the ray block is missing %s", want))
 		}
 	}
