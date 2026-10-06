@@ -16,9 +16,14 @@ func TestOpenUsesPlatformCommand(t *testing.T) {
 		t.Fatalf("Open() error = %v", err)
 	}
 
+	// O esperado é escrito por SO, não derivado de commandForGOOS: assim o
+	// teste ainda pega uma troca de comando no SO em que roda.
 	want := "xdg-open /some/path"
-	if runtime.GOOS == "darwin" {
+	switch runtime.GOOS {
+	case "darwin":
 		want = "open /some/path"
+	case "windows":
+		want = "rundll32 url.dll,FileProtocolHandler /some/path"
 	}
 	if len(fr.Calls) != 1 || fr.Calls[0].String() != want {
 		t.Fatalf("Calls = %v, want [%q]", fr.Calls, want)

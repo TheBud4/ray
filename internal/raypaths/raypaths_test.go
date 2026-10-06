@@ -6,15 +6,27 @@ import (
 	"testing"
 )
 
+// absPath resolve p como o Home faz; no Windows um caminho começando em "/"
+// ganha a letra do drive, então o esperado precisa nascer da plataforma.
+func absPath(t *testing.T, p string) string {
+	t.Helper()
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return abs
+}
+
 func TestHomeUsesRayHome(t *testing.T) {
 	t.Setenv("RAY_HOME", "/custom/root")
+	root := absPath(t, "/custom/root")
 
 	home, err := Home()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if home != "/custom/root" {
-		t.Errorf("Home() = %q, want %q", home, "/custom/root")
+	if home != root {
+		t.Errorf("Home() = %q, want %q", home, root)
 	}
 
 	cases := []struct {
@@ -22,13 +34,13 @@ func TestHomeUsesRayHome(t *testing.T) {
 		fn   func() (string, error)
 		want string
 	}{
-		{"ProfilesDir", ProfilesDir, "/custom/root/profiles"},
-		{"TemplatesDir", TemplatesDir, "/custom/root/templates"},
+		{"ProfilesDir", ProfilesDir, filepath.Join(root, "profiles")},
+		{"TemplatesDir", TemplatesDir, filepath.Join(root, "templates")},
 
-		{"ConfigPath", ConfigPath, "/custom/root/config.yaml"},
-		{"StatePath", StatePath, "/custom/root/state.yaml"},
-		{"CommandsPath", CommandsPath, "/custom/root/commands.yaml"},
-		{"StoreDir", StoreDir, "/custom/root/store"},
+		{"ConfigPath", ConfigPath, filepath.Join(root, "config.yaml")},
+		{"StatePath", StatePath, filepath.Join(root, "state.yaml")},
+		{"CommandsPath", CommandsPath, filepath.Join(root, "commands.yaml")},
+		{"StoreDir", StoreDir, filepath.Join(root, "store")},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -81,8 +93,8 @@ func TestHomeNormalizesRayHome(t *testing.T) {
 		{"dot", ".", cwd},
 		{"tilde alone", "~", user},
 		{"tilde slash", "~/ray-state", filepath.Join(user, "ray-state")},
-		{"tilde inside a name is kept", "/srv/~backup", "/srv/~backup"},
-		{"unclean absolute", "/custom//root/../root", "/custom/root"},
+		{"tilde inside a name is kept", "/srv/~backup", absPath(t, "/srv/~backup")},
+		{"unclean absolute", "/custom//root/../root", absPath(t, "/custom/root")},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

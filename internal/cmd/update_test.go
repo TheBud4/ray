@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -37,6 +38,11 @@ func (cleanCheckRunner) Run(_ context.Context, c runner.Command) (runner.Result,
 }
 
 func TestRunUpdatePrintsSummaryAndErrorsOnFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// A falha é forçada com um diretório 0o555; o Windows ignora o bit de
+		// escrita de diretório, então a cópia nunca falha ali.
+		t.Skip("Windows has no write-permission bit on directories")
+	}
 	resetUpdateFlags(t)
 
 	base := t.TempDir()
