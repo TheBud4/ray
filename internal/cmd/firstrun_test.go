@@ -107,18 +107,17 @@ func TestFirstRunSaysNothingWhenDepsAreFine(t *testing.T) {
 
 // Required faltando é alerta na tela, não exit ≠ 0: quem erra por dependência
 // é o doctor, porque ali o próximo comando quebra de verdade.
-func TestFirstRunWarnsAboutMissingRequiredWithoutFailing(t *testing.T) {
+// Sem receita carregada nada é obrigatório (needPython=false, e o npx deixou de
+// ser), então a tela de abertura fica em silêncio mesmo numa máquina sem nada: o
+// alerta só existe quando algo é de fato necessário. Quem diagnostica é o doctor.
+func TestFirstRunIsSilentAboutDependenciesWhenNothingIsRequired(t *testing.T) {
 	var out bytes.Buffer
 
-	err := runFirstRun(stubLooker{}, t.TempDir(), &out) // npx ausente
-	if err != nil {
-		t.Fatalf("runFirstRun() error = %v, want nil — a missing dep is a warning here", err)
+	if err := runFirstRun(stubLooker{}, t.TempDir(), &out); err != nil { // nada instalado
+		t.Fatalf("runFirstRun() error = %v, want nil", err)
 	}
-	got := out.String()
-	for _, want := range []string{"⚠", "npx", "ray doctor"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("output = %q, want it to contain %q", got, want)
-		}
+	if got := out.String(); strings.Contains(got, "⚠") || strings.Contains(got, "missing") {
+		t.Errorf("output = %q, want no dependency warning when nothing is required", got)
 	}
 }
 

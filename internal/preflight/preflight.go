@@ -28,7 +28,7 @@ const uvInstallScript = `s=$(curl -LsSf https://astral.sh/uv/install.sh) || exit
 // needPython liga o requisito de python3.10+/uv (usado por headroom/code_graph).
 func Run(l Looker, needPython bool) []Check {
 	checks := []Check{
-		{Name: "npx", Required: true, Hint: "install Node.js"},
+		{Name: "npx", Required: false, Hint: "install Node.js — needed by recipes whose create: step runs npx (e.g. web)"},
 		{Name: "node", Required: false},
 		{Name: "jq", Required: false, Hint: "install jq — the warning hooks no-op without it"},
 		{Name: "python3.10+", Required: needPython, Hint: "install Python 3.10+"},

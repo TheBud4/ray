@@ -97,6 +97,24 @@ func runNew(r runner.Runner, l preflight.Looker, profilesDir, profileName, proje
 		renderedSteps[i] = rendered
 	}
 
+	// Confere, antes de criar qualquer coisa, que o programa de cada passo
+	// existe: sem isso o erro ("exec: npx not found") vinha no meio do create,
+	// com a pasta já criada. Checar não escreve, então vale também no dry-run.
+	// Um Looker que não sabe responder (não implementa Finder) pula a checagem.
+	if f, ok := l.(preflight.Finder); ok {
+		checked := map[string]bool{}
+		for _, step := range renderedSteps {
+			fields := strings.Fields(step)
+			if len(fields) == 0 || checked[fields[0]] {
+				continue
+			}
+			checked[fields[0]] = true
+			if !f.Has(fields[0]) {
+				return initai.Summary{}, fmt.Errorf("profile %q needs %q (create step %q), which is not installed — install it and run ray new again", profileName, fields[0], step)
+			}
+		}
+	}
+
 	// O MkdirAll não passa pelo runner, então o --dry-run não o alcança
 	// sozinho: sem esta guarda, simular um `ray new` deixa a pasta para trás.
 	// Vem depois da validação do perfil e do create: um nome errado ou um

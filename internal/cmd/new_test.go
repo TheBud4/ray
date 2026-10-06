@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -258,5 +259,54 @@ func TestRunNewDryRunDoesNotCreateTheProfilesDir(t *testing.T) {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Errorf("%s exists after `new --dry-run` (stat err = %v)", name, err)
 		}
+	}
+}
+
+// toolStub é um Looker que também sabe dizer se um programa existe (Has), como o
+// RunnerLooker real. missing lista os programas que "não estão instalados".
+type toolStub struct{ missing map[string]bool }
+
+func (toolStub) Look(string) bool       { return true }
+func (t toolStub) Has(name string) bool { return !t.missing[name] }
+
+// `ray new` confere, antes de criar qualquer coisa, que o programa de cada passo
+// do create: existe. Sem isso o erro vinha tarde ("exec: npx not found") e a
+// pasta ficava para trás.
+func TestRunNewRefusesBeforeCreatingAnythingWhenACreateToolIsMissing(t *testing.T) {
+	for _, dryRun := range []bool{false, true} {
+		sandbox := t.TempDir()
+		t.Chdir(sandbox)
+		home := newTestHome(t)
+		writeTestProfile(t, home.ProfilesDir, newTestProfile([]string{"echo ok", "npx create-next-app@latest . --yes"}))
+		fr := &runner.FakeRunner{}
+		initOpts := initai.Options{DryRun: dryRun, Out: &bytes.Buffer{}}
+
+		_, err := runNew(fr, toolStub{missing: map[string]bool{"npx": true}}, home.ProfilesDir, "test", "myproj", false, dryRun, initOpts, home)
+		if err == nil {
+			t.Fatalf("dryRun=%v: runNew() = nil error, want a missing-tool error", dryRun)
+		}
+		for _, want := range []string{"npx", `"test"`, "not installed"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("dryRun=%v: error = %q, want it to contain %q", dryRun, err, want)
+			}
+		}
+		if _, statErr := os.Stat(filepath.Join(sandbox, "myproj")); !os.IsNotExist(statErr) {
+			t.Errorf("dryRun=%v: the project dir was created (stat err = %v)", dryRun, statErr)
+		}
+		if len(fr.Calls) != 0 {
+			t.Errorf("dryRun=%v: Calls = %v, want no process run before the check", dryRun, fr.Calls)
+		}
+	}
+}
+
+func TestRunNewProceedsWhenEveryCreateToolExists(t *testing.T) {
+	sandbox := t.TempDir()
+	t.Chdir(sandbox)
+	home := newTestHome(t)
+	writeTestProfile(t, home.ProfilesDir, newTestProfile([]string{"echo ok"}))
+	initOpts := initai.Options{NoGlobal: true, Out: &bytes.Buffer{}}
+
+	if _, err := runNew(&runner.FakeRunner{}, toolStub{}, home.ProfilesDir, "test", "myproj", true, false, initOpts, home); err != nil {
+		t.Fatalf("runNew() error = %v", err)
 	}
 }

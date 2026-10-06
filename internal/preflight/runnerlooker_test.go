@@ -142,3 +142,16 @@ func TestRunnerLookerPythonNoFallbackOutsideWindows(t *testing.T) {
 		t.Error("lookGOOS(python3.10+, linux) = true, want false — no fallback to python outside windows")
 	}
 }
+
+// Has responde "o programa existe?", não "o --version dele passa?": o `go`, por
+// exemplo, não tem `--version` e sai com código 2, mas está instalado.
+func TestRunnerLookerHasMeansTheProgramStarts(t *testing.T) {
+	ran := RunnerLooker{Runner: &runner.FakeRunner{Results: map[string]runner.Result{"go --version": {ExitCode: 2}}}}
+	if !ran.Has("go") {
+		t.Error("Has(go) = false, want true: it started, even though --version exited 2")
+	}
+	missing := RunnerLooker{Runner: &runner.FakeRunner{Err: errors.New(`exec: "go": executable file not found`)}}
+	if missing.Has("go") {
+		t.Error("Has(go) = true, want false when the program cannot be started")
+	}
+}

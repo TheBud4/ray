@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/TheBud4/ray/internal/runner"
@@ -38,7 +39,7 @@ func TestRunRequiredWithNeedPython(t *testing.T) {
 		required[c.Name] = c.Required
 	}
 	want := map[string]bool{
-		"npx": true, "node": false, "python3.10+": true, "uv": true,
+		"npx": false, "node": false, "python3.10+": true, "uv": true,
 		"headroom": false, "graphify": false,
 	}
 	for name, w := range want {
@@ -62,8 +63,8 @@ func TestRunRequiredWithoutNeedPython(t *testing.T) {
 	if required["uv"] {
 		t.Error("uv Required = true, want false when needPython=false")
 	}
-	if !required["npx"] {
-		t.Error("npx Required = false, want true regardless of needPython")
+	if required["npx"] {
+		t.Error("npx Required = true, want false: só o create: de certas receitas o usa, e `ray new` confere isso na hora")
 	}
 }
 
@@ -189,4 +190,22 @@ func TestUVInstallScriptRunsWhatCurlDownloads(t *testing.T) {
 	if _, err := os.Stat(marker); err != nil {
 		t.Errorf("the downloaded script did not run (%v)", err)
 	}
+}
+
+// O npx saiu da lista de obrigatórios, mas continua dizendo o que fazer quando
+// falta: o doctor o mostra na coluna de conselho.
+func TestNpxIsOptionalButKeepsItsHint(t *testing.T) {
+	for _, c := range Run(stubLooker{}, false) {
+		if c.Name != "npx" {
+			continue
+		}
+		if c.Required {
+			t.Error("npx Required = true, want false")
+		}
+		if !strings.Contains(c.Hint, "Node.js") {
+			t.Errorf("npx Hint = %q, want it to keep pointing at Node.js", c.Hint)
+		}
+		return
+	}
+	t.Fatal("no npx check")
 }

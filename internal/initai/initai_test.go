@@ -225,12 +225,12 @@ func TestRunPreflightAbortsBeforeAnyProjectEffect(t *testing.T) {
 	writeProfile(t, home.ProfilesDir, testProfile())
 	target := t.TempDir()
 
-	missingNpx := stubLooker{"node": true, "python3.10+": true, "uv": true}
+	missingPython := stubLooker{"npx": true, "node": true, "uv": true}
 	opts := Options{Profile: "test", Target: target, Out: &bytes.Buffer{}}
 
-	_, err := Run(&runner.FakeRunner{}, missingNpx, opts, home)
+	_, err := Run(&runner.FakeRunner{}, missingPython, opts, home)
 	if err == nil {
-		t.Fatal("Run() = nil error, want error when npx is missing")
+		t.Fatal("Run() = nil error, want error when python3.10+ is missing")
 	}
 	if !strings.Contains(err.Error(), "ray doctor") {
 		t.Errorf("error = %q, want it to hint at `ray doctor`", err.Error())
@@ -246,10 +246,10 @@ func TestRunPreflightErrorCarriesTheHint(t *testing.T) {
 	home := newHome(t)
 	writeProfile(t, home.ProfilesDir, testProfile())
 
-	missingNpx := stubLooker{"node": true, "python3.10+": true, "uv": true}
+	missingPython := stubLooker{"npx": true, "node": true, "uv": true}
 	opts := Options{Profile: "test", Target: t.TempDir(), Out: &bytes.Buffer{}}
 
-	_, err := Run(&runner.FakeRunner{}, missingNpx, opts, home)
+	_, err := Run(&runner.FakeRunner{}, missingPython, opts, home)
 
 	var missing *preflight.MissingRequiredError
 	if !errors.As(err, &missing) {
@@ -258,8 +258,8 @@ func TestRunPreflightErrorCarriesTheHint(t *testing.T) {
 	if missing.From != preflight.FromGate {
 		t.Errorf("From = %d, want FromGate", missing.From)
 	}
-	if !strings.Contains(err.Error(), "install Node.js") {
-		t.Errorf("error = %q, want it to carry the npx hint", err.Error())
+	if !strings.Contains(err.Error(), "install Python 3.10+") {
+		t.Errorf("error = %q, want it to carry the python hint", err.Error())
 	}
 }
 

@@ -28,6 +28,27 @@ type RunnerLooker struct {
 	Runner runner.Runner
 }
 
+// Finder responde se um programa existe na máquina, sem exigir que ele
+// "funcione" no sentido de Look. Quem só precisa saber se um binário pode ser
+// iniciado (por exemplo, o programa de um passo de create:) usa Finder.
+type Finder interface {
+	Has(name string) bool
+}
+
+// Has reporta se o programa name existe: roda `<name> --version` e conta
+// QUALQUER exit code como presente — há programas que não têm --version e
+// saem com erro (o `go` sai com 2), mas estão instalados. Só não conseguir
+// iniciar o processo (binário ausente: o runner devolve err) conta como
+// ausente. Um programa que inicia e trava até o prazo estourar também conta
+// como presente: foi morto depois de existir. É a diferença para Look, que
+// trata exit != 0 como dependência indisponível.
+func (l RunnerLooker) Has(name string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), lookTimeout)
+	defer cancel()
+	_, err := l.Runner.Run(ctx, runner.Command{Name: name, Args: []string{"--version"}})
+	return err == nil
+}
+
 // Look reporta se name está disponível. python3.10+ é o único caso especial:
 // roda `<candidato> --version` (python3, e no Windows também python como
 // fallback — ver pythonCandidates) e exige major.minor >= 3.10.
