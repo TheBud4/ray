@@ -748,3 +748,74 @@ func TestRunRefusesForgedProfileRecord(t *testing.T) {
 		t.Errorf("a component was copied from the forged recipe (stat err = %v)", serr)
 	}
 }
+
+// seedEditedComponentWithDanglingSymlink deixa em target uma cópia editada do
+// componente s com um symlink pendente dentro — o que faz o hash da pasta
+// falhar. A linha-base é a do conteúdo original, então a pasta é um fork.
+func seedEditedComponentWithDanglingSymlink(t *testing.T, home Home, target string) string {
+	t.Helper()
+	skillDir := filepath.Join(target, ".claude", "skills", "s")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# my local edit"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(target, "no-such-target"), filepath.Join(skillDir, "dangling")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	oldPristine, err := store.HashTree(seedTempFile(t, "# original"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.New(home.StoreDir).SetPristine(target, coordS, oldPristine); err != nil {
+		t.Fatal(err)
+	}
+	return skillDir
+}
+
+// Uma pasta que o hash não consegue ler não é uma pasta inexistente: é algo que
+// o ray não gravou. Sem --force, o update a preserva, em vez de a tratar como
+// primeira instalação e apagar a edição.
+func TestRunPreservesEditedComponentWhoseHashCannotBeComputed(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "# new upstream")
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+	writeProfileRecord(t, target, "test")
+	skillDir := seedEditedComponentWithDanglingSymlink(t, home, target)
+
+	sum, err := Run(&runner.FakeRunner{}, cleanGitCheck(), Options{Target: target, NoGlobal: true}, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	if got, _ := os.ReadFile(filepath.Join(skillDir, "SKILL.md")); string(got) != "# my local edit" {
+		t.Errorf("SKILL.md = %q, want the local edit to survive", got)
+	}
+	if _, err := os.Lstat(filepath.Join(skillDir, "dangling")); err != nil {
+		t.Errorf("the symlink was removed (%v), want the folder untouched", err)
+	}
+	if !slices.Contains(sum.Skipped, coordS) {
+		t.Errorf("Skipped = %v, want it to include %q", sum.Skipped, coordS)
+	}
+	if len(sum.Warnings) == 0 {
+		t.Error("Warnings is empty, want a warning explaining why it was kept")
+	}
+}
+
+func TestRunForceOverwritesComponentWhoseHashCannotBeComputed(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "# new upstream")
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+	writeProfileRecord(t, target, "test")
+	skillDir := seedEditedComponentWithDanglingSymlink(t, home, target)
+
+	if _, err := Run(&runner.FakeRunner{}, cleanGitCheck(), Options{Target: target, Force: true, NoGlobal: true}, home); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(skillDir, "SKILL.md")); string(got) != "# new upstream" {
+		t.Errorf("SKILL.md = %q, want the upstream content after --force", got)
+	}
+}

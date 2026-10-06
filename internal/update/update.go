@@ -112,9 +112,9 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 		if herr != nil {
 			return Summary{}, herr
 		}
-		onDiskHash, onDiskErr := store.HashTree(onDisk)
+		onDiskHash, onDiskExists := store.LocalState(onDisk)
 		pristineHash, hasPristine := st.PristineHash(target, c.Name)
-		overwrite, reason := decideOverwrite(opts.Force, onDiskErr == nil, onDiskHash, freshHash, pristineHash, hasPristine)
+		overwrite, reason := decideOverwrite(opts.Force, onDiskExists, onDiskHash, freshHash, pristineHash, hasPristine)
 
 		if opts.DryRun {
 			if !overwrite {

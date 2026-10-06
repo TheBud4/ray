@@ -111,6 +111,26 @@ func (s *Store) saveIndex(index map[string]string) error {
 	return os.WriteFile(s.indexPath(), data, 0o644)
 }
 
+// LocalState responde, sobre o que está em disco em path, duas perguntas
+// separadas: se existe e, se existe, qual o hash. Não dá para deduzir uma da
+// outra — um erro de HashTree (symlink pendente dentro da pasta, arquivo
+// ilegível) não prova ausência. Path que existe mas não pode ser lido ou
+// hasheado volta como ("", true): ilegível conta como divergente do pristino,
+// nunca como inexistente, para que quem decide não sobrescreva uma edição.
+func LocalState(path string) (hash string, exists bool) {
+	if _, err := os.Lstat(path); err != nil {
+		if os.IsNotExist(err) {
+			return "", false
+		}
+		return "", true
+	}
+	h, err := HashTree(path)
+	if err != nil {
+		return "", true
+	}
+	return h, true
+}
+
 // HashTree calcula um sha256 determinístico sobre (rel-path, conteúdo) de
 // todo arquivo regular sob path, em ordem lexicográfica de rel-path. path
 // pode ser um diretório ou um único arquivo (aitmpl entrega um .md solto),

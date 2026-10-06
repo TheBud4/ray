@@ -250,9 +250,9 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		if err != nil {
 			return Summary{}, err
 		}
-		onDiskHash, onDiskErr := store.HashTree(destDir)
+		onDiskHash, onDiskExists := store.LocalState(destDir)
 		pristineHash, hasPristine := st.PristineHash(target, c.Name)
-		overwrite, reason := store.DecideOverwrite(opts.Force, onDiskErr == nil, onDiskHash, freshHash, pristineHash, hasPristine)
+		overwrite, reason := store.DecideOverwrite(opts.Force, onDiskExists, onDiskHash, freshHash, pristineHash, hasPristine)
 		if !overwrite {
 			if opts.DryRun {
 				fmt.Fprintf(out, "+ preserve %s (edited locally)\n", c.Name)

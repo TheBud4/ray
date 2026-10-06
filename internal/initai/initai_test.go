@@ -913,3 +913,46 @@ func TestRunRefusesHostileRecipeBeforeAnyEffectOnTarget(t *testing.T) {
 		})
 	}
 }
+
+// Mesmo contrato do update: pasta que o hash não consegue ler é preservada.
+func TestRunTwicePreservesEditedComponentWhoseHashCannotBeComputed(t *testing.T) {
+	for _, force := range []bool{false, true} {
+		t.Run(map[bool]string{false: "without force", true: "with force"}[force], func(t *testing.T) {
+			home := newHome(t)
+			seedComponent(t, home, "s")
+			writeProfile(t, home.ProfilesDir, testProfile())
+			target := t.TempDir()
+			opts := Options{Profile: "test", Target: target, Out: &bytes.Buffer{}}
+			if _, err := Run(&runner.FakeRunner{}, allFound, opts, home); err != nil {
+				t.Fatalf("first Run() error = %v", err)
+			}
+			skillDir := filepath.Join(target, ".claude", "skills", "s")
+			if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# edited by the user"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(filepath.Join(target, "no-such-target"), filepath.Join(skillDir, "dangling")); err != nil {
+				t.Skipf("symlinks unavailable: %v", err)
+			}
+
+			opts.Force = force
+			sum, err := Run(&runner.FakeRunner{}, allFound, opts, home)
+			if err != nil {
+				t.Fatalf("second Run() error = %v", err)
+			}
+
+			got, _ := os.ReadFile(filepath.Join(skillDir, "SKILL.md"))
+			if force {
+				if string(got) != "# s" {
+					t.Errorf("SKILL.md = %q, want the source content after --force", got)
+				}
+				return
+			}
+			if string(got) != "# edited by the user" {
+				t.Errorf("SKILL.md = %q, want the user's edit preserved", got)
+			}
+			if !slices.Contains(sum.Skipped, "s") {
+				t.Errorf("Skipped = %v, want it to include the component", sum.Skipped)
+			}
+		})
+	}
+}

@@ -216,3 +216,36 @@ func TestSetPristineOverwrites(t *testing.T) {
 		t.Fatalf("PristineHash() = (%q, %v), want (%q, true)", got, ok, "new")
 	}
 }
+
+// LocalState responde duas perguntas separadas — "a pasta existe?" e "qual o
+// hash dela?" — porque o erro do hash não pode servir de teste de existência:
+// o ReadFile de um symlink pendente também devolve "no such file".
+func TestLocalState(t *testing.T) {
+	t.Run("missing path does not exist", func(t *testing.T) {
+		hash, exists := LocalState(filepath.Join(t.TempDir(), "nope"))
+		if exists || hash != "" {
+			t.Errorf("LocalState() = (%q, %v), want (\"\", false)", hash, exists)
+		}
+	})
+	t.Run("readable tree matches HashTree", func(t *testing.T) {
+		dir := seedTree(t, map[string]string{"SKILL.md": "# s", "sub/a.md": "a"})
+		want, err := HashTree(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		hash, exists := LocalState(dir)
+		if !exists || hash != want {
+			t.Errorf("LocalState() = (%q, %v), want (%q, true)", hash, exists, want)
+		}
+	})
+	t.Run("tree with a dangling symlink exists but has no hash", func(t *testing.T) {
+		dir := seedTree(t, map[string]string{"SKILL.md": "# s"})
+		if err := os.Symlink(filepath.Join(dir, "missing-target"), filepath.Join(dir, "dangling")); err != nil {
+			t.Skipf("symlinks unavailable: %v", err)
+		}
+		hash, exists := LocalState(dir)
+		if !exists || hash != "" {
+			t.Errorf("LocalState() = (%q, %v), want (\"\", true): unreadable is not the same as absent", hash, exists)
+		}
+	})
+}
