@@ -218,6 +218,9 @@ func newProfileRemoveCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
+				if err := profile.CheckRemovable(args[0]); err != nil {
+					return err
+				}
 				fmt.Fprintf(cmd.OutOrStdout(), "+ remove profile %s (%s)\n", args[0], path)
 				return nil
 			}

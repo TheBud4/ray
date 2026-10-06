@@ -190,5 +190,28 @@ func Remove(dir, name string) error {
 	if err != nil {
 		return err
 	}
+	if err := CheckRemovable(name); err != nil {
+		return err
+	}
 	return os.Remove(path)
+}
+
+// IsFactory diz se name é de um perfil de fábrica.
+func IsFactory(name string) bool {
+	for _, p := range Defaults() {
+		if p.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// CheckRemovable recusa remover um perfil de fábrica: o EnsureDir o recria no
+// comando seguinte, então apagá-lo parece funcionar e não funciona. Quem quer uma
+// versão própria o edita — a edição é preservada.
+func CheckRemovable(name string) error {
+	if IsFactory(name) {
+		return fmt.Errorf("%q is a factory profile and would be recreated on the next run; edit it instead (your edits are kept)", name)
+	}
+	return nil
 }

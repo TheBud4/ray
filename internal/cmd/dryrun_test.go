@@ -158,3 +158,37 @@ func TestDryRunBrainSetPrintsTheAbsolutePath(t *testing.T) {
 		t.Errorf("output = %q, want the plan to name the absolute path %q", out, brain)
 	}
 }
+
+// A recusa vale também para a simulação: um "+ remove profile base" sugeriria
+// que a execução real o removeria. O arquivo é semeado antes, para a recusa não
+// poder ser confundida com "o arquivo não existe".
+func TestProfileRemoveRefusesFactoryProfilesEvenInDryRun(t *testing.T) {
+	home := dryRunHome(t)
+	if out, err := execRoot(t, "profile", "list"); err != nil {
+		t.Fatalf("profile list error = %v\n%s", err, out)
+	}
+	path := filepath.Join(home, "profiles", "base.yaml")
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("base.yaml was not seeded: %v", err)
+	}
+
+	for _, args := range [][]string{
+		{"profile", "remove", "base"},
+		{"profile", "remove", "base", "--dry-run"},
+	} {
+		out, err := execRoot(t, args...)
+		if err == nil {
+			t.Errorf("%v = nil error, want the factory profile refused\n%s", args, out)
+			continue
+		}
+		if !strings.Contains(err.Error(), "factory") {
+			t.Errorf("%v: error = %q, want it to say the profile is a factory one", args, err)
+		}
+		if strings.Contains(out, "+ remove") {
+			t.Errorf("%v printed a removal plan: %q", args, out)
+		}
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("%v: base.yaml is gone: %v", args, err)
+		}
+	}
+}

@@ -432,3 +432,39 @@ func TestEnsureDirLeavesOtherProfilesAloneAndIsIdempotent(t *testing.T) {
 		}
 	}
 }
+
+// Um perfil de fábrica volta no comando seguinte (EnsureDir recria o que falta),
+// então apagá-lo é um gesto que parece funcionar e não funciona. Remove recusa,
+// diz por quê e o que fazer, e deixa o arquivo.
+func TestRemoveRefusesFactoryProfiles(t *testing.T) {
+	for _, name := range []string{"base", "go", "web", "flutter"} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := EnsureDir(dir, store.New(t.TempDir())); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(dir, name+".yaml")
+
+			err := Remove(dir, name)
+			if err == nil {
+				t.Fatalf("Remove(%q) = nil, want the factory profile refused", name)
+			}
+			for _, want := range []string{name, "factory", "recreated", "edit"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error = %q, want it to mention %q", err, want)
+				}
+			}
+			if _, err := os.Stat(path); err != nil {
+				t.Errorf("the factory profile file is gone after a refused Remove: %v", err)
+			}
+		})
+	}
+}
+
+func TestIsFactory(t *testing.T) {
+	for name, want := range map[string]bool{"base": true, "go": true, "web": true, "flutter": true, "mine": false, "Go": false, "": false} {
+		if got := IsFactory(name); got != want {
+			t.Errorf("IsFactory(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
