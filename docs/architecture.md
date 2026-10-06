@@ -121,7 +121,15 @@ type Scaffold struct {
 ```
 
 `Validate` exige `Name`; em cada `Component`, `Name` e `Dest`; em cada
-`ScaffoldFile`, `Path` não-vazio. Um servidor MCP (`headroom`, `code_graph`) se
+`ScaffoldFile`, `Path` não-vazio. Receita é entrada não confiável, então
+`Validate` também confina: `Name` (do perfil e do componente) é **um único
+elemento de caminho** (sem separador, `.`, `..` nem caractere de controle), e
+`Dest`, `Path` e `Template` são relativos e ficam estritamente abaixo da raiz a
+que se referem (o projeto, ou o overlay de templates). `profile.PathFor` é o
+único ponto que transforma um nome digitado em caminho de receita; o registro
+`.claude/.ray-profile`, que viaja num clone, é lido com teto de 4 KiB e passa
+pelo mesmo `PathFor`. Confinar o que a receita diz não cobre symlink no disco:
+isso é outro mecanismo e não está fechado. Um servidor MCP (`headroom`, `code_graph`) se
 declara em `Integrations`, nunca em `Components` — são conceitos disjuntos por
 construção, e `Component` não tem campo para dizer "isto é um servidor".
 
