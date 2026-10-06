@@ -208,6 +208,12 @@ sobrescreve.
 
 - **Edição local nunca é sobrescrita em silêncio.** Componente divergente entra
   no resumo como preservado, com o motivo.
+- **Linha-base ilegível para tudo, antes de qualquer efeito.** Com o
+  `pristine.yaml` corrompido o `update` e o `init ai` recusam, com o caminho e a
+  saída (apagar o arquivo; os componentes passam a "procedência desconhecida"),
+  em vez de instalar, copiar e só falhar ao gravar. O `status` lista o arquivo
+  como problema. Ausente é normal; só ilegível é erro. O arquivo é gravado de
+  forma atômica, para um leitor concorrente nunca ver o meio.
 - **O modo de simulação decide exatamente como a execução real decidiria**,
   com ou sem linha-base gravada. Sem rede envolvida, ler o "upstream" (a pasta
   local) é grátis mesmo em dry-run — não há mais um caso que só a execução real

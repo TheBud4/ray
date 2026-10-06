@@ -1437,3 +1437,34 @@ func TestRunCreatedListsOnlyWhatChanged(t *testing.T) {
 		}
 	}
 }
+
+// O init ai instala ferramentas e copia componentes: com a linha-base ilegível
+// nada disso pode começar, senão uma edição local seria sobrescrita às cegas.
+func TestRunStopsBeforeAnyEffectWhenThePristineFileIsUnreadable(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "s")
+	writeProfile(t, home.ProfilesDir, testProfile())
+	if err := os.MkdirAll(home.StoreDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home.StoreDir, "pristine.yaml"), []byte("{{{ not yaml"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	target := t.TempDir()
+
+	fr := &runner.FakeRunner{}
+	_, err := Run(fr, allFound, Options{Profile: "test", Target: target, Out: &bytes.Buffer{}}, home)
+	if err == nil {
+		t.Fatal("Run() = nil error, want the unreadable pristine file reported")
+	}
+	if !strings.Contains(err.Error(), "pristine.yaml") {
+		t.Errorf("error = %q, want it to name pristine.yaml", err)
+	}
+	if len(fr.Calls) != 0 {
+		t.Errorf("Calls = %v, want no install before the check", fr.Calls)
+	}
+	entries, _ := os.ReadDir(target)
+	if len(entries) != 0 {
+		t.Errorf("target has %d entries after the failure, want it untouched", len(entries))
+	}
+}

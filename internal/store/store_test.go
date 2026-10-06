@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -241,4 +242,40 @@ func TestSetPristineIsNeverObservedHalfWritten(t *testing.T) {
 			t.Fatalf("PristineHash() = (%q, %v) while another write was in flight, want the seeded baseline intact", got, ok)
 		}
 	}
+}
+
+// O PristineHash devolve ok=false para um arquivo ilegível — o mesmo que "nunca
+// gravei" —, então quem o chama não sabe que perdeu as linhas-base. O Verify é
+// a pergunta que separa os dois casos, feita antes de qualquer efeito.
+func TestVerifyTellsAnUnreadablePristineFileFromAMissingOne(t *testing.T) {
+	t.Run("missing is fine", func(t *testing.T) {
+		if err := New(t.TempDir()).Verify(); err != nil {
+			t.Errorf("Verify() = %v, want nil when nothing was ever written", err)
+		}
+	})
+	t.Run("valid is fine", func(t *testing.T) {
+		s := New(t.TempDir())
+		if err := s.SetPristine("/proj", "c", "h"); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Verify(); err != nil {
+			t.Errorf("Verify() = %v, want nil for a readable file", err)
+		}
+	})
+	t.Run("corrupt is an error that says what to do", func(t *testing.T) {
+		root := t.TempDir()
+		path := filepath.Join(root, "pristine.yaml")
+		if err := os.WriteFile(path, []byte("{{{ not yaml"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		err := New(root).Verify()
+		if err == nil {
+			t.Fatal("Verify() = nil, want an error for a corrupt pristine.yaml")
+		}
+		for _, want := range []string{path, "delete"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error = %q, want it to mention %q", err, want)
+			}
+		}
+	})
 }

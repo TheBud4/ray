@@ -7,6 +7,7 @@ package store
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -152,6 +153,16 @@ func (s *Store) PristineHash(proj, coord string) (string, bool) {
 	}
 	hash, ok := byCoord[coord]
 	return hash, ok
+}
+
+// Verify diz se o arquivo das linhas-base é legível. Ausente é válido (nada foi
+// gravado ainda); ilegível não é, e quem vai ler ou gravar linha-base chama
+// Verify antes de qualquer efeito.
+func (s *Store) Verify() error {
+	if _, err := s.loadPristine(); err != nil {
+		return fmt.Errorf("%s is unreadable (%v); delete it to start over — every component then reads as unknown provenance until the next `ray init ai` or `ray update`", s.pristinePath(), err)
+	}
+	return nil
 }
 
 // SetPristine grava o hash pristino de proj×coord, sobrescrevendo qualquer

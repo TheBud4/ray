@@ -39,6 +39,11 @@ func checkForks(target string, home Home) (string, []ComponentState, []string, e
 	}
 
 	st := store.New(home.StoreDir)
+	// Sem linha-base legível, "procedência desconhecida" em cada componente
+	// culparia o componente por um defeito do arquivo.
+	if err := st.Verify(); err != nil {
+		return prof.Name, nil, []string{err.Error()}, nil
+	}
 	var out []ComponentState
 
 	for _, c := range prof.Components {

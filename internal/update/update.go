@@ -74,6 +74,13 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 		return Summary{}, err
 	}
 
+	// A linha-base é o que separa "intocado" de "editado": ilegível, nada abaixo
+	// pode decidir sobre sobrescrita, então para antes de qualquer efeito.
+	st := store.New(home.StoreDir)
+	if err := st.Verify(); err != nil {
+		return Summary{}, err
+	}
+
 	// 2. guard de árvore limpa (ortogonal) — mantém o diff do update legível.
 	// Se não der para checar (não é repo git, git ausente), segue sem bloquear.
 	//
@@ -102,7 +109,6 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 
 	// 4. conteúdo — recópia local (nunca rede), protegida por fork (por
 	// componente).
-	st := store.New(home.StoreDir)
 	for _, c := range prof.Components {
 		srcDir := filepath.Join(home.ComponentsDir, c.Name)
 		if info, statErr := os.Stat(srcDir); statErr != nil || !info.IsDir() {

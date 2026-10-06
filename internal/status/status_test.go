@@ -459,6 +459,34 @@ func TestGitQueriesRunInTheTarget(t *testing.T) {
 	}
 }
 
+// No status, linha-base ilegível é um achado (exit 0, como todo problema), e os
+// componentes não podem ser dados como "procedência desconhecida" sem dizer por
+// quê: o motivo é o arquivo, não o componente.
+func TestPristineFileUnreadableIsAProblem(t *testing.T) {
+	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
+	home := writeEnv(t, target, []profile.Component{{Name: "tdd", Dest: ".claude/skills"}})
+	if err := os.MkdirAll(home.StoreDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home.StoreDir, "pristine.yaml"), []byte("{{{ not yaml"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := Run(nil, Options{Target: target}, home)
+	if err != nil {
+		t.Fatalf("Run() error = %v; a finding must not fail the command", err)
+	}
+	var named bool
+	for _, p := range rep.Problems {
+		if strings.Contains(p, "pristine.yaml") {
+			named = true
+		}
+	}
+	if !named {
+		t.Errorf("Problems = %v, want one naming pristine.yaml", rep.Problems)
+	}
+}
+
 func TestGitCleanWhenTrackedAndPorcelainEmpty(t *testing.T) {
 	target := newTarget(t, []string{"tdd/SKILL.md"}, nil, nil)
 

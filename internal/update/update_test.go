@@ -919,3 +919,35 @@ func TestRunToolUpgradeFailureCarriesItsReason(t *testing.T) {
 		t.Errorf("Warnings = %v, want the failed command with its exit code and stderr", sum.Warnings)
 	}
 }
+
+// Linha-base ilegível é "perdi o que sei sobre o que você editou": seguir em
+// frente copiaria por cima de edição local e só falharia no fim, ao gravar. O
+// update para antes de qualquer efeito, e diz como recomeçar.
+func TestRunStopsBeforeAnyEffectWhenThePristineFileIsUnreadable(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "# new upstream")
+	writeProfile(t, home.ProfilesDir, testProfile())
+	target := t.TempDir()
+	writeProfileRecord(t, target, "test")
+	if err := os.MkdirAll(home.StoreDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home.StoreDir, "pristine.yaml"), []byte("{{{ not yaml"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	fr := &runner.FakeRunner{}
+	_, err := Run(fr, cleanGitCheck(), Options{Target: target}, home)
+	if err == nil {
+		t.Fatal("Run() = nil error, want the unreadable pristine file reported")
+	}
+	if !strings.Contains(err.Error(), "pristine.yaml") {
+		t.Errorf("error = %q, want it to name pristine.yaml", err)
+	}
+	if len(fr.Calls) != 0 {
+		t.Errorf("Calls = %v, want no tool upgrade before the check", fr.Calls)
+	}
+	if _, err := os.Stat(filepath.Join(target, ".claude", "skills", "s")); !os.IsNotExist(err) {
+		t.Errorf("the component was copied despite the error (stat err = %v)", err)
+	}
+}

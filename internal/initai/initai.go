@@ -146,6 +146,13 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		return Summary{}, err
 	}
 
+	// A linha-base é o que separa "intocado" de "editado": ilegível, nenhum passo
+	// abaixo pode decidir sobre sobrescrita, então para antes de qualquer efeito.
+	st := store.New(home.StoreDir)
+	if err := st.Verify(); err != nil {
+		return Summary{}, err
+	}
+
 	// 2. garante ~/.ray populado. Em dry-run nada de ~/.ray é gravado: os
 	// perfis de fábrica ausentes são lidos da memória (passo 3) e os templates
 	// só são comparados.
@@ -158,7 +165,6 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	// sombreia o embed em silêncio, e atualizar o `ray` deixa de atualizar os
 	// templates. A política de "editado?" é a mesma do `ray update`
 	// (store.DecideOverwrite), com a mesma saída para --force.
-	st := store.New(home.StoreDir)
 	synced, err := scaffold.EnsureTemplates(home.TemplatesDir, scaffold.EnsureOptions{
 		Force:    opts.Force,
 		DryRun:   opts.DryRun,
