@@ -150,10 +150,11 @@ de lá para `<projeto>/<Dest>/<Name>` pela mesma política de sobrescrita
 
 ```text
 ~/.ray/
-├── profiles/*.yaml      # receitas editáveis (defaults escritos na 1ª leitura)
+├── profiles/*.yaml      # receitas editáveis (as de fábrica seguem o binário, se não editadas)
 ├── templates/*.tmpl     # overlay editável dos templates de scaffold
 ├── components/<Name>/   # skills/agents/comandos que o usuário mantém à mão
-├── store/                # linha-base do overlay de templates (e a antiga dos projetos)
+├── store/                # linha-base do overlay de templates e dos perfis de fábrica
+│                         #   (e a antiga dos projetos)
 ├── config.yaml           # brain
 ├── state.yaml            # installed_globals[]
 └── commands.yaml         # aliases globais do `ray run`

@@ -100,7 +100,7 @@ execução criou.
 | `ray new <perfil> <nome>` | Cria um projeto do stack (`create` da receita + `git init`) e monta a IA nele. |
 | `ray init ai [--profile <n>] [path]` | Monta o ambiente de IA numa pasta existente (default: diretório atual). Sem `--profile`, usa o perfil `base`: o ambiente de IA sem scaffold de stack. |
 | `ray run [alias] [-- extra]` | Roda um alias de `ray.yaml` (projeto) ou `~/.ray/commands.yaml` (global); sem alias, lista os disponíveis. Cada passo é dividido como um shell divide a linha (aspas e `\`, **sem** expansão de variável nem de curinga), roda com stdin, stdout e stderr ligados ao terminal (servidor de dev e comando interativo funcionam) e os argumentos extras vão **depois** do `--`. Chave desconhecida no `ray.yaml` (`step:` por `steps:`) é erro. |
-| `ray profile list\|show\|add\|edit\|remove\|path` | Gerencia as receitas em `~/.ray/profiles`. |
+| `ray profile list\|show\|add\|edit\|remove\|path` | Gerencia as receitas em `~/.ray/profiles`. Os perfis de fábrica (`base`, `go`, `web`, `flutter`) acompanham o binário enquanto você não os edita, e `remove` os recusa (eles voltariam). |
 | `ray brain set\|status\|open\|path` | Grava/consulta o caminho da sua vault Obsidian em `~/.ray/config.yaml`. Valida o caminho; nunca cria nem reorganiza, e não expõe nada por MCP — o agente lê a vault por filesystem direto. |
 | `ray doctor [--fix]` | Checa/instala dependências externas. |
 | `ray update [path]` | Recopia componentes do overlay local (`~/.ray/components/`) e atualiza ferramentas; protege edições suas por hash de conteúdo (exige `--force` para sobrescrever). `--no-global` deixa as ferramentas da máquina onde estão e atualiza só o projeto. |

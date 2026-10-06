@@ -255,6 +255,32 @@ ambiente de IA sem stack — sem `create:` e sem linhas extras de `.gitignore` �
 `headroom` e `code_graph`. `ray new base <nome>` também funciona: cria a pasta e
 o `git init`, sem passo de criação de projeto.
 
+**Os perfis de fábrica acompanham o binário.** `profile list`, `new` e `init ai`
+sincronizam as quatro receitas com as do binário, pela mesma regra de "o usuário
+editou isto?" dos templates e do `update` (`store.DecideOverwrite`), com a
+linha-base em `~/.ray/store` sob a chave `<pasta de perfis>` × `<nome>.yaml`:
+
+| Arquivo em `~/.ray/profiles` | O que acontece |
+|---|---|
+| ausente | é gravado |
+| igual ao de fábrica | fica |
+| diferente, e a linha-base é igual ao arquivo (nunca editado) | é atualizado |
+| diferente, e a linha-base difere do arquivo (editado) | é preservado, em silêncio |
+| diferente, sem linha-base | é preservado: não dá para separar edição de versão antiga |
+
+Sem esta regra, a cópia gravada por uma versão antiga sombreava o binário novo em
+silêncio — o mesmo defeito que já houve nos templates. Perfis gravados antes de
+a linha-base existir não a têm, e portanto ficam como estão; quem quer a versão
+atual de um deles apaga o arquivo à mão e ele volta atualizado. Um perfil editado
+não avisa que a fábrica ficou à frente. O `--dry-run` planeja com a receita que a
+execução real usaria (a de fábrica, se o arquivo seria atualizado) e nada grava.
+
+`ray profile remove` recusa um perfil de fábrica, também com `--dry-run`: o ray o
+recriaria no comando seguinte, então apagá-lo parece funcionar e não funciona.
+Quem quer uma versão própria edita o arquivo, e a edição é preservada. Perfil que
+você criou continua removível. Se o `pristine.yaml` estiver ilegível, a
+sincronização recusa antes de gravar qualquer perfil.
+
 A chave `scaffold.gitignore_stack` da receita lista linhas que o `init ai`
 acrescenta ao bloco do `.gitignore`, depois das linhas fixas (ex. `node_modules/`
 no `web`, `/{{.ProjectName}}` no `go`). Aceita `text/template` com os mesmos
