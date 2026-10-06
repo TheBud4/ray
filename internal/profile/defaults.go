@@ -76,9 +76,14 @@ func flutterProfile() Profile {
 		[]string{".dart_tool/", "build/"})
 }
 
+// BaseName é o nome do perfil `base`: o único perfil de fábrica que não
+// declara stack. Quem precisa distingui-lo de um perfil de stack compara com
+// esta constante, em vez de repetir o literal.
+const BaseName = "base"
+
 // baseProfile é o default de `ray init ai` quando --profile não é passado
 // (RF-07): o ambiente de IA por si só, sem scaffold de nenhuma stack — sem
 // create: (isso é trabalho de `ray new`) e sem linhas extras de gitignore.
 func baseProfile() Profile {
-	return build("base", "Base AI environment, no stack scaffolding", nil, nil)
+	return build(BaseName, "Base AI environment, no stack scaffolding", nil, nil)
 }

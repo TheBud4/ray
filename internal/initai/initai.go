@@ -336,7 +336,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	files := dedupScaffoldFiles(prof.Scaffold.Files, scaffold.SystemFiles())
 	res, err := scaffold.WriteFiles(files, scaffold.Options{
 		Target:       target,
-		Data:         scaffold.Data{ProjectName: filepath.Base(target), Stack: prof.Name},
+		Data:         scaffold.Data{ProjectName: filepath.Base(target), Stack: stackOf(prof)},
 		Force:        opts.Force,
 		DryRun:       opts.DryRun,
 		Out:          out,
@@ -361,7 +361,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 
 	// 11. .gitignore (I1) — regra-mãe: conteúdo de IA vendorizado é
 	// commitável, runtime/segredos nunca são.
-	gitignoreData := scaffold.Data{ProjectName: filepath.Base(target), Stack: prof.Name}
+	gitignoreData := scaffold.Data{ProjectName: filepath.Base(target), Stack: stackOf(prof)}
 	if err := scaffold.MergeGitignore(target, prof.Scaffold.GitignoreStack, gitignoreData, opts.DryRun, out); err != nil {
 		return Summary{}, err
 	}
@@ -392,4 +392,15 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	sum.VersionedPaths = versionedPaths(target, sum.Created)
 	sum.InGitRepo = inGitRepo(target)
 	return sum, nil
+}
+
+// stackOf é o valor de {{.Stack}} nos templates: o nome do perfil, que num
+// perfil de stack é o nome da stack. O `base` não tem stack, e "base" escrito
+// como linguagem/runtime no CLAUDE.md seria informação falsa — o template
+// recebe vazio e deixa o campo para quem preenche.
+func stackOf(p *profile.Profile) string {
+	if p.Name == profile.BaseName {
+		return ""
+	}
+	return p.Name
 }

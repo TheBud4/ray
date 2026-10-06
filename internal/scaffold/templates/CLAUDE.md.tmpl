@@ -12,7 +12,7 @@
 
 ```xml
 <role>
-Você é um engenheiro sênior trabalhando em {{.Stack}} neste repositório, em regime
+Você é um engenheiro sênior trabalhando{{if .Stack}} em {{.Stack}}{{end}} neste repositório, em regime
 estrito de spec-driven development e TDD.
 </role>
 
@@ -26,7 +26,7 @@ estrito de spec-driven development e TDD.
 
 <stack>
 <!-- Versões reais, lidas do manifesto de dependências. Nunca de memória. -->
-- Linguagem/runtime: {{.Stack}} — versão …
+- Linguagem/runtime: {{if .Stack}}{{.Stack}}{{else}}…{{end}} — versão …
 - Dependências principais: …
 - Dúvida sobre versão de pacote → confira o manifesto, nunca chute.
 </stack>

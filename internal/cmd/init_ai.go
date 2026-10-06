@@ -11,6 +11,7 @@ import (
 
 	"github.com/TheBud4/ray/internal/initai"
 	"github.com/TheBud4/ray/internal/preflight"
+	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/raypaths"
 	"github.com/TheBud4/ray/internal/runner"
 )
@@ -59,7 +60,7 @@ func newInitAICmd() *cobra.Command {
 func buildInitAIOptions(target string, out io.Writer) initai.Options {
 	name := flagProfile
 	if name == "" {
-		name = "base"
+		name = profile.BaseName
 	}
 	return initai.Options{
 		Profile:         name,

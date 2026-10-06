@@ -1358,3 +1358,44 @@ func TestRunLeavesNoSettingsPointingAtMissingHooksWhenATemplateFails(t *testing.
 		t.Errorf(".claude/hooks exists after a refused run (stat err = %v)", statErr)
 	}
 }
+
+// O perfil `base` não declara stack nenhuma, então o CLAUDE.md gerado não pode
+// chamar "base" de linguagem/runtime nem de lugar onde o engenheiro trabalha:
+// o nome de um perfil só vale como stack quando o perfil é de uma stack.
+func TestRunClaudeMDOfBaseProfileDoesNotNameItAsStack(t *testing.T) {
+	cases := []struct {
+		name      string
+		profile   string
+		wantStack bool
+	}{
+		{"base has no stack", "base", false},
+		{"a stack profile names its stack", "go", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			home := newHome(t)
+			p := testProfile()
+			p.Name = tc.profile
+			p.Components = nil
+			writeProfile(t, home.ProfilesDir, p)
+			target := t.TempDir()
+
+			opts := Options{Profile: tc.profile, Target: target, Out: &bytes.Buffer{}}
+			if _, err := Run(&runner.FakeRunner{}, allFound, opts, home); err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			got, err := os.ReadFile(filepath.Join(target, "CLAUDE.md"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, line := range []string{
+				"trabalhando em " + tc.profile + " neste repositório",
+				"Linguagem/runtime: " + tc.profile + " —",
+			} {
+				if has := strings.Contains(string(got), line); has != tc.wantStack {
+					t.Errorf("contains %q = %v, want %v", line, has, tc.wantStack)
+				}
+			}
+		})
+	}
+}
