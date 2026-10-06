@@ -249,3 +249,23 @@ func TestLocalState(t *testing.T) {
 		}
 	})
 }
+
+// Um pristine.yaml com `null` é um arquivo sem linhas-base, não um motivo de
+// panic: a leitura devolve "não sei" e a gravação recomeça do zero.
+func TestPristineTreatsANullFileAsEmpty(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "pristine.yaml"), []byte("null\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st := New(root)
+
+	if _, ok := st.PristineHash("/proj", "s"); ok {
+		t.Error("PristineHash() ok = true on a null file, want false")
+	}
+	if err := st.SetPristine("/proj", "s", "abc"); err != nil {
+		t.Fatalf("SetPristine() error = %v", err)
+	}
+	if got, ok := st.PristineHash("/proj", "s"); !ok || got != "abc" {
+		t.Errorf("PristineHash() = (%q, %v), want (abc, true)", got, ok)
+	}
+}

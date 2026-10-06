@@ -97,6 +97,9 @@ func (s *Store) loadIndex() (map[string]string, error) {
 	if err := yaml.Unmarshal(data, &index); err != nil {
 		return nil, err
 	}
+	if index == nil { // arquivo "null": mapa nil, nada a preservar
+		index = map[string]string{}
+	}
 	return index, nil
 }
 
@@ -258,6 +261,9 @@ func (s *Store) loadPristine() (map[string]map[string]string, error) {
 	}
 	if err := yaml.Unmarshal(data, &index); err != nil {
 		return nil, err
+	}
+	if index == nil { // arquivo "null": mapa nil, nada a preservar
+		index = map[string]map[string]string{}
 	}
 	return index, nil
 }

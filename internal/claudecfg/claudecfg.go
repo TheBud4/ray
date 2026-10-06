@@ -32,6 +32,9 @@ func MergeSettings(target string, settings map[string]any, force, dryRun bool, o
 		if err := json.Unmarshal(data, &doc); err != nil {
 			return fmt.Errorf("parsing %s: %w", path, err)
 		}
+		if doc == nil { // arquivo "null": mapa nil, nada a preservar
+			doc = map[string]any{}
+		}
 	} else if !os.IsNotExist(err) {
 		return err
 	}

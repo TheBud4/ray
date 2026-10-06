@@ -244,3 +244,17 @@ func TestMergeSettingsForceReplacesHooksAndTopLevelKeys(t *testing.T) {
 		t.Errorf("SessionStart = %v", got)
 	}
 }
+
+// `null` é JSON válido e Unmarshal o entrega como mapa nil: gravar nele dava
+// panic. Um documento nulo não tem nada a preservar, então vale como vazio.
+func TestMergeSettingsTreatsANullDocumentAsEmpty(t *testing.T) {
+	target := t.TempDir()
+	writeSettingsJSON(t, target, "null\n")
+
+	if err := MergeSettings(target, map[string]any{"model": "opus"}, false, false, nil); err != nil {
+		t.Fatalf("MergeSettings() error = %v", err)
+	}
+	if m := readSettingsJSON(t, target); m["model"] != "opus" {
+		t.Errorf("settings = %v, want the merged model", m)
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -173,5 +174,23 @@ func TestReadServersIsEmptyWithoutFile(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Errorf("ReadServers() = %+v, want empty", got)
+	}
+}
+
+func TestWriteServersTreatsANullDocumentAsEmpty(t *testing.T) {
+	target := t.TempDir()
+	if err := os.WriteFile(filepath.Join(target, ".mcp.json"), []byte("null\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := WriteServers(target, []Server{{Name: "headroom", Command: "headroom", Args: []string{"mcp"}}}, false, io.Discard); err != nil {
+		t.Fatalf("WriteServers() error = %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(target, ".mcp.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), `"headroom"`) {
+		t.Errorf(".mcp.json = %s, want the server written", got)
 	}
 }

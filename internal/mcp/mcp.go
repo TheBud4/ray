@@ -65,6 +65,9 @@ func WriteServers(target string, servers []Server, dryRun bool, out io.Writer) e
 		if err := json.Unmarshal(data, &doc); err != nil {
 			return fmt.Errorf("parsing %s: %w", path, err)
 		}
+		if doc == nil { // arquivo "null": mapa nil, nada a preservar
+			doc = map[string]any{}
+		}
 	} else if !os.IsNotExist(err) {
 		return err
 	}
