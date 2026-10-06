@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -77,7 +78,8 @@ func TestWriteFilesCreatesBaseSetAndSystemFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o755 {
+	// O Windows não tem bit de execução: reporta 0666 para qualquer arquivo.
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o755 {
 		t.Fatalf("session-start.sh mode = %v, want 0755", info.Mode().Perm())
 	}
 }
@@ -855,7 +857,10 @@ func runHook(t *testing.T, script, payload string) runner.Result {
 
 	res, err := runner.ExecRunner{}.Run(context.Background(), runner.Command{
 		Name: "bash",
-		Args: []string{"-c", "cat " + payloadPath + " | bash " + filepath.Join(dir, ".claude/hooks/"+script)},
+		// Os caminhos vão como argumentos posicionais, não colados na string do
+		// shell: no Windows eles têm barra invertida, que o bash lê como escape
+		// (C:\Users vira C:Users) e o script não é encontrado (exit 127).
+		Args: []string{"-c", `cat "$1" | bash "$2"`, "_", payloadPath, filepath.Join(dir, ".claude/hooks/"+script)},
 		Dir:  dir,
 	})
 	if err != nil {
@@ -991,7 +996,8 @@ func runGuardVocab(t *testing.T, dir, payload string) runner.Result {
 
 	res, err := runner.ExecRunner{}.Run(context.Background(), runner.Command{
 		Name: "bash",
-		Args: []string{"-c", "cat " + payloadPath + " | bash " + filepath.Join(dir, ".claude/hooks/guard-vocab.sh")},
+		// Caminhos como argumentos posicionais: ver runHook.
+		Args: []string{"-c", `cat "$1" | bash "$2"`, "_", payloadPath, filepath.Join(dir, ".claude/hooks/guard-vocab.sh")},
 		Dir:  dir,
 	})
 	if err != nil {
