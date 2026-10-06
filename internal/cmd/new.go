@@ -17,6 +17,7 @@ import (
 	"github.com/TheBud4/ray/internal/raypaths"
 	"github.com/TheBud4/ray/internal/runner"
 	"github.com/TheBud4/ray/internal/scaffold"
+	"github.com/TheBud4/ray/internal/store"
 )
 
 var flagNoGit bool
@@ -77,7 +78,7 @@ func runNew(r runner.Runner, l preflight.Looker, profilesDir, profileName, proje
 	loadProfile := profile.LoadByName
 	if dryRun {
 		loadProfile = profile.LoadByNameOrDefault
-	} else if err := profile.EnsureDir(profilesDir); err != nil {
+	} else if err := profile.EnsureDir(profilesDir, store.New(home.StoreDir)); err != nil {
 		return initai.Summary{}, err
 	}
 	prof, err := loadProfile(profilesDir, profileName)

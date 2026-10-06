@@ -7,7 +7,12 @@ import (
 	"strings"
 	"testing"
 
+	"gopkg.in/yaml.v3"
+
+	"github.com/TheBud4/ray/internal/initai"
 	"github.com/TheBud4/ray/internal/profile"
+	"github.com/TheBud4/ray/internal/runner"
+	"github.com/TheBud4/ray/internal/store"
 )
 
 func TestRunProfileListIncludesDefaultsAndExtra(t *testing.T) {
@@ -17,7 +22,7 @@ func TestRunProfileListIncludesDefaultsAndExtra(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := runProfileList(dir, &out); err != nil {
+	if err := runProfileList(dir, t.TempDir(), &out); err != nil {
 		t.Fatalf("runProfileList() error = %v", err)
 	}
 
@@ -34,7 +39,7 @@ func TestRunProfileListIncludesDefaultsAndExtra(t *testing.T) {
 // curto na própria linha; o erro completo continua sendo do show.
 func TestRunProfileListMarksBrokenProfiles(t *testing.T) {
 	dir := t.TempDir()
-	if err := profile.EnsureDir(dir); err != nil {
+	if err := profile.EnsureDir(dir, store.New(t.TempDir())); err != nil {
 		t.Fatal(err)
 	}
 	const bad = "name: badsemantic\ndescription: parses fine\ncomponents:\n  - name: ctx7\n    type: mcp\n    via: aitmpl\n    ref: context7\n"
@@ -46,7 +51,7 @@ func TestRunProfileListMarksBrokenProfiles(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	if err := runProfileList(dir, &out); err != nil {
+	if err := runProfileList(dir, t.TempDir(), &out); err != nil {
 		t.Fatalf("runProfileList() error = %v", err)
 	}
 
@@ -192,4 +197,77 @@ func TestRunProfileEditRefusesNameOutsideProfilesDir(t *testing.T) {
 	if called {
 		t.Error("the editor was spawned for a name outside the profiles dir")
 	}
+}
+
+// seedOutdatedFactoryProfile grava em dir um perfil de fábrica `name` antigo,
+// nunca editado (com a linha-base igual ao que está em disco), como o ray teria
+// deixado numa versão anterior. Devolve o conteúdo atual de fábrica.
+func seedOutdatedFactoryProfile(t *testing.T, dir, storeDir, name string) (current []byte) {
+	t.Helper()
+	old := []byte("name: " + name + "\ndescription: an older factory profile\n")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, name+".yaml"), old, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.New(storeDir).SetPristine(dir, name+".yaml", store.HashBytes(old)); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range profile.Defaults() {
+		if p.Name == name {
+			data, err := yaml.Marshal(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return data
+		}
+	}
+	t.Fatalf("no factory profile %q", name)
+	return nil
+}
+
+func assertProfileIsCurrent(t *testing.T, dir, name string, current []byte) {
+	t.Helper()
+	got, err := os.ReadFile(filepath.Join(dir, name+".yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(current) {
+		t.Errorf("%s.yaml = %q, want the current factory profile: an older, never-edited copy must not shadow the binary", name, got)
+	}
+}
+
+// Os três comandos que garantem o diretório de receitas sincronizam os perfis de
+// fábrica: um binário novo tem de chegar a quem nunca editou o arquivo.
+func TestProfileListSyncsOutdatedFactoryProfiles(t *testing.T) {
+	dir, storeDir := t.TempDir(), t.TempDir()
+	current := seedOutdatedFactoryProfile(t, dir, storeDir, "go")
+
+	if err := runProfileList(dir, storeDir, &bytes.Buffer{}); err != nil {
+		t.Fatalf("runProfileList() error = %v", err)
+	}
+	assertProfileIsCurrent(t, dir, "go", current)
+}
+
+func TestNewSyncsOutdatedFactoryProfiles(t *testing.T) {
+	t.Chdir(t.TempDir())
+	home := newTestHome(t)
+	current := seedOutdatedFactoryProfile(t, home.ProfilesDir, home.StoreDir, "base")
+
+	if _, err := runNew(&runner.FakeRunner{}, allFound, home.ProfilesDir, "base", "myproj", true, false, initai.Options{}, home); err != nil {
+		t.Fatalf("runNew() error = %v", err)
+	}
+	assertProfileIsCurrent(t, home.ProfilesDir, "base", current)
+}
+
+func TestInitAISyncsOutdatedFactoryProfiles(t *testing.T) {
+	home := newTestHome(t)
+	current := seedOutdatedFactoryProfile(t, home.ProfilesDir, home.StoreDir, "base")
+
+	opts := initai.Options{Profile: "base", Target: t.TempDir(), Out: &bytes.Buffer{}}
+	if _, err := initai.Run(&runner.FakeRunner{}, allFound, opts, home); err != nil {
+		t.Fatalf("initai.Run() error = %v", err)
+	}
+	assertProfileIsCurrent(t, home.ProfilesDir, "base", current)
 }

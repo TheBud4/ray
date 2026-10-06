@@ -13,6 +13,7 @@ import (
 	"github.com/TheBud4/ray/internal/installer"
 	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/raypaths"
+	"github.com/TheBud4/ray/internal/store"
 )
 
 func newProfileCmd() *cobra.Command {
@@ -32,20 +33,24 @@ func newProfileListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runProfileListWith(dir, cmd.OutOrStdout(), !flagDryRun)
+			storeDir, err := raypaths.StoreDir()
+			if err != nil {
+				return err
+			}
+			return runProfileListWith(dir, storeDir, cmd.OutOrStdout(), !flagDryRun)
 		},
 	}
 }
 
-func runProfileList(dir string, out io.Writer) error {
-	return runProfileListWith(dir, out, true)
+func runProfileList(dir, storeDir string, out io.Writer) error {
+	return runProfileListWith(dir, storeDir, out, true)
 }
 
 // runProfileListWith lista as receitas de dir. seed controla se os perfis de
 // fábrica ausentes são gravados antes: listar sob --dry-run só lê.
-func runProfileListWith(dir string, out io.Writer, seed bool) error {
+func runProfileListWith(dir, storeDir string, out io.Writer, seed bool) error {
 	if seed {
-		if err := profile.EnsureDir(dir); err != nil {
+		if err := profile.EnsureDir(dir, store.New(storeDir)); err != nil {
 			return err
 		}
 	}

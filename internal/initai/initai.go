@@ -161,7 +161,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	// perfis de fábrica ausentes são lidos da memória (passo 3) e os templates
 	// só são comparados.
 	if !opts.DryRun {
-		if err := profile.EnsureDir(home.ProfilesDir); err != nil {
+		if err := profile.EnsureDir(home.ProfilesDir, st); err != nil {
 			return Summary{}, err
 		}
 	}

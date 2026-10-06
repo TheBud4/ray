@@ -8,25 +8,65 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/TheBud4/ray/internal/store"
 )
 
-// EnsureDir escreve todo perfil default ainda ausente em dir, nunca
-// sobrescrevendo um arquivo existente.
-func EnsureDir(dir string) error {
+// EnsureDir sincroniza os perfis de fábrica em dir com os do binário, e nunca
+// toca em arquivo que não seja de um deles.
+//
+// Antes, ele só gravava o que faltava. Isso fazia o arquivo em disco sombrear o
+// binário em silêncio: gerado por uma versão antiga, continuava valendo mesmo
+// sem ninguém o ter editado, e atualizar o `ray` não atualizava as receitas — o
+// mesmo defeito que já existiu nos templates (scaffold.EnsureTemplates).
+//
+// A política de "o usuário editou isto?" é store.DecideOverwrite, a mesma do
+// `ray update` e dos templates, com a linha-base em st sob a chave (dir,
+// <nome>.yaml): ausente é gravado, igual ao de fábrica fica, nunca editado é
+// atualizado, e editado — ou diferente sem linha-base, que é ambíguo — é
+// preservado em silêncio.
+func EnsureDir(dir string, st *store.Store) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
+	// Linha-base ilegível não pode ser lida como "nunca gravei": a decisão
+	// abaixo sobrescreveria o que ela existe para proteger.
+	if err := st.Verify(); err != nil {
+		return err
+	}
 	for _, p := range Defaults() {
-		path := filepath.Join(dir, p.Name+".yaml")
-		if _, err := os.Stat(path); err == nil {
-			continue // já existe: respeita
-		}
-		data, err := yaml.Marshal(p)
+		coord := p.Name + ".yaml"
+		path := filepath.Join(dir, coord)
+
+		fresh, err := yaml.Marshal(p)
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(path, data, 0o644); err != nil {
-			return err
+		freshHash := store.HashBytes(fresh)
+
+		onDisk, readErr := os.ReadFile(path)
+		exists := readErr == nil
+		if readErr != nil && !os.IsNotExist(readErr) {
+			return readErr
+		}
+		onDiskHash := store.HashBytes(onDisk)
+		pristineHash, hasPristine := st.PristineHash(dir, coord)
+
+		overwrite, _ := store.DecideOverwrite(false, exists, onDiskHash, freshHash, pristineHash, hasPristine)
+		if !overwrite {
+			continue // editado: é do usuário
+		}
+		if !exists || onDiskHash != freshHash {
+			if err := os.WriteFile(path, fresh, 0o644); err != nil {
+				return err
+			}
+		}
+		// Só move a linha-base quando ela muda: o pristine.yaml é um arquivo só
+		// para tudo, e regravá-lo à toa acorda quem o observa.
+		if !hasPristine || pristineHash != freshHash {
+			if err := st.SetPristine(dir, coord, freshHash); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
