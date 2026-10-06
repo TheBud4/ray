@@ -435,6 +435,11 @@ func TestRunTwicePreservesEditedComponentAndItsPristine(t *testing.T) {
 	if err := os.WriteFile(skill, []byte(edited), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// A fonte também muda: sem isso, regravar a linha-base com o hash do que
+	// acabou de ser escrito daria o mesmo valor e a asserção abaixo seria vazia.
+	if err := os.WriteFile(filepath.Join(home.ComponentsDir, "s", "SKILL.md"), []byte("# new upstream"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	sum, err := Run(&runner.FakeRunner{}, allFound, opts, home)
 	if err != nil {

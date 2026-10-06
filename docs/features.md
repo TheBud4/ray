@@ -189,7 +189,10 @@ O `update` recopia o conteúdo declarado na receita a partir de
 conteúdo**, não por estado do git. É a decisão que sustenta a promessa do
 vendoring: você pode editar uma skill vendorizada, commitar, e o `update`
 seguinte preserva sua edição — porque compara contra a linha-base pristina
-guardada no `store`, e o commit não muda o conteúdo do arquivo.
+guardada no `store`, e o commit não muda o conteúdo do arquivo. Rodar `init ai`
+de novo no mesmo alvo segue a mesma política: componente editado é preservado
+(entra em `Skipped`, com aviso) e a linha-base não se move; só `--force`
+sobrescreve.
 
 **O que tem de valer:**
 
