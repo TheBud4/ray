@@ -19,22 +19,20 @@ import (
 // Commands é comando por-projeto, sempre roda (ex. reindexar o grafo);
 // Server, se o mecanismo expõe um MCP server.
 type Mechanism struct {
-	Name      string
-	Kind      string // "mcp"
-	Install   []runner.Command
-	Commands  []runner.Command
-	Server    *mcp.Server
-	MetricKey string
+	Name     string
+	Kind     string // "mcp"
+	Install  []runner.Command
+	Commands []runner.Command
+	Server   *mcp.Server
 }
 
 // Headroom é o mecanismo de compressão de contexto (design §8.1).
 func Headroom() Mechanism {
 	return Mechanism{
-		Name:      "headroom",
-		Kind:      "mcp",
-		Install:   []runner.Command{{Name: "uv", Args: []string{"tool", "install", "headroom-ai[mcp]"}}},
-		Server:    &mcp.Server{Name: "headroom", Command: "headroom", Args: []string{"mcp"}},
-		MetricKey: "compressions",
+		Name:    "headroom",
+		Kind:    "mcp",
+		Install: []runner.Command{{Name: "uv", Args: []string{"tool", "install", "headroom-ai[mcp]"}}},
+		Server:  &mcp.Server{Name: "headroom", Command: "headroom", Args: []string{"mcp"}},
 	}
 }
 
@@ -48,8 +46,7 @@ func CodeGraph() Mechanism {
 			{Name: "uv", Args: []string{"tool", "install", "graphifyy"}},
 			{Name: "graphify", Args: []string{"install", "--platform", "claude"}},
 		},
-		Commands:  []runner.Command{{Name: "graphify", Args: []string{"update", "."}}},
-		Server:    &mcp.Server{Name: "graphify", Command: "graphify-mcp"},
-		MetricKey: "graph_queries",
+		Commands: []runner.Command{{Name: "graphify", Args: []string{"update", "."}}},
+		Server:   &mcp.Server{Name: "graphify", Command: "graphify-mcp"},
 	}
 }

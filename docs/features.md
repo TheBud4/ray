@@ -205,10 +205,10 @@ Quem escreve é o hook, não o binário: só o `session-start.sh` grava, e só
 que o `stats` leia o que ele escreveu, para o nome do arquivo não divergir dos
 dois lados em silêncio.
 
-`compressions` e `graph_queries` têm rótulo no `stats`, mas nada neste repositório
-as grava, e as versões de `headroom-ai` e `graphifyy` verificadas não escrevem
-esses arquivos. Na prática o `stats` só mostra handoffs, a menos que uma
-ferramenta passe a gravá-los; chave desconhecida aparece com o próprio nome.
+Só `handoffs` tem rótulo. O `stats` lista qualquer `<chave>.count` que exista,
+então um contador gravado por outra ferramenta aparece com o próprio nome, sem
+mudança no ray; as versões de `headroom-ai` e `graphifyy` verificadas não gravam
+nenhum. Chave sem arquivo não aparece: o `stats` nunca imprime zero inventado.
 
 ## `ray update` e a proteção de edição local
 

@@ -46,13 +46,13 @@ func TestRunStatsFormatsCounts(t *testing.T) {
 	}
 	got := out.String()
 
-	for _, want := range []string{"12 handoffs", "7 context compressions", "3 future_mechanism"} {
+	for _, want := range []string{"12 handoffs", "7 compressions", "3 future_mechanism"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("output = %q, want it to contain %q", got, want)
 		}
 	}
 	// deterministic order: alphabetical by key (compressions, future_mechanism, handoffs)
-	if strings.Index(got, "context compressions") > strings.Index(got, "future_mechanism") ||
+	if strings.Index(got, "compressions") > strings.Index(got, "future_mechanism") ||
 		strings.Index(got, "future_mechanism") > strings.Index(got, "handoffs") {
 		t.Errorf("output = %q, want alphabetical-by-key order", got)
 	}

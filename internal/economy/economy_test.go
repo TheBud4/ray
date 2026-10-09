@@ -27,9 +27,6 @@ func TestHeadroomFields(t *testing.T) {
 	if !reflect.DeepEqual(m.Server, wantServer) {
 		t.Errorf("Server = %#v, want %#v", m.Server, wantServer)
 	}
-	if m.MetricKey == "" {
-		t.Error("MetricKey is empty")
-	}
 }
 
 func TestCodeGraphFields(t *testing.T) {
@@ -54,8 +51,5 @@ func TestCodeGraphFields(t *testing.T) {
 	wantServer := &mcp.Server{Name: "graphify", Command: "graphify-mcp"}
 	if !reflect.DeepEqual(m.Server, wantServer) {
 		t.Errorf("Server = %#v, want %#v", m.Server, wantServer)
-	}
-	if m.MetricKey == "" {
-		t.Error("MetricKey is empty")
 	}
 }

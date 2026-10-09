@@ -11,13 +11,11 @@ import (
 	"github.com/TheBud4/ray/internal/metrics"
 )
 
-// statsLabels traduz MetricKey conhecidos (internal/economy.Mechanism) em
-// rótulos legíveis. Fica local a este comando — é uma preocupação de
-// apresentação, não de identidade do mecanismo (não engorda economy.Mechanism).
+// statsLabels traduz as chaves que algo grava de fato em rótulos legíveis. Hoje
+// só o hook de sessão grava (handoffs); chave sem rótulo aparece com o próprio
+// nome.
 var statsLabels = map[string]string{
-	"graph_queries": "graph queries",
-	"compressions":  "context compressions",
-	"handoffs":      "handoffs",
+	"handoffs": "handoffs",
 }
 
 func newStatsCmd() *cobra.Command {
