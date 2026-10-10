@@ -11,6 +11,7 @@ import (
 
 	"github.com/TheBud4/ray/internal/runner"
 	"github.com/TheBud4/ray/internal/store"
+	"github.com/TheBud4/ray/internal/testenv"
 )
 
 func treeOf(t *testing.T, root string) []string {
@@ -37,7 +38,7 @@ func symlinkOrSkip(t *testing.T, target, path string) {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(target, path); err != nil {
-		t.Skipf("symlink not supported here: %v", err)
+		testenv.SymlinkUnavailable(t, err)
 	}
 }
 

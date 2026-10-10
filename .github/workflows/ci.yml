@@ -14,6 +14,8 @@ jobs:
         with:
           go-version-file: go.mod
       - run: make ci
+        env:
+          RAY_REQUIRE_SYMLINKS: "1"
 
   # O gate completo (`make ci`) roda no Linux. Aqui só a suíte, em Windows e
   # macOS: o ray escreve em repositórios de terceiros, e caminho, symlink, modo
@@ -31,7 +33,19 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go build ./...
-      - run: go test ./...
+      # -count=1 e -v: sem cache, e com cada pulo nomeado no log. Um teste que
+      # pula em silêncio no runner faz a garantia parecer medida onde nunca rodou.
+      # RAY_REQUIRE_SYMLINKS transforma a falta de symlink em falha, não em pulo:
+      # o guard de symlink é a garantia de segurança do ray.
+      - name: go test
+        shell: bash
+        env:
+          RAY_REQUIRE_SYMLINKS: "1"
+        run: |
+          go test -v -count=1 ./... 2>&1 | tee test.log
+          echo "::group::skipped tests"
+          grep -e '--- SKIP' test.log || true
+          echo "::endgroup::"
       # O smoke do binário também no macOS (o `ci` do Linux já o roda via make).
       - run: bash scripts/smoke.sh
         if: runner.os == 'macOS'

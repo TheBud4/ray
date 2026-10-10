@@ -510,17 +510,28 @@ que número nenhum, e quem acabou de escrever a linha não precisa de coordenada
 
 ## Limites conhecidos no Windows
 
-Verificado só pelo CI (`go test ./...` em `windows-latest`); nenhum uso real
-medido. Duas coisas estão fora do que a suíte afirma lá, e cada uma é um pulo
-declarado em teste, não uma garantia:
+Verificado só pelo CI (`go test -v ./...` em `windows-latest`); nenhum uso real
+medido. O job lista cada pulo (`--- SKIP`) no log e exige symlinks
+(`RAY_REQUIRE_SYMLINKS`): a falta de privilégio para criá-los falha o job em vez
+de pular o guard de symlink em silêncio. O que a suíte **não** afirma lá, cada
+item um pulo declarado em teste, não uma garantia:
 
 - **Leitura concorrente da linha-base.** O `rename` atômico por cima de um arquivo
   que outro handle abre falha por instantes no Windows. A gravação repete o
-  `rename` por até ~130 ms (`internal/fsutil`), mas um leitor que chega nesse
-  instante vê o arquivo como ilegível, não pela metade. Só importa com dois `ray`
-  mexendo no mesmo estado.
+  `rename` por cerca de meio segundo (10 tentativas, esperas de 1 a 256 ms,
+  `internal/fsutil`), mas um leitor que chega nesse instante vê o arquivo como
+  ilegível, não pela metade. Só importa com dois `ray` mexendo no mesmo estado.
 - **Bit de execução e permissão de pasta não existem**; os testes que os
   afirmam valem em Linux e macOS.
+- **Executáveis falsos são scripts `sh`**, então pulam: que a tela inicial não
+  cria processo (`TestRootWithoutArgsSpawnsNoProcess`), que `doctor --fix
+  --dry-run` não executa e que `--dry-run` não abre o editor nem o app. Valem em
+  Linux; no macOS só o último (`xdg-open`) pula.
+- **Hooks com `jq` ausente** pulam por desenho: sem `jq` os avisos ficam mudos.
+
+Não medido, só lido no código: o guard de symlink segue `ModeSymlink`, e o Go
+trata uma junção do Windows como `ModeIrregular`, então uma junção para fora pode
+não ser recusada. O `git clone` não cria junção; ela precisaria ser feita à mão.
 
 ## `/destilar`
 

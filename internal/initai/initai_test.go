@@ -19,6 +19,7 @@ import (
 	"github.com/TheBud4/ray/internal/rayconfig"
 	"github.com/TheBud4/ray/internal/runner"
 	"github.com/TheBud4/ray/internal/store"
+	"github.com/TheBud4/ray/internal/testenv"
 )
 
 type stubLooker map[string]bool
@@ -931,7 +932,7 @@ func TestRunTwicePreservesEditedComponentWhoseHashCannotBeComputed(t *testing.T)
 				t.Fatal(err)
 			}
 			if err := os.Symlink(filepath.Join(target, "no-such-target"), filepath.Join(skillDir, "dangling")); err != nil {
-				t.Skipf("symlinks unavailable: %v", err)
+				testenv.SymlinkUnavailable(t, err)
 			}
 
 			opts.Force = force

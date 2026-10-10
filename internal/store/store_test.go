@@ -1,6 +1,7 @@
 package store
 
 import (
+	"github.com/TheBud4/ray/internal/testenv"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -147,7 +148,7 @@ func TestLocalState(t *testing.T) {
 	t.Run("tree with a dangling symlink exists but has no hash", func(t *testing.T) {
 		dir := seedTree(t, map[string]string{"SKILL.md": "# s"})
 		if err := os.Symlink(filepath.Join(dir, "missing-target"), filepath.Join(dir, "dangling")); err != nil {
-			t.Skipf("symlinks unavailable: %v", err)
+			testenv.SymlinkUnavailable(t, err)
 		}
 		hash, exists := LocalState(dir)
 		if !exists || hash != "" {
@@ -189,7 +190,7 @@ func TestCopyTreeGivesASymlinkTheModeOfItsTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.Symlink("real.md", filepath.Join(src, "link.md")); err != nil {
-		t.Skipf("symlinks unavailable: %v", err)
+		testenv.SymlinkUnavailable(t, err)
 	}
 	dst := filepath.Join(t.TempDir(), "out")
 
@@ -526,7 +527,7 @@ func TestResolveSourcesSkipsAbsentAndNamesTheOffender(t *testing.T) {
 	}
 
 	if err := os.Symlink(t.TempDir(), filepath.Join(root, "ok", "pasta")); err != nil {
-		t.Skipf("symlink not supported here: %v", err)
+		testenv.SymlinkUnavailable(t, err)
 	}
 	_, err = ResolveSources(root, []string{"ok"})
 	if err == nil || !strings.Contains(err.Error(), `"ok"`) || !strings.Contains(err.Error(), "symlink") {

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/TheBud4/ray/internal/runner"
+	"github.com/TheBud4/ray/internal/testenv"
 )
 
 // treeOf lista tudo sob root (arquivos, pastas e symlinks, sem seguir link),
@@ -69,7 +70,7 @@ func symlinkOrSkip(t *testing.T, target, path string) {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(target, path); err != nil {
-		t.Skipf("symlink not supported here: %v", err)
+		testenv.SymlinkUnavailable(t, err)
 	}
 }
 

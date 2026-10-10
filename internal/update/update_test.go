@@ -15,6 +15,7 @@ import (
 	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/runner"
 	"github.com/TheBud4/ray/internal/store"
+	"github.com/TheBud4/ray/internal/testenv"
 )
 
 // ---- decideOverwrite (pure) -------------------------------------------
@@ -834,7 +835,7 @@ func seedEditedComponentWithDanglingSymlink(t *testing.T, home Home, target stri
 		t.Fatal(err)
 	}
 	if err := os.Symlink(filepath.Join(target, "no-such-target"), filepath.Join(skillDir, "dangling")); err != nil {
-		t.Skipf("symlinks unavailable: %v", err)
+		testenv.SymlinkUnavailable(t, err)
 	}
 	oldPristine, err := store.HashTree(seedTempFile(t, "# original"))
 	if err != nil {

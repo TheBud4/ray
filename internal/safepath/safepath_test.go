@@ -1,6 +1,7 @@
 package safepath
 
 import (
+	"github.com/TheBud4/ray/internal/testenv"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,7 +32,7 @@ func link(t *testing.T, target, path string) {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(target, path); err != nil {
-		t.Skipf("symlink not supported here: %v", err)
+		testenv.SymlinkUnavailable(t, err)
 	}
 }
 

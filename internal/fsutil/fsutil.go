@@ -17,7 +17,7 @@ var (
 )
 
 // Tentativas e espera inicial do rename no Windows. A espera dobra a cada
-// tentativa (1ms, 2ms, ... 64ms), somando cerca de meio segundo no pior caso.
+// tentativa (1ms, 2ms, ... 256ms), somando cerca de meio segundo no pior caso.
 const (
 	renameAttempts   = 10
 	renameFirstDelay = time.Millisecond
