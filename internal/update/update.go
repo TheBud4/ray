@@ -98,6 +98,18 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 		}
 	}
 
+	// A origem dos componentes também é conferida antes de qualquer efeito: um
+	// link dentro de um componente que leve para fora dele seria copiado como
+	// arquivo comum para dentro do projeto.
+	compNames := make([]string, len(prof.Components))
+	for i, c := range prof.Components {
+		compNames[i] = c.Name
+	}
+	sources, err := store.ResolveSources(home.ComponentsDir, compNames)
+	if err != nil {
+		return Summary{}, err
+	}
+
 	// A linha-base é o que separa "intocado" de "editado": ilegível, nada abaixo
 	// pode decidir sobre sobrescrita, então para antes de qualquer efeito.
 	baseline := store.ProjectBaseline(target).WithLegacy(store.New(home.StoreDir))
@@ -141,7 +153,7 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 		}
 		onDisk := filepath.Join(target, c.Dest, c.Name)
 
-		freshHash, herr := store.HashTree(srcDir)
+		freshHash, herr := store.HashTree(sources[c.Name])
 		if herr != nil {
 			return Summary{}, herr
 		}
@@ -186,7 +198,7 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 		if err := os.RemoveAll(onDisk); err != nil && !os.IsNotExist(err) {
 			return Summary{}, err
 		}
-		if err := store.CopyTree(srcDir, onDisk); err != nil {
+		if err := store.CopyTree(sources[c.Name], onDisk); err != nil {
 			sum.Failed = append(sum.Failed, c.Name)
 			continue
 		}

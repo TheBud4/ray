@@ -70,6 +70,11 @@ O risco central deste programa: ele roda `uv`, `graphify`, `git` e os passos de
   novo que o guard esqueça faz o teste falhar. Escrita transitória (o probe de
   gravabilidade) usa nome aleatório e criação exclusiva, nunca um nome fixo que
   um clone possa ter plantado como symlink.
+- **[MUST]** A cópia de um componente (`~/.ray/components/<Name>`) não leva para o
+  projeto conteúdo de fora da pasta do componente: um link de arquivo dentro dele
+  só passa se o alvo ficar dentro do componente; link para fora, pendente ou para
+  pasta recusa o `init ai` e o `update` antes de qualquer efeito
+  (`store.ResolveSources`). A própria pasta do componente pode ser um symlink.
 - **[MUST]** Não sobrescrever arquivo existente sem `--force` explícito, e
   `.claude/handoff.md` **nunca** é sobrescrito nem com `--force` — é estado vivo
   do usuário.

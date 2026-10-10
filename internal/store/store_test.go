@@ -509,3 +509,27 @@ func TestBaselineVerifyChecksTheLegacyStoreOnlyWhileItIsNeeded(t *testing.T) {
 		}
 	})
 }
+
+// ResolveSources deixa de fora o componente ausente (quem chama já trata) e
+// nomeia, no erro, o componente cujo link sai da pasta.
+func TestResolveSourcesSkipsAbsentAndNamesTheOffender(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "ok"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ResolveSources(root, []string{"ok", "absent"})
+	if err != nil {
+		t.Fatalf("ResolveSources() error = %v", err)
+	}
+	if _, has := got["absent"]; has || got["ok"] == "" {
+		t.Errorf("ResolveSources() = %v, want only ok", got)
+	}
+
+	if err := os.Symlink(t.TempDir(), filepath.Join(root, "ok", "pasta")); err != nil {
+		t.Skipf("symlink not supported here: %v", err)
+	}
+	_, err = ResolveSources(root, []string{"ok"})
+	if err == nil || !strings.Contains(err.Error(), `"ok"`) || !strings.Contains(err.Error(), "symlink") {
+		t.Errorf("ResolveSources() error = %v, want it to name component ok and say symlink", err)
+	}
+}

@@ -219,6 +219,18 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		return Summary{}, err
 	}
 
+	// A origem dos componentes também é conferida antes de qualquer efeito: um
+	// link dentro de um componente que leve para fora dele seria copiado como
+	// arquivo comum para dentro do projeto.
+	compNames := make([]string, len(prof.Components))
+	for i, c := range prof.Components {
+		compNames[i] = c.Name
+	}
+	sources, err := store.ResolveSources(home.ComponentsDir, compNames)
+	if err != nil {
+		return Summary{}, err
+	}
+
 	// 4. preflight — aborta antes de qualquer efeito. A mensagem sai do
 	// preflight, que é dono tanto do que checar quanto do que dizer: montar a
 	// string aqui descartava o Hint e o Fix que o Check já carrega.
@@ -300,7 +312,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		// Edição local do usuário é preservada pela mesma política do
 		// `ray update`: só sobrescreve se o destino ainda é o pristino. A
 		// decisão é só leitura, então vale igual para o dry-run.
-		freshHash, err := store.HashTree(srcDir)
+		freshHash, err := store.HashTree(sources[c.Name])
 		if err != nil {
 			return Summary{}, err
 		}
@@ -326,7 +338,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		if err := os.RemoveAll(destDir); err != nil && !os.IsNotExist(err) {
 			return Summary{}, err
 		}
-		if err := store.CopyTree(srcDir, destDir); err != nil {
+		if err := store.CopyTree(sources[c.Name], destDir); err != nil {
 			sum.Failed = append(sum.Failed, c.Name)
 			continue
 		}

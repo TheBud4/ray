@@ -138,8 +138,13 @@ projeto, um destino que um symlink leve para fora dele; o link que resolve para
 dentro continua valendo. O `init ai` confere os destinos fixos (`.mcp.json`,
 `settings.json`, `.gitignore`, o registro, a linha-base e os hooks de sistema) e
 os da receita; o `update`, o registro, a linha-base e cada componente com as
-entradas que já existem nele. A fonte dos componentes (`~/.ray/components`) segue
-symlink como antes: a pasta é do usuário. O guard é uma checagem prévia, não uma
+entradas que já existem nele. A fonte dos componentes (`~/.ray/components`) é
+conferida na mesma fase (`store.ResolveSources`): a pasta de um componente pode
+ser ela mesma um symlink, mas um link **dentro** dele só passa se for de arquivo
+e o alvo ficar dentro do componente — a cópia segue o link e grava arquivo comum
+no projeto, que o rodapé manda commitar, então um link para fora levaria
+conteúdo alheio para um repositório. Link para fora, pendente ou para pasta é
+recusado com o componente e o link no erro. O guard é uma checagem prévia, não uma
 barreira no momento da escrita; ele cobre um clone, não um processo que troca o
 disco durante a execução. Um servidor MCP (`headroom`, `code_graph`) se
 declara em `Integrations`, nunca em `Components` — são conceitos disjuntos por

@@ -97,4 +97,22 @@ if (cd "$work/crlf-clone" && "$ray" status) 2>&1 | grep -q "edited locally"; the
   fail "a core.autocrlf checkout made untouched components look edited"
 fi
 
+step "a component symlink that leaves the component is refused"
+mkdir -p "$RAY_HOME/components/leaky"
+printf '# leaky\n' > "$RAY_HOME/components/leaky/SKILL.md"
+ln -s "$victim" "$RAY_HOME/components/leaky/leak.txt"
+cat > "$RAY_HOME/profiles/leaky.yaml" <<'YAML'
+name: leaky
+description: smoke recipe with a component that links outside itself
+components:
+  - name: leaky
+    dest: .claude/skills
+YAML
+leakproj="$work/leakproj"
+mkdir "$leakproj"
+if "$ray" init ai --profile leaky --no-global "$leakproj" >/dev/null 2>&1; then
+  fail "init ai copied a component whose symlink leaves the component"
+fi
+[ -z "$(ls -A "$leakproj")" ] || fail "init ai left traces after refusing a leaking component: $(ls -A "$leakproj")"
+
 step "ok"

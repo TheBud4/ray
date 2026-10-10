@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -51,6 +52,64 @@ func LocalState(path string) (hash string, exists bool) {
 		return "", true
 	}
 	return h, true
+}
+
+// ResolveSources valida e resolve a pasta de origem de cada componente que
+// existe em componentsDir, antes de qualquer efeito, e devolve nome→caminho já
+// resolvido. Componente ausente ou que não é pasta fica de fora: quem chama já
+// trata a ausência. A pasta do componente pode ser ela mesma um symlink (é como
+// se mantém um componente em outro lugar); os links DENTRO dela, não — a cópia
+// os segue e grava arquivo comum no projeto, que o rodapé do init manda
+// commitar, então um link para fora levaria conteúdo alheio para dentro de um
+// repositório. Só passa link de arquivo cujo alvo fica dentro do componente.
+func ResolveSources(componentsDir string, names []string) (map[string]string, error) {
+	out := make(map[string]string, len(names))
+	for _, name := range names {
+		dir := filepath.Join(componentsDir, name)
+		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+			continue
+		}
+		root, err := resolveSource(dir)
+		if err != nil {
+			return nil, fmt.Errorf("refusing to copy component %q: %w", name, err)
+		}
+		out[name] = root
+	}
+	return out, nil
+}
+
+func resolveSource(dir string) (string, error) {
+	root, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return "", err
+	}
+	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.Type()&fs.ModeSymlink == 0 {
+			return nil
+		}
+		rel, _ := filepath.Rel(root, p)
+		dest, err := os.Readlink(p)
+		if err != nil {
+			return err
+		}
+		resolved, err := filepath.EvalSymlinks(p)
+		if err != nil {
+			return fmt.Errorf("%s is a symlink to %s, which cannot be resolved: %w", rel, dest, err)
+		}
+		if back, err := filepath.Rel(root, resolved); err != nil || back == ".." || strings.HasPrefix(back, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("%s is a symlink to %s, outside the component %s", rel, dest, root)
+		}
+		if info, err := os.Stat(resolved); err != nil {
+			return err
+		} else if info.IsDir() {
+			return fmt.Errorf("%s is a symlink to a folder (%s); link the files, or the whole component folder", rel, dest)
+		}
+		return nil
+	})
+	return root, err
 }
 
 // HashTree calcula um sha256 determinístico sobre (rel-path, conteúdo) de

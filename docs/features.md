@@ -224,6 +224,14 @@ de novo no mesmo alvo segue a mesma política: componente editado é preservado
 (entra em `Skipped`, com aviso) e a linha-base não se move; só `--force`
 sobrescreve.
 
+Antes de copiar, `init ai` e `update` conferem a origem de cada componente: um
+link de arquivo dentro dele é seguido e vira arquivo comum no projeto, desde que o
+alvo fique dentro do componente. Link que sai da pasta, pendente ou para pasta
+recusa o comando inteiro, antes de qualquer efeito, com o componente e o link no
+erro (`refusing to copy component "x": leak.txt is a symlink to …`). A pasta do
+componente em si pode ser um symlink — é como se mantém um componente fora de
+`~/.ray/components`.
+
 **O que tem de valer:**
 
 - **Edição local nunca é sobrescrita em silêncio.** Componente divergente entra
