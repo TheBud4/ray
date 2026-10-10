@@ -81,6 +81,7 @@ ignorasse.
 
 `.claude/skills/` · `.claude/agents/` · `.claude/commands/` ·
 `.claude/settings.json` · `.claude/.ray-profile` · `.claude/.ray-pristine.yaml` ·
+`.claude/.gitattributes` ·
 `.mcp.json` · `docs/` ·
 `**/.ray-origin` · `**/LICENSE`
 

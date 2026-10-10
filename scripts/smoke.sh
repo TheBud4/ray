@@ -82,4 +82,19 @@ if init "$evil" >/dev/null 2>&1; then
 fi
 [ "$(cat "$victim")" = "KEEP" ] || fail "init ai wrote through a symlink out of the project"
 
+step "a CRLF checkout (the Windows default) leaves hooks and components intact"
+crlf="$work/crlf"
+mkdir "$crlf"
+init "$crlf" >/dev/null || fail "init ai exited non-zero for the CRLF project"
+git -C "$crlf" init -q
+git -C "$crlf" add .claude .gitignore CLAUDE.md
+git -C "$crlf" -c user.email=smoke@ray -c user.name=smoke commit -q -m vendor
+git clone -q -c core.autocrlf=true "$crlf" "$work/crlf-clone"
+if grep -lq $'\r' "$work"/crlf-clone/.claude/hooks/*.sh "$work/crlf-clone/.claude/skills/s/SKILL.md"; then
+  fail "a core.autocrlf checkout put CRLF in the vendored hooks or components"
+fi
+if (cd "$work/crlf-clone" && "$ray" status) 2>&1 | grep -q "edited locally"; then
+  fail "a core.autocrlf checkout made untouched components look edited"
+fi
+
 step "ok"

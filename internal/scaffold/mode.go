@@ -7,7 +7,7 @@ import (
 
 // SystemFiles são os arquivos "de sistema" que o ray sempre escreve, fora da
 // receita — garante que todo hook referenciado em settings.json exista no
-// disco. No initai (Fase 8), estes se somam a prof.Files (dedup por path,
+// disco, e que um checkout com conversão de fim de linha não os corrompa. No initai (Fase 8), estes se somam a prof.Files (dedup por path,
 // receita ganha).
 func SystemFiles() []profile.ScaffoldFile {
 	return []profile.ScaffoldFile{
@@ -16,6 +16,7 @@ func SystemFiles() []profile.ScaffoldFile {
 		{Path: ".claude/hooks/guard-vocab.sh"},
 		{Path: ".claude/hooks/guard-plans.sh"},
 		{Path: ".claude/hooks/guard-handoff.sh"},
+		{Path: ".claude/.gitattributes"},
 	}
 }
 

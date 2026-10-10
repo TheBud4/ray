@@ -358,6 +358,7 @@ A árvore que `ray init ai` produz na pasta-alvo:
 └── .claude/
     ├── .ray-profile           # perfil usado; é o que o `ray update` lê
     ├── .ray-pristine.yaml     # hash do que o ray escreveu em cada componente (versionado)
+    ├── .gitattributes         # `* -text`: sem conversão de fim de linha no que o ray vendoriza
     ├── settings.json          # model, effortLevel, hooks
     ├── handoff.md              # estado vivo (gerido pela IA; NUNCA tocado por --force)
     ├── commands/{destilar,document,handoff,revisar}.md
@@ -388,6 +389,15 @@ quatro guards abaixo existam no disco de todo projeto, **fora da receita** —
 isso garante que todo hook referenciado em `settings.json` tenha o script que
 ele nomeia. No `init ai`, os arquivos da receita e os de sistema são
 deduplicados por path (receita ganha).
+
+O mesmo conjunto traz `.claude/.gitattributes` (`* -text`). O checkout padrão do
+Git no Windows converte texto para CRLF, o que quebra os hooks em bash
+(`set: pipefail: nome de opção inválido`) e muda o hash que separa "o usuário
+editou isto?" do que veio do ray — todo componente passaria a parecer editado e
+o `update` o pularia. Por morar dentro de `.claude/`, a regra vale só para o que o
+ray vendoriza e não toca o `.gitattributes` da raiz, que é do usuário.
+`scripts/smoke.sh` clona um projeto com `core.autocrlf=true` e exige hooks sem
+`\r` e nenhum componente "edited locally".
 
 `scaffold.HookSettings()` devolve o bloco `hooks` que o ray instala em
 `settings.json`: `SessionStart` (sempre, injeta o handoff) + `PreToolUse` (os

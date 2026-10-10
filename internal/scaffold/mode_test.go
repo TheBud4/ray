@@ -13,7 +13,7 @@ import (
 
 func TestSystemFilesIsSessionStartThreeWarningGuardsAndGuardHandoff(t *testing.T) {
 	files := SystemFiles()
-	want := []string{".claude/hooks/session-start.sh", ".claude/hooks/guard-add.sh", ".claude/hooks/guard-vocab.sh", ".claude/hooks/guard-plans.sh", ".claude/hooks/guard-handoff.sh"}
+	want := []string{".claude/hooks/session-start.sh", ".claude/hooks/guard-add.sh", ".claude/hooks/guard-vocab.sh", ".claude/hooks/guard-plans.sh", ".claude/hooks/guard-handoff.sh", ".claude/.gitattributes"}
 	if len(files) != len(want) {
 		t.Fatalf("SystemFiles() = %v, want %v", files, want)
 	}
@@ -309,4 +309,28 @@ func TestHooksTreatABackslashPayloadPathLikeASlashOne(t *testing.T) {
 			t.Errorf("guard-vocab.sh on an exempt backslash path = %q, want silent", out)
 		}
 	})
+}
+
+// O checkout padrão no Windows converte o fim de linha dos arquivos de texto, e
+// isso quebra os hooks em bash e muda o hash que decide "o usuário editou
+// isto?". A regra viaja com o projeto, num .gitattributes dentro de .claude/,
+// que vale só para o que o ray vendoriza e não toca o .gitattributes da raiz.
+func TestGitattributesSystemFileTurnsOffEOLConversion(t *testing.T) {
+	target := t.TempDir()
+	if _, err := WriteFiles(SystemFiles(), Options{Target: target}); err != nil {
+		t.Fatalf("WriteFiles() error = %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(target, ".claude", ".gitattributes"))
+	if err != nil {
+		t.Fatalf("read .claude/.gitattributes: %v", err)
+	}
+	var rule bool
+	for _, line := range strings.Split(string(got), "\n") {
+		if strings.TrimSpace(line) == "* -text" {
+			rule = true
+		}
+	}
+	if !rule {
+		t.Errorf(".claude/.gitattributes = %q, want a line %q", got, "* -text")
+	}
 }

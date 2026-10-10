@@ -47,6 +47,7 @@ var templateFor = map[string]string{
 	".claude/hooks/guard-vocab.sh":   "claude/hooks/guard-vocab.sh.tmpl",
 	".claude/hooks/guard-plans.sh":   "claude/hooks/guard-plans.sh.tmpl",
 	".claude/hooks/guard-handoff.sh": "claude/hooks/guard-handoff.sh.tmpl",
+	".claude/.gitattributes":         "claude/gitattributes.tmpl",
 }
 
 // Data são os placeholders disponíveis em todo template.
@@ -221,6 +222,7 @@ var gitignoreBaseLines = []string{
 	"!docs/",
 	"!.claude/.ray-profile",
 	"!.claude/.ray-pristine.yaml",
+	"!.claude/.gitattributes",
 	"!**/.ray-origin",
 	"!**/LICENSE",
 	"",
