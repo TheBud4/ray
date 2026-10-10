@@ -67,7 +67,9 @@ O risco central deste programa: ele roda `uv`, `graphify`, `git` e os passos de
 - **[MUST]** Um symlink no projeto que leve para fora dele não é seguido: `init ai`
   e `update` recusam o destino antes de qualquer escrita (`internal/safepath`).
   O teste enumera o que um `init ai` escreve num projeto vazio: um destino
-  novo que o guard esqueça faz o teste falhar.
+  novo que o guard esqueça faz o teste falhar. Escrita transitória (o probe de
+  gravabilidade) usa nome aleatório e criação exclusiva, nunca um nome fixo que
+  um clone possa ter plantado como symlink.
 - **[MUST]** Não sobrescrever arquivo existente sem `--force` explícito, e
   `.claude/handoff.md` **nunca** é sobrescrito nem com `--force` — é estado vivo
   do usuário.

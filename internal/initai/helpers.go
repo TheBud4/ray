@@ -74,7 +74,10 @@ func checkDestinations(target string, rels []string) error {
 }
 
 // ensureWritableDir garante que dir existe e é gravável, escrevendo e
-// removendo um arquivo-probe.
+// removendo um arquivo-probe. O nome é aleatório e a criação é exclusiva
+// (os.CreateTemp): um nome fixo poderia vir de um clone como symlink para fora,
+// e o probe o seguiria — escrita que nenhum guard de destino enxerga, porque
+// roda depois deles e some antes da enumeração.
 //
 // Em dryRun não faz nem uma coisa nem outra: um dry-run que cria o diretório
 // do projeto já executou a parte irreversível antes de o usuário decidir. O
@@ -90,11 +93,16 @@ func ensureWritableDir(dir string, dryRun bool, out io.Writer) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	probe := filepath.Join(dir, ".ray-write-test")
-	if err := os.WriteFile(probe, nil, 0o644); err != nil {
+	probe, err := os.CreateTemp(dir, ".ray-write-test-*")
+	if err != nil {
 		return err
 	}
-	return os.Remove(probe)
+	name := probe.Name()
+	if err := probe.Close(); err != nil {
+		os.Remove(name)
+		return err
+	}
+	return os.Remove(name)
 }
 
 // runOne roda c via r e classifica o resultado: err ou ExitCode != 0 → ok

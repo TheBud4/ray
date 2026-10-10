@@ -162,3 +162,44 @@ func TestRunFollowsASymlinkThatStaysInsideTheProject(t *testing.T) {
 		t.Errorf("component not written through the internal symlink: %v", err)
 	}
 }
+
+// O probe de gravabilidade escreve no projeto antes da enumeração do teste
+// acima, que só vê o que sobra depois de apagado. Um clone que traga o nome do
+// probe como symlink para fora não pode fazer o init truncar o alvo nem criar
+// arquivo lá.
+func TestRunProbeNeverWritesThroughAPlantedSymlink(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "s")
+	writeProfile(t, home.ProfilesDir, testProfile())
+
+	for _, dangling := range []bool{false, true} {
+		name := "existing target"
+		if dangling {
+			name = "dangling target"
+		}
+		t.Run(name, func(t *testing.T) {
+			outside := t.TempDir()
+			victim := filepath.Join(outside, "victim")
+			if !dangling {
+				if err := os.WriteFile(victim, []byte("SENTINEL"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			target := t.TempDir()
+			symlinkOrSkip(t, victim, filepath.Join(target, ".ray-write-test"))
+
+			opts := Options{Profile: "test", Target: target, NoGlobal: true, Out: &bytes.Buffer{}}
+			if _, err := Run(&runner.FakeRunner{}, allFound, opts, home); err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+
+			b, err := os.ReadFile(victim)
+			switch {
+			case dangling && err == nil:
+				t.Errorf("the probe created %s through the dangling symlink", victim)
+			case !dangling && string(b) != "SENTINEL":
+				t.Errorf("victim = %q, want it untouched (the probe truncated it)", b)
+			}
+		})
+	}
+}
