@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/scaffold"
 	"github.com/TheBud4/ray/internal/store"
 	"github.com/TheBud4/ray/internal/testenv"
@@ -406,5 +407,60 @@ func TestResetOfOutdatedAndNewNeedsNoForceAndCustomIsRefused(t *testing.T) {
 	f.overlay("mine.tmpl", "x")
 	if _, _, err := f.cat.Reset("mine.tmpl", true, count); !errors.Is(err, ErrCustom) {
 		t.Errorf("Reset(custom) error = %v, want ErrCustom", err)
+	}
+}
+
+func TestInspectReportsEveryProblemAndCountsThem(t *testing.T) {
+	f := newFixture(t)
+	comps := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(comps, "good"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(comps, "leaky"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(f.dir, filepath.Join(comps, "leaky", "pasta")); err != nil {
+		testenv.SymlinkUnavailable(t, err)
+	}
+	f.overlay("broken.tmpl", "{{ .ProjectName")
+	p := &profile.Profile{
+		Name: "x",
+		Components: []profile.Component{
+			{Name: "good", Dest: ".claude/skills"},
+			{Name: "gone", Dest: ".claude/skills"},
+			{Name: "leaky", Dest: ".claude/skills"},
+		},
+		Scaffold: profile.Scaffold{Files: []profile.ScaffoldFile{
+			{Path: "CLAUDE.md"},
+			{Path: "a.md", Template: "does-not-exist.tmpl"},
+			{Path: "b.md"},
+			{Path: "c.md", Template: "broken.tmpl"},
+		}},
+	}
+	r, err := f.cat.Inspect(p, comps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := map[string]string{}
+	for _, c := range r.Components {
+		status[c.Name] = c.Status
+	}
+	if status["good"] != ComponentOK || status["gone"] != ComponentMissing || status["leaky"] != ComponentRefused {
+		t.Errorf("components = %v", status)
+	}
+	problem := map[string]string{}
+	paths := []string{}
+	for _, fr := range r.Files {
+		problem[fr.Path] = fr.Problem
+		paths = append(paths, fr.Path)
+	}
+	if problem["CLAUDE.md"] != "" || problem["a.md"] != "missing template" || problem["b.md"] != "no template for path" || !strings.HasPrefix(problem["c.md"], "broken: ") {
+		t.Errorf("file problems = %v", problem)
+	}
+	if !slices.Contains(paths, ".claude/hooks/guard-add.sh") {
+		t.Errorf("system files missing from Files: %v", paths)
+	}
+	if got := r.Problems(); got != 2+3 {
+		t.Errorf("Problems() = %d, want 5 (gone, leaky, a.md, b.md, c.md)", got)
 	}
 }

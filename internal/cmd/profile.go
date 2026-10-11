@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/TheBud4/ray/internal/catalog"
 	"github.com/TheBud4/ray/internal/installer"
 	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/raypaths"
@@ -81,12 +82,34 @@ func newProfileShowCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runProfileShow(dir, args[0], cmd.OutOrStdout())
+			cat, err := templateCatalog(true)
+			if err != nil {
+				return err
+			}
+			componentsDir, err := raypaths.ComponentsDir()
+			if err != nil {
+				return err
+			}
+			p, err := profile.LoadByName(dir, args[0])
+			if err != nil {
+				return err
+			}
+			rep, err := cat.Inspect(p, componentsDir)
+			if err != nil {
+				return err
+			}
+			return runProfileShowWith(dir, args[0], &rep, cmd.OutOrStdout())
 		},
 	}
 }
 
 func runProfileShow(dir, name string, out io.Writer) error {
+	return runProfileShowWith(dir, name, nil, out)
+}
+
+// runProfileShowWith imprime o plano de um perfil; com rep, anota cada
+// componente e arquivo com o que o `init ai` faria e termina com um veredito.
+func runProfileShowWith(dir, name string, rep *catalog.Report, out io.Writer) error {
 	p, err := profile.LoadByName(dir, name)
 	if err != nil {
 		return err
@@ -100,8 +123,30 @@ func runProfileShow(dir, name string, out io.Writer) error {
 
 	if len(p.Components) > 0 {
 		fmt.Fprintln(out, "\nComponents (copied from local components dir, never downloaded):")
-		for _, c := range p.Components {
-			fmt.Fprintf(out, "  %s -> %s\n", c.Name, filepath.Join(c.Dest, c.Name))
+		for i, c := range p.Components {
+			line := fmt.Sprintf("  %s -> %s", c.Name, filepath.Join(c.Dest, c.Name))
+			if rep != nil {
+				cr := rep.Components[i]
+				if cr.Status == catalog.ComponentOK {
+					line += "  ok"
+				} else {
+					line += fmt.Sprintf("  %s: %s", cr.Status, cr.Detail)
+				}
+			}
+			fmt.Fprintln(out, line)
+		}
+	}
+	if rep != nil {
+		fmt.Fprintln(out, "\nFiles:")
+		for _, f := range rep.Files {
+			switch {
+			case f.Template == "":
+				fmt.Fprintf(out, "  %s  %s\n", f.Path, f.Problem)
+			case f.Problem != "":
+				fmt.Fprintf(out, "  %s <- %s  %s\n", f.Path, f.Template, f.Problem)
+			default:
+				fmt.Fprintf(out, "  %s <- %s  (%s)\n", f.Path, f.Template, f.State)
+			}
 		}
 	}
 	if len(plan.Globals) > 0 {
@@ -119,6 +164,17 @@ func runProfileShow(dir, name string, out io.Writer) error {
 			// separado pendurava um espaço no fim da linha do servidor que não
 			// tem nenhum.
 			fmt.Fprintf(out, "  %s: %s\n", s.Name, strings.Join(append([]string{s.Command}, s.Args...), " "))
+		}
+	}
+	if rep != nil {
+		if n := rep.Problems(); n == 0 {
+			fmt.Fprintln(out, "\nready")
+		} else {
+			noun := "problems"
+			if n == 1 {
+				noun = "problem"
+			}
+			fmt.Fprintf(out, "\n%d %s: `ray init ai --profile %s` would refuse or skip the items marked above\n", n, noun, name)
 		}
 	}
 	return nil
