@@ -52,6 +52,8 @@ internal/
 ├── initai/       # orquestra os 12 passos de `ray init ai`; copia
 │                 #   componentes de ~/.ray/components/, nunca baixa
 ├── scaffold/     # escreve a árvore de orientação; templates embutidos
+├── catalog/      # núcleo de leitura e edição do overlay de templates e
+│                 #   checagem de receita
 ├── update/       # `ray update`: recópia local protegendo edição
 │
 ├── store/        # linha-base pristina (hash) para decidir "foi editado?":
@@ -68,6 +70,7 @@ internal/
 ├── rayconfig/    # lê e grava ~/.ray/config.yaml e o State
 ├── raypaths/     # resolve onde o ray guarda estado em disco
 ├── fsutil/       # escrita atômica de arquivo (estado compartilhado do ~/.ray)
+├── linediff/     # diff unificado puro
 ├── safepath/     # confere que um destino, seguindo symlink, fica dentro do projeto
 ├── runfile/      # aliases do `ray run` (ray.yaml do projeto + global)
 ├── preflight/    # fonte única de checagem de dependências externas
@@ -81,10 +84,12 @@ Quem pode importar quem — e principalmente **quem não pode**, que é a metade
 o código sozinho não conta:
 
 - Só `runner` executa processo externo — quem precisa de processo recebe um
-  `Runner` por parâmetro. **Uma exceção deliberada:** `spawnEditor`
-  (`internal/cmd/profile.go`) usa `exec.Command` direto para abrir o `$EDITOR`,
-  porque `runner.Result` bufferiza stdout/stderr e um editor interativo precisa
-  do terminal cru.
+  `Runner` por parâmetro. **Uma exceção deliberada:** `editorCommand`/`spawnEditor`
+  (`internal/cmd/profile.go`), usados por `profile edit` e `template edit`, abrem
+  o `$EDITOR` sem passar pelo `runner`, porque `runner.Result` bufferiza
+  stdout/stderr e um editor interativo precisa do terminal cru. `exec.LookPath`
+  decide se o `$EDITOR` é um executável inteiro; senão é quebrado em palavras,
+  sem shell, e roda por `exec.Command`.
 - `os/exec` é importado em **três** lugares, e o terceiro não é exceção à regra:
   `preflight.PathLooker` chama `exec.LookPath`, que resolve um nome contra o
   `$PATH` sem criar processo. É o que deixa o `ray status` verificar se o
@@ -97,6 +102,8 @@ o código sozinho não conta:
   `~/.ray/...` à mão.
 - O núcleo de domínio (`profile`, `economy`) **não** toca disco nem
   rede — é o que o mantém testável só com memória.
+- `catalog` importa `scaffold`, `store`, `profile` e `fsutil`; `scaffold` não
+  importa `catalog`. `linediff` é usado pelo `cmd` (`template diff` e `reset`).
 - `vault` **valida** o cérebro, nunca o cria. O `ray` é consumidor da vault do
   usuário, não dono dela.
 

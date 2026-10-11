@@ -25,10 +25,13 @@ O risco central deste programa: ele roda `uv`, `graphify`, `git` e os passos de
 - **[MUST]** Todo processo externo passa por `internal/runner`. É o que mantém a
   superfície auditável em um lugar só.
   **Duas exceções, e elas são fechadas:**
-  1. `spawnEditor` em `internal/cmd/profile.go` chama `exec.Command` direto para
-     abrir o `$EDITOR` do usuário, porque um editor interativo precisa herdar o
-     terminal e a interface do `runner` bufferiza stdout/stderr em `Result` —
-     ela não consegue entregar um TTY cru.
+  1. `editorCommand`/`spawnEditor` em `internal/cmd/profile.go`, usados por
+     `profile edit` e `template edit`, abrem o `$EDITOR` do usuário sem passar
+     pelo `runner`, porque um editor interativo precisa herdar o terminal e a
+     interface do `runner` bufferiza stdout/stderr em `Result` — ela não
+     consegue entregar um TTY cru. `exec.LookPath` decide se o `$EDITOR` é um
+     executável inteiro; senão é quebrado em palavras, sem shell, e roda por
+     `exec.Command`.
   2. `preflight.PathLooker` (`internal/preflight/pathlooker.go`) chama
      `exec.LookPath`, que resolve um nome contra o `$PATH` sem criar processo.
      Não é execução, mas é um import de `os/exec` fora do `runner`, e por isso
