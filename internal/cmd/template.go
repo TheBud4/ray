@@ -17,7 +17,8 @@ import (
 
 func newTemplateCmd() *cobra.Command {
 	c := groupCmd("template", "Inspect and edit the scaffold templates in the overlay")
-	c.AddCommand(newTemplateListCmd(), newTemplateShowCmd(), newTemplatePathCmd(), newTemplateEditCmd(), newTemplateResetCmd())
+	c.AddCommand(newTemplateListCmd(), newTemplateShowCmd(), newTemplatePathCmd(),
+		newTemplateEditCmd(), newTemplateDiffCmd(), newTemplateResetCmd())
 	return c
 }
 
@@ -246,6 +247,63 @@ func runTemplateEdit(cat catalog.Templates, name string, spawn func(editor, path
 	return nil
 }
 
+func newTemplateDiffCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:               "diff <name>",
+		Short:             "Show how the template differs from the one embedded in ray",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: templateNames,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cat, err := templateCatalog(true)
+			if err != nil {
+				return err
+			}
+			return runTemplateDiff(cat, args[0], cmd.OutOrStdout(), cmd.ErrOrStderr())
+		},
+	}
+}
+
+// runTemplateDiff compara o template do overlay com o embutido. O diff sai limpo
+// em out; o aviso de "outdated" vai para errOut para não contaminar um pipe.
+func runTemplateDiff(cat catalog.Templates, name string, out, errOut io.Writer) error {
+	e, err := cat.Lookup(name)
+	if err != nil {
+		return err
+	}
+	switch e.State {
+	case catalog.Current:
+		fmt.Fprintln(out, "identical to the embedded template")
+		return nil
+	case catalog.New:
+		fmt.Fprintln(out, "not in the overlay yet; nothing to compare")
+		return nil
+	case catalog.Custom:
+		fmt.Fprintln(out, "custom template: there is no embedded one to compare to")
+		return nil
+	}
+	embedded, err := cat.Embedded(e.Name)
+	if err != nil {
+		return err
+	}
+	overlay, err := cat.Overlay(e.Name)
+	if err != nil {
+		return err
+	}
+	if lf := func(b []byte) string { return strings.ReplaceAll(string(b), "\r\n", "\n") }; lf(embedded) == lf(overlay) {
+		fmt.Fprintln(out, "differs only in line endings (CRLF)")
+		return nil
+	}
+	d, err := linediff.Unified(string(embedded), string(overlay), "embedded/"+e.Name, "overlay/"+e.Name)
+	if err != nil {
+		return err
+	}
+	if e.State == catalog.Outdated {
+		fmt.Fprintln(errOut, "outdated: the embedded template changed; your file is untouched")
+	}
+	fmt.Fprint(out, d)
+	return nil
+}
+
 func newTemplateResetCmd() *cobra.Command {
 	var force bool
 	c := &cobra.Command{
@@ -272,7 +330,7 @@ func changedLines(overlay, embedded []byte) int {
 		return -1
 	}
 	n := 0
-	for _, l := range strings.Split(d, "\n") {
+	for l := range strings.SplitSeq(d, "\n") {
 		if (strings.HasPrefix(l, "+") && !strings.HasPrefix(l, "+++ ")) || (strings.HasPrefix(l, "-") && !strings.HasPrefix(l, "--- ")) {
 			n++
 		}
