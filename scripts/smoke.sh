@@ -115,4 +115,22 @@ if "$ray" init ai --profile leaky --no-global "$leakproj" >/dev/null 2>&1; then
 fi
 [ -z "$(ls -A "$leakproj")" ] || fail "init ai left traces after refusing a leaking component: $(ls -A "$leakproj")"
 
+step "templates can be listed, edited, diffed and reset from the binary"
+tpl="CLAUDE.md.tmpl"
+tpl_state() { "$ray" template list | awk -v n="$tpl" '$1 == n { print $2 }'; }
+[ "$(tpl_state)" = "current" ] || fail "template list: $tpl should be current after init ai, got '$(tpl_state)'"
+editor="$work/editor.sh"
+printf '#!/usr/bin/env bash\necho "# edited by the smoke test" >> "$1"\n' > "$editor"
+chmod +x "$editor"
+EDITOR="$editor" "$ray" template edit "$tpl" >/dev/null || fail "template edit exited non-zero"
+[ "$(tpl_state)" = "edited" ] || fail "template list: $tpl should be edited after the edit, got '$(tpl_state)'"
+"$ray" template diff "$tpl" | grep -q '^+# edited by the smoke test' || fail "template diff does not show the edit"
+if "$ray" template reset "$tpl" >/dev/null 2>&1; then
+  fail "template reset discarded an edit without --force"
+fi
+"$ray" template reset "$tpl" --force >/dev/null || fail "template reset --force exited non-zero"
+[ "$(tpl_state)" = "current" ] || fail "template list: $tpl should be current after reset, got '$(tpl_state)'"
+[ "$("$ray" profile show smoke | tail -n 1)" = "ready" ] || fail "profile show: the smoke recipe should be ready"
+"$ray" profile show leaky | tail -n 1 | grep -q "1 problem" || fail "profile show does not flag the leaking component"
+
 step "ok"

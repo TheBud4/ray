@@ -344,6 +344,77 @@ existe forma de confundir os dois no formato da receita.
   sido instalado antes — um `.mcp.json` novo não pode ficar sem a entrada só
   porque outro projeto já passou pelo global.
 
+## Templates e perfis na linha de comando
+
+`ray template list|show|path|edit|diff|reset` vê e edita o overlay de templates
+de scaffold em `~/.ray/templates`, e `ray profile show` confere se uma receita
+vai funcionar antes de o `init ai` rodar. O núcleo é `internal/catalog`; o `cmd`
+só cuida de flags, saída e `$EDITOR`.
+
+Cada template tem um de cinco estados, que é exatamente o que o próximo
+`init ai` fará com ele:
+
+| Estado | O que é | O que o `init ai` faz |
+|---|---|---|
+| `current` | igual ao embutido | usa como está |
+| `outdated` | o binário mudou e você não tocou no arquivo | atualiza para o embutido |
+| `edited` | você alterou (ou não há linha-base: `edited (no baseline)`) | preserva |
+| `new` | existe no binário, ainda não no overlay | grava o embutido |
+| `custom` | existe no overlay, não no binário | usa, se uma receita o referencia |
+
+**O que tem de valer:**
+
+- **O `list` nunca discorda do `init ai`.** Ele chama o `EnsureTemplates` em
+  dry-run, com a mesma linha-base, e só lê. Um `custom` é qualquer `*.tmpl` do
+  overlay fora do conjunto embutido, sem segmento oculto no caminho; o overlay
+  pode ser um symlink (gerenciador de dotfiles) e é seguido. Arquivo vazio é
+  `edited`, não ausente. O nome de um template tem de ser exatamente um dos que o
+  `list` mostra; qualquer outro (`../x`) é `unknown template` e nada é criado.
+- **`show` imprime o conteúdo que o `init ai` usaria**: o embutido em `new` e
+  `outdated` (o `init ai` sincroniza antes de renderizar), o do overlay nos
+  demais. `path` imprime a pasta do overlay ou o caminho de um template, mesmo
+  ainda inexistente.
+- **`edit` deixa o arquivo como o `init ai` o deixaria e só então abre o
+  editor.** Em `new` e `outdated`, grava o embutido com a linha-base; em
+  `current` sem linha-base, grava só a linha-base. Depois de salvar, valida
+  renderizando com `Stack` vazio e preenchido (os dois ramos de `{{if .Stack}}`)
+  e avisa de hook (`*.sh.tmpl`) com CRLF.
+- **`edit` nunca desfaz a edição.** Template que deixou de renderizar fica salvo
+  como você o deixou; o comando sai com código 1 nomeando o erro e as duas saídas
+  (`ray template edit` de novo, ou `ray template reset`).
+- **O ray nunca troca um symlink por arquivo comum.** Onde ele gravaria (`edit`
+  em `new`/`outdated`, e `reset`), um alvo que é symlink é recusado, nomeando o
+  link e o destino; o `--dry-run` do `edit` antecipa a mesma recusa. Em `edited`
+  o ray não grava nada: o editor escreve através do link, como se espera.
+- **`diff` compara o overlay com o embutido** num diff unificado com rótulos
+  fixos `embedded/<nome>` e `overlay/<nome>`, puro Go (`internal/linediff`), sem
+  depender do `diff` do sistema. Em `outdated`, o aviso de que o embutido mudou
+  vai para stderr, para não sujar um pipe. Diferença só de fim de linha é dita
+  como tal (`differs only in line endings (CRLF)`); `current`, `new` e `custom`
+  respondem em uma frase que não há o que comparar.
+- **`reset` devolve o template ao padrão do binário, com a linha-base.** Só
+  `edited` exige `--force`: sem ele, o comando recusa dizendo quantas linhas
+  diferem. `custom` não tem padrão e é recusado; `current` responde
+  `already the default`. O `--dry-run` aplica as mesmas recusas e nada grava.
+- **Linha-base ilegível recusa**, como no `init ai`: todo subcomando que decide
+  estado para antes de agir. Só `path` continua funcionando.
+- **O `init ai` grava a linha-base também quando o template já é igual ao
+  embutido.** Sem isso, um template que já estava `current` antes de a
+  linha-base existir passaria a `edited (no baseline)` na primeira mudança do
+  binário, e ficaria preso na versão antiga.
+
+`ray profile show <nome>` confere a receita sem executar nada e termina em
+`ready` ou em `N problem(s)`. Conta como problema o que faria o `init ai` recusar
+ou pular algo: componente `missing` (sem pasta em `~/.ray/components/`) ou
+`refused` (link que sai do componente), arquivo cujo template não existe
+(`missing template`), arquivo sem template para o caminho (`no template for
+path`) e template que não renderiza (`broken`). O estado de um template
+(`edited`, `outdated`…) aparece ao lado de cada arquivo, mas não é problema.
+
+`profile edit` e `template edit` abrem o `$EDITOR`, que pode ter argumentos
+(`code -w`): se o valor inteiro é um executável no `$PATH`, é usado como está;
+senão é quebrado em palavras, sem shell, e o caminho vai como último argumento.
+
 ---
 
 # Parte 2 — O que o `ray` escreve nos projetos dos outros
@@ -526,7 +597,9 @@ item um pulo declarado em teste, não uma garantia:
 - **Executáveis falsos são scripts `sh`**, então pulam: que a tela inicial não
   cria processo (`TestRootWithoutArgsSpawnsNoProcess`), que `doctor --fix
   --dry-run` não executa e que `--dry-run` não abre o editor nem o app. Valem em
-  Linux; no macOS só o último (`xdg-open`) pula.
+  Linux; no macOS só o último (`xdg-open`) pula. Pelo mesmo motivo, só no
+  Windows, pula o `$EDITOR` com argumentos
+  (`TestEditorCommandSplitsAnEditorWithArguments`), testado com um script `sh`.
 - **Hooks com `jq` ausente** pulam por desenho: sem `jq` os avisos ficam mudos.
 
 Não medido, só lido no código: o guard de symlink segue `ModeSymlink`, e o Go
