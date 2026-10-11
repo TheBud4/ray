@@ -21,7 +21,7 @@ func TestProfileShowChecksTheRecipeAndSaysWhetherItIsReady(t *testing.T) {
 		Scaffold:   profile.Scaffold{Files: []profile.ScaffoldFile{{Path: "CLAUDE.md"}}},
 	})
 	out, err := execRoot(t, "profile", "show", "ok")
-	if err != nil || !strings.Contains(out, "good -> .claude/skills/good  ok") || !strings.Contains(out, "CLAUDE.md <- CLAUDE.md.tmpl") || !strings.HasSuffix(strings.TrimSpace(out), "ready") {
+	if err != nil || !strings.Contains(out, "good -> "+filepath.Join(".claude/skills", "good")+"  ok") || !strings.Contains(out, "CLAUDE.md <- CLAUDE.md.tmpl") || !strings.HasSuffix(strings.TrimSpace(out), "ready") {
 		t.Errorf("ready profile: %q, %v", out, err)
 	}
 
