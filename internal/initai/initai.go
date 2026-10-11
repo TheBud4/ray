@@ -381,7 +381,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	}
 
 	// 9. scaffold (orientação + arquivos de sistema).
-	files := dedupScaffoldFiles(prof.Scaffold.Files, scaffold.SystemFiles())
+	files := scaffold.DedupFiles(prof.Scaffold.Files, scaffold.SystemFiles())
 	res, err := scaffold.WriteFiles(files, scaffold.Options{
 		Target:       target,
 		Data:         scaffold.Data{ProjectName: filepath.Base(target), Stack: stackOf(prof)},
