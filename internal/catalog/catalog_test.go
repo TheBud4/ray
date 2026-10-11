@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/TheBud4/ray/internal/scaffold"
@@ -226,5 +227,110 @@ func TestLookupAcceptsBackslashesOnWindows(t *testing.T) {
 	f := newFixture(t)
 	if _, err := f.cat.Lookup(`claude\hooks\guard-add.sh.tmpl`); err != nil {
 		t.Errorf("Lookup with backslashes error = %v", err)
+	}
+}
+
+func TestPrepareMaterializesNewAndOutdatedWithTheBaseline(t *testing.T) {
+	for _, name := range []string{"new", "outdated"} {
+		t.Run(name, func(t *testing.T) {
+			f := newFixture(t)
+			fresh := f.embedded(sample)
+			if name == "outdated" {
+				f.overlay(sample, "older\n")
+				f.baseline(sample, []byte("older\n"))
+			}
+			wrote, bErr, err := f.cat.Prepare(sample)
+			if err != nil || bErr != nil || !wrote {
+				t.Fatalf("Prepare = %v, %v, %v", wrote, bErr, err)
+			}
+			if got, _ := os.ReadFile(filepath.Join(f.dir, sample)); string(got) != string(fresh) {
+				t.Errorf("overlay not the embedded template")
+			}
+			if h, ok := f.st.PristineHash(f.dir, sample); !ok || h != store.HashBytes(fresh) {
+				t.Errorf("baseline = %q, %v; want the embedded hash", h, ok)
+			}
+		})
+	}
+}
+
+func TestPrepareFixesAStaleBaselineOfACurrentTemplateAndLeavesEditedAlone(t *testing.T) {
+	f := newFixture(t)
+	fresh := f.embedded(sample)
+	f.overlay(sample, string(fresh))
+	f.baseline(sample, []byte("older"))
+	if wrote, _, err := f.cat.Prepare(sample); err != nil || wrote {
+		t.Fatalf("Prepare(current) = %v, %v", wrote, err)
+	}
+	if h, _ := f.st.PristineHash(f.dir, sample); h != store.HashBytes(fresh) {
+		t.Errorf("baseline not corrected")
+	}
+
+	f.overlay(sample, "mine\n")
+	if _, _, err := f.cat.Prepare(sample); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(f.dir, sample)); string(got) != "mine\n" {
+		t.Errorf("Prepare touched an edited template")
+	}
+}
+
+// O segundo conjunto de dados (Stack preenchido) exercita o ramo {{if .Stack}}.
+func TestValidateRendersWithAndWithoutStack(t *testing.T) {
+	f := newFixture(t)
+	f.overlay("a.tmpl", "{{ .ProjectName")
+	f.overlay("b.tmpl", "{{if .Stack}}{{.Nope}}{{end}}")
+	f.overlay("c.tmpl", "ok {{.ProjectName}}")
+	if _, err := f.cat.Validate("a.tmpl"); err == nil {
+		t.Error("a syntax error should fail Validate")
+	}
+	if _, err := f.cat.Validate("b.tmpl"); err == nil {
+		t.Error("a bad field in the {{if .Stack}} branch should fail Validate")
+	}
+	if _, err := f.cat.Validate("c.tmpl"); err != nil {
+		t.Errorf("a good template failed: %v", err)
+	}
+}
+
+func TestValidateWarnsAboutCRLFInAHook(t *testing.T) {
+	f := newFixture(t)
+	f.overlay("hooks/x.sh.tmpl", "echo hi\r\n")
+	w, err := f.cat.Validate("hooks/x.sh.tmpl")
+	if err != nil || len(w) != 1 || !strings.Contains(w[0], "CRLF") {
+		t.Errorf("Validate = %v, %v; want one CRLF warning", w, err)
+	}
+}
+
+// Só New e Outdated gravam o arquivo; o resto segue o link e o editor escreve
+// através dele. A recusa vale onde o ray escreveria, e o --dry-run a antecipa.
+func TestPrepareRefusesASymlinkTargetOnlyWhenItWouldWrite(t *testing.T) {
+	f := newFixture(t)
+	elsewhere := filepath.Join(t.TempDir(), "dotfile")
+	if err := os.WriteFile(elsewhere, []byte("keep\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(f.dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(elsewhere, filepath.Join(f.dir, sample)); err != nil {
+		testenv.SymlinkUnavailable(t, err)
+	}
+
+	f.baseline(sample, []byte("older")) // difere de ambos: edited
+	if _, err := f.cat.PlanEdit(sample); err != nil {
+		t.Errorf("PlanEdit(edited through a symlink) error = %v, want none", err)
+	}
+	if wrote, _, err := f.cat.Prepare(sample); err != nil || wrote {
+		t.Errorf("Prepare(edited through a symlink) = %v, %v; want no write and no error", wrote, err)
+	}
+
+	f.baseline(sample, []byte("keep\n")) // igual à linha-base: outdated, o ray gravaria
+	if _, err := f.cat.PlanEdit(sample); err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Errorf("PlanEdit(outdated through a symlink) error = %v, want a symlink refusal", err)
+	}
+	if _, _, err := f.cat.Prepare(sample); err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Errorf("Prepare(outdated through a symlink) error = %v, want a symlink refusal", err)
+	}
+	if got, _ := os.ReadFile(elsewhere); string(got) != "keep\n" {
+		t.Errorf("the symlink target was changed: %q", got)
 	}
 }
