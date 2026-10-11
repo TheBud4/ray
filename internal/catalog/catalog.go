@@ -250,6 +250,68 @@ func (t Templates) PlanEdit(name string) (Entry, error) {
 	return e, nil
 }
 
+// ErrEdited é devolvido por Reset num template Edited sem force; Lines é quantas
+// linhas diferem do padrão.
+type ErrEdited struct {
+	Name  string
+	Lines int
+}
+
+func (e *ErrEdited) Error() string {
+	return fmt.Sprintf("%s: %d lines differ from the default; see `ray template diff %s`, or pass --force to discard your edit", e.Name, e.Lines, e.Name)
+}
+
+// ErrCustom é devolvido por Reset num template custom.
+var ErrCustom = errors.New("has no default to restore; delete the file if you no longer want it")
+
+// PlanReset devolve as recusas que Reset aplicaria, sem escrever nada: é o que
+// o --dry-run consulta.
+func (t Templates) PlanReset(name string, force bool, countChanged func(overlay, embedded []byte) int) (Entry, error) {
+	e, err := t.Lookup(name)
+	if err != nil {
+		return Entry{}, err
+	}
+	switch e.State {
+	case Custom:
+		return e, fmt.Errorf("%s: %w", e.Name, ErrCustom)
+	case Edited:
+		if !force {
+			onDisk, rerr := os.ReadFile(filepath.Join(t.Dir, filepath.FromSlash(e.Name)))
+			if rerr != nil {
+				return e, rerr
+			}
+			fresh, _ := embeddedBytes(e.Name)
+			return e, &ErrEdited{Name: e.Name, Lines: countChanged(onDisk, fresh)}
+		}
+	}
+	if e.State != Current {
+		return e, t.refuseSymlink(e.Name)
+	}
+	return e, nil
+}
+
+// Reset devolve name ao padrão do binário, com a linha-base. countChanged conta
+// as linhas que diferem (para a recusa). action diz o que aconteceu: "restored",
+// "created" ou "already the default".
+func (t Templates) Reset(name string, force bool, countChanged func(overlay, embedded []byte) int) (action string, baselineErr error, err error) {
+	e, err := t.PlanReset(name, force, countChanged)
+	if err != nil {
+		return "", nil, err
+	}
+	if e.State == Current {
+		_, baselineErr, err = t.Prepare(e.Name)
+		return "already the default", baselineErr, err
+	}
+	baselineErr, err = t.writeDefault(e.Name)
+	if err != nil {
+		return "", nil, err
+	}
+	if e.State == New {
+		return "created", baselineErr, nil
+	}
+	return "restored", baselineErr, nil
+}
+
 // exampleData são os dois conjuntos com que Validate renderiza: com e sem Stack,
 // para cobrir os dois ramos de {{if .Stack}}.
 var exampleData = []scaffold.Data{

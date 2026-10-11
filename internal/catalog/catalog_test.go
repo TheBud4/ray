@@ -334,3 +334,77 @@ func TestPrepareRefusesASymlinkTargetOnlyWhenItWouldWrite(t *testing.T) {
 		t.Errorf("the symlink target was changed: %q", got)
 	}
 }
+
+func TestResetRefusesASymlinkTarget(t *testing.T) {
+	f := newFixture(t)
+	elsewhere := filepath.Join(t.TempDir(), "dotfile")
+	if err := os.WriteFile(elsewhere, []byte("keep\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(f.dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(elsewhere, filepath.Join(f.dir, sample)); err != nil {
+		testenv.SymlinkUnavailable(t, err)
+	}
+	f.baseline(sample, []byte("older")) // diferente do embutido e do arquivo: edited
+
+	if _, _, err := f.cat.Reset(sample, true, func(a, b []byte) int { return 0 }); err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Errorf("Reset on a symlink error = %v, want a symlink refusal", err)
+	}
+	if got, _ := os.ReadFile(elsewhere); string(got) != "keep\n" {
+		t.Errorf("the symlink target was changed: %q", got)
+	}
+}
+
+func TestResetNeedsForceOnlyForAnEditedTemplate(t *testing.T) {
+	count := func(a, b []byte) int { return 7 }
+	f := newFixture(t)
+	fresh := f.embedded(sample)
+
+	f.overlay(sample, "mine\n")
+	f.baseline(sample, fresh)
+	_, _, err := f.cat.Reset(sample, false, count)
+	var edited *ErrEdited
+	if !errors.As(err, &edited) || edited.Lines != 7 {
+		t.Fatalf("Reset(edited) error = %v, want *ErrEdited{Lines: 7}", err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(f.dir, sample)); string(got) != "mine\n" {
+		t.Errorf("a refused reset changed the file")
+	}
+
+	action, _, err := f.cat.Reset(sample, true, count)
+	if err != nil || action != "restored" {
+		t.Fatalf("Reset(--force) = %q, %v", action, err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(f.dir, sample)); string(got) != string(fresh) {
+		t.Errorf("not restored")
+	}
+	if h, _ := f.st.PristineHash(f.dir, sample); h != store.HashBytes(fresh) {
+		t.Errorf("baseline not recorded")
+	}
+	if e := f.state(sample); e.State != Current {
+		t.Errorf("state after reset = %s, want current", e.State)
+	}
+
+	if action, _, err := f.cat.Reset(sample, false, count); err != nil || action != "already the default" {
+		t.Errorf("Reset(current) = %q, %v", action, err)
+	}
+}
+
+func TestResetOfOutdatedAndNewNeedsNoForceAndCustomIsRefused(t *testing.T) {
+	f := newFixture(t)
+	count := func(a, b []byte) int { return 0 }
+	if action, _, err := f.cat.Reset(sample, false, count); err != nil || action != "created" {
+		t.Errorf("Reset(new) = %q, %v", action, err)
+	}
+	f.overlay(sample, "older\n")
+	f.baseline(sample, []byte("older\n"))
+	if action, _, err := f.cat.Reset(sample, false, count); err != nil || action != "restored" {
+		t.Errorf("Reset(outdated) = %q, %v", action, err)
+	}
+	f.overlay("mine.tmpl", "x")
+	if _, _, err := f.cat.Reset("mine.tmpl", true, count); !errors.Is(err, ErrCustom) {
+		t.Errorf("Reset(custom) error = %v, want ErrCustom", err)
+	}
+}

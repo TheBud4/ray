@@ -283,3 +283,65 @@ func TestTemplateEditWithoutEditorFailsEvenUnderDryRun(t *testing.T) {
 		t.Errorf("error = %v", err)
 	}
 }
+
+// O reset passa pela fiação real (RAY_HOME → store → overlay): a chave da
+// linha-base tem de ser a mesma que o init ai lê, senão ele trataria o arquivo
+// restaurado como editado.
+func TestTemplateResetRecordsTheBaselineInitAiReads(t *testing.T) {
+	home := dryRunHome(t)
+	fresh := embeddedTemplate(t, tmplSample)
+	seedOverlay(t, home, tmplSample, "mine\n")
+	// Linha-base velha, diferente do embutido: só um reset que a grave na chave
+	// certa deixa o init ai enxergar o arquivo restaurado como intocado.
+	seedBaseline(t, home, tmplSample, []byte("an older default"))
+
+	if _, err := execRoot(t, "template", "reset", tmplSample); err == nil || !strings.Contains(err.Error(), "--force") {
+		t.Fatalf("reset of an edited template without --force: error = %v", err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(home, "templates", tmplSample)); string(b) != "mine\n" {
+		t.Fatal("a refused reset changed the file")
+	}
+	if _, err := execRoot(t, "template", "reset", tmplSample, "--force"); err != nil {
+		t.Fatalf("reset --force error = %v", err)
+	}
+
+	st := store.New(filepath.Join(home, "store"))
+	dir := filepath.Join(home, "templates")
+	synced, err := scaffold.EnsureTemplates(dir, scaffold.EnsureOptions{
+		DryRun:   true,
+		Pristine: func(rel string) (string, bool) { return st.PristineHash(dir, rel) },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range synced {
+		if s.Rel == tmplSample && s.Action != scaffold.TemplateCurrent {
+			t.Errorf("after reset, init ai would do %q to the template, want current", s.Action)
+		}
+	}
+	if h, ok := st.PristineHash(dir, tmplSample); !ok || h != store.HashBytes(fresh) {
+		t.Errorf("baseline = %q, %v; want the embedded hash", h, ok)
+	}
+}
+
+func TestTemplateResetDryRunPlansWithoutWritingAndKeepsTheRefusals(t *testing.T) {
+	home := dryRunHome(t)
+	fresh := embeddedTemplate(t, tmplSample)
+
+	out, err := execRoot(t, "template", "reset", tmplSample, "--dry-run")
+	if err != nil || !strings.Contains(out, "+ reset "+tmplSample) {
+		t.Errorf("dry-run reset of a new template: %q, %v", out, err)
+	}
+	if _, err := os.Stat(filepath.Join(home, "templates")); !os.IsNotExist(err) {
+		t.Errorf("dry-run created the overlay: %v", err)
+	}
+
+	seedOverlay(t, home, tmplSample, "mine\n")
+	seedBaseline(t, home, tmplSample, fresh)
+	if _, err := execRoot(t, "template", "reset", tmplSample, "--dry-run"); err == nil || !strings.Contains(err.Error(), "--force") {
+		t.Errorf("the refusal must also hold under --dry-run, got %v", err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(home, "templates", tmplSample)); string(b) != "mine\n" {
+		t.Error("dry-run changed the file")
+	}
+}
