@@ -345,3 +345,81 @@ func TestTemplateResetDryRunPlansWithoutWritingAndKeepsTheRefusals(t *testing.T)
 		t.Error("dry-run changed the file")
 	}
 }
+
+// Nome fora do que o list mostra: nenhum comando toca disco.
+func TestTemplateUnknownNameIsRefusedByEveryCommandWithoutTouchingDisk(t *testing.T) {
+	t.Setenv("EDITOR", "fake")
+	for _, name := range []string{"../x", "/etc/passwd", "claude/../CLAUDE.md.tmpl", "nope.tmpl"} {
+		for _, sub := range [][]string{{"show"}, {"path"}, {"edit"}, {"diff"}, {"reset"}, {"reset", "--force"}} {
+			home := dryRunHome(t)
+			args := append([]string{"template", sub[0], name}, sub[1:]...)
+			_, err := execRoot(t, args...)
+			if err == nil || !strings.Contains(err.Error(), "unknown template") || !strings.Contains(err.Error(), "ray template list") {
+				t.Errorf("%v: error = %v", args, err)
+			}
+			for _, p := range []string{"templates", filepath.Join("store", "pristine.yaml")} {
+				if _, serr := os.Stat(filepath.Join(home, p)); !os.IsNotExist(serr) {
+					t.Errorf("%v created %s", args, p)
+				}
+			}
+		}
+	}
+}
+
+func TestTemplateStateCommandsRefuseAnUnreadableBaseline(t *testing.T) {
+	home := dryRunHome(t)
+	t.Setenv("EDITOR", "fake")
+	if err := os.MkdirAll(filepath.Join(home, "store"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "store", "pristine.yaml"), []byte("::: not yaml"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"list"}, {"show", tmplSample}, {"diff", tmplSample}, {"edit", tmplSample}, {"reset", tmplSample}} {
+		if _, err := execRoot(t, append([]string{"template"}, args...)...); err == nil || !strings.Contains(err.Error(), "pristine.yaml") {
+			t.Errorf("%v: error = %v, want the unreadable-baseline refusal", args, err)
+		}
+	}
+	if _, err := execRoot(t, "template", "path"); err != nil {
+		t.Errorf("path should not depend on the baseline: %v", err)
+	}
+}
+
+func TestTemplateDiffByState(t *testing.T) {
+	home := dryRunHome(t)
+	fresh := embeddedTemplate(t, tmplSample)
+
+	if out, _ := execRoot(t, "template", "diff", tmplSample); !strings.Contains(out, "not in the overlay yet") {
+		t.Errorf("new: %q", out)
+	}
+	seedOverlay(t, home, tmplSample, string(fresh))
+	seedBaseline(t, home, tmplSample, fresh)
+	if out, _ := execRoot(t, "template", "diff", tmplSample); !strings.Contains(out, "identical to the embedded template") {
+		t.Errorf("current: %q", out)
+	}
+	seedOverlay(t, home, tmplSample, string(fresh)+"mine\n")
+	if out, _ := execRoot(t, "template", "diff", tmplSample); !strings.Contains(out, "--- embedded/"+tmplSample) || !strings.Contains(out, "+mine") {
+		t.Errorf("edited: %q", out)
+	}
+	seedOverlay(t, home, tmplSample, "older\n")
+	seedBaseline(t, home, tmplSample, []byte("older\n"))
+	var stdout, stderr bytes.Buffer
+	if err := runTemplateDiff(templatesFor(t), tmplSample, &stdout, &stderr); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stderr.String(), "outdated: the embedded template changed") || strings.Contains(stdout.String(), "outdated:") {
+		t.Errorf("outdated: the warning must go to stderr only; stdout = %q, stderr = %q", stdout.String(), stderr.String())
+	}
+	if !strings.HasPrefix(stdout.String(), "--- embedded/") {
+		t.Errorf("outdated: stdout must stay a clean diff, got %q", stdout.String())
+	}
+	seedOverlay(t, home, tmplSample, strings.ReplaceAll(string(fresh), "\n", "\r\n"))
+	seedBaseline(t, home, tmplSample, fresh)
+	if out, _ := execRoot(t, "template", "diff", tmplSample); !strings.Contains(out, "differs only in line endings (CRLF)") {
+		t.Errorf("crlf: %q", out)
+	}
+	seedOverlay(t, home, "mine/x.md.tmpl", "x")
+	if out, _ := execRoot(t, "template", "diff", "mine/x.md.tmpl"); !strings.Contains(out, "custom template") {
+		t.Errorf("custom: %q", out)
+	}
+}
