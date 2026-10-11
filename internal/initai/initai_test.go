@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -1574,5 +1575,54 @@ func TestRunRecordsTheBaselineOfATemplateThatAlreadyMatchesTheDefault(t *testing
 	}
 	if h, _ := st.PristineHash(home.TemplatesDir, rel); h != store.HashBytes([]byte("an older default")) {
 		t.Error("dry-run changed the baseline")
+	}
+}
+
+// Falha ao gravar a linha-base não derruba o init ai: sem ela o template cai na
+// degradação graciosa do DecideOverwrite, e abortar trocaria um efeito
+// recuperável por um comando morto. Vira aviso, nomeando o template.
+func TestRunWarnsInsteadOfFailingWhenABaselineCannotBeRecorded(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("depends on a read-only directory refusing writes (no mode bits on Windows; root ignores them)")
+	}
+	home := newHome(t)
+	seedComponent(t, home, "s")
+	writeProfile(t, home.ProfilesDir, testProfile())
+
+	// Uma primeira execução semeia os perfis de fábrica e o overlay: o passo que
+	// semeia ~/.ray falha de verdade se o store não é gravável, e não é ele que
+	// este teste exercita.
+	first := Options{Profile: "test", Target: t.TempDir(), NoGlobal: true, Out: &bytes.Buffer{}}
+	if _, err := Run(&runner.FakeRunner{}, allFound, first, home); err != nil {
+		t.Fatalf("first Run() error = %v", err)
+	}
+
+	// O template fica igual ao embutido e a linha-base, velha: é o ramo que a
+	// corrige, e é nele que a gravação vai falhar.
+	const rel = "CLAUDE.md.tmpl"
+	fresh, err := fs.ReadFile(scaffold.EmbeddedTemplates(), rel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home.TemplatesDir, rel), fresh, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st := store.New(home.StoreDir)
+	if err := st.SetPristine(home.TemplatesDir, rel, store.HashBytes([]byte("an older default"))); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(home.StoreDir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(home.StoreDir, 0o755) })
+
+	second := Options{Profile: "test", Target: t.TempDir(), NoGlobal: true, Out: &bytes.Buffer{}}
+	sum, err := Run(&runner.FakeRunner{}, allFound, second, home)
+	if err != nil {
+		t.Fatalf("second Run() error = %v, want the failed baseline to be only a warning", err)
+	}
+	want := "template " + rel + ": pristine baseline not recorded"
+	if !slices.ContainsFunc(sum.Warnings, func(w string) bool { return strings.HasPrefix(w, want) }) {
+		t.Errorf("Warnings = %v, want one starting with %q", sum.Warnings, want)
 	}
 }
