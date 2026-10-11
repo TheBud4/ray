@@ -197,8 +197,20 @@ func runProfileEdit(dir, name string, spawn func(editor, path string) error) err
 	return spawn(editor, path)
 }
 
+// editorCommand monta o comando do editor. Um $EDITOR com argumentos (`code -w`)
+// não é um executável: se LookPath não o acha inteiro, é quebrado em palavras,
+// sem shell.
+func editorCommand(editor, path string) *exec.Cmd {
+	if _, err := exec.LookPath(editor); err != nil {
+		if words := strings.Fields(editor); len(words) > 1 {
+			return exec.Command(words[0], append(words[1:], path)...)
+		}
+	}
+	return exec.Command(editor, path)
+}
+
 func spawnEditor(editor, path string) error {
-	c := exec.Command(editor, path)
+	c := editorCommand(editor, path)
 	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
 	return c.Run()
 }

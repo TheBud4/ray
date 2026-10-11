@@ -1,6 +1,7 @@
-// Package catalog é o núcleo de leitura do overlay de templates: o que cada
-// template é (padrão, seu, defasado) e o que o `init ai` fará com ele. Não fala
-// com o terminal nem com processo; quem o usa injeta a linha-base.
+// Package catalog é o núcleo de leitura e edição do overlay de templates: o que
+// cada template é (padrão, seu, defasado), o que o `init ai` fará com ele e se
+// ele ainda renderiza. Não fala com o terminal nem com processo; quem o usa
+// injeta a linha-base.
 package catalog
 
 import (
@@ -12,7 +13,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/TheBud4/ray/internal/fsutil"
 	"github.com/TheBud4/ray/internal/scaffold"
+	"github.com/TheBud4/ray/internal/store"
 )
 
 // State é o que o `init ai` faz com um template do overlay.
@@ -173,4 +176,103 @@ func (t Templates) Overlay(name string) ([]byte, error) {
 		return nil, nil
 	}
 	return b, err
+}
+
+// writeDefault grava o embutido de name no overlay (0644, pai criado) e a
+// linha-base. Falha ao gravar a linha-base não é erro: devolve-a em baselineErr,
+// porque sem ela o arquivo é Current, inofensivo. Alvo que é symlink é recusado.
+func (t Templates) writeDefault(name string) (baselineErr, err error) {
+	dest := filepath.Join(t.Dir, filepath.FromSlash(name))
+	if err := t.refuseSymlink(name); err != nil {
+		return nil, err
+	}
+	fresh, err := embeddedBytes(name)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		return nil, err
+	}
+	if err := fsutil.WriteFileAtomic(dest, fresh, 0o644); err != nil {
+		return nil, err
+	}
+	return t.SetPristine(name, store.HashBytes(fresh)), nil
+}
+
+// refuseSymlink recusa um alvo que é symlink: substituí-lo desfaria o link de um
+// gerenciador de dotfiles, e o editor escreveria através dele.
+func (t Templates) refuseSymlink(name string) error {
+	dest := filepath.Join(t.Dir, filepath.FromSlash(name))
+	if fi, err := os.Lstat(dest); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		target, _ := os.Readlink(dest)
+		return fmt.Errorf("%s is a symlink to %s; change the file it points to or remove the link", name, target)
+	}
+	return nil
+}
+
+// Prepare deixa name pronto para edição, como o `init ai` o deixaria: New e
+// Outdated recebem o embutido e a linha-base; Current com linha-base ausente ou
+// diferente a recebe; Edited e Custom não mudam. wrote diz se o arquivo foi gravado.
+func (t Templates) Prepare(name string) (wrote bool, baselineErr error, err error) {
+	e, err := t.Lookup(name)
+	if err != nil {
+		return false, nil, err
+	}
+	switch e.State {
+	case New, Outdated:
+		baselineErr, err = t.writeDefault(e.Name)
+		return err == nil, baselineErr, err
+	case Current:
+		fresh, err := embeddedBytes(e.Name)
+		if err != nil {
+			return false, nil, err
+		}
+		h := store.HashBytes(fresh)
+		if got, ok := t.Pristine(e.Name); !ok || got != h {
+			return false, t.SetPristine(e.Name, h), nil
+		}
+	}
+	return false, nil, nil
+}
+
+// PlanEdit devolve a recusa que Prepare aplicaria, sem escrever nada: é o que o
+// --dry-run do edit consulta, para a simulação não prometer o que a execução
+// real recusa. Só New e Outdated gravam o arquivo; Edited, Current e Custom
+// seguem o link, e o editor escreve através dele como o usuário espera.
+func (t Templates) PlanEdit(name string) (Entry, error) {
+	e, err := t.Lookup(name)
+	if err != nil {
+		return Entry{}, err
+	}
+	if e.State == New || e.State == Outdated {
+		return e, t.refuseSymlink(e.Name)
+	}
+	return e, nil
+}
+
+// exampleData são os dois conjuntos com que Validate renderiza: com e sem Stack,
+// para cobrir os dois ramos de {{if .Stack}}.
+var exampleData = []scaffold.Data{
+	{ProjectName: "example", Stack: ""},
+	{ProjectName: "example", Stack: "example"},
+}
+
+// Validate renderiza name (overlay antes do embutido) com os dados de exemplo.
+// warnings traz avisos que não são erro (hook com CRLF).
+func (t Templates) Validate(name string) (warnings []string, err error) {
+	e, err := t.Lookup(name)
+	if err != nil {
+		return nil, err
+	}
+	var rendered []byte
+	for _, d := range exampleData {
+		rendered, err = scaffold.Render(e.Name, t.Dir, d)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if strings.HasSuffix(e.Name, ".sh.tmpl") && strings.Contains(string(rendered), "\r\n") {
+		warnings = append(warnings, "CRLF line endings: the hook will fail in bash")
+	}
+	return warnings, nil
 }

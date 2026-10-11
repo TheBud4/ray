@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -13,8 +15,8 @@ import (
 )
 
 func newTemplateCmd() *cobra.Command {
-	c := groupCmd("template", "Inspect the scaffold templates in the overlay")
-	c.AddCommand(newTemplateListCmd(), newTemplateShowCmd(), newTemplatePathCmd())
+	c := groupCmd("template", "Inspect and edit the scaffold templates in the overlay")
+	c.AddCommand(newTemplateListCmd(), newTemplateShowCmd(), newTemplatePathCmd(), newTemplateEditCmd())
 	return c
 }
 
@@ -150,4 +152,95 @@ func newTemplatePathCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func newTemplateEditCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:               "edit <name>",
+		Short:             "Open a template in $EDITOR and check that it still renders",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: templateNames,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cat, err := templateCatalog(true)
+			if err != nil {
+				return err
+			}
+			spawn := spawnEditor
+			if flagDryRun {
+				spawn = func(editor, path string) error {
+					fmt.Fprintf(cmd.OutOrStdout(), "+ edit %s (with %s)\n", path, editor)
+					return nil
+				}
+			}
+			return runTemplateEdit(cat, args[0], spawn, flagDryRun, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		},
+	}
+}
+
+// runTemplateEdit isola a checagem de $EDITOR e o spawn, que herda o terminal e
+// não passa pelo runner, como no `profile edit`.
+func runTemplateEdit(cat catalog.Templates, name string, spawn func(editor, path string) error, dryRun bool, out, errOut io.Writer) error {
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		return fmt.Errorf("$EDITOR is not set")
+	}
+	entry, err := cat.Lookup(name)
+	if err != nil {
+		return err
+	}
+	path, err := cat.Path(entry.Name)
+	if err != nil {
+		return err
+	}
+	if dryRun {
+		if _, err := cat.PlanEdit(entry.Name); err != nil {
+			return err
+		}
+		if entry.State == catalog.New || entry.State == catalog.Outdated {
+			fmt.Fprintf(out, "+ materialize %s\n", path)
+		}
+		return spawn(editor, path)
+	}
+
+	_, baselineErr, err := cat.Prepare(entry.Name)
+	if err != nil {
+		return err
+	}
+	if baselineErr != nil {
+		fmt.Fprintf(errOut, "warning: %s: baseline not recorded (%v)\n", entry.Name, baselineErr)
+	}
+	before, err := cat.Overlay(entry.Name)
+	if err != nil {
+		return err
+	}
+	if err := spawn(editor, path); err != nil {
+		return err
+	}
+	after, err := cat.Overlay(entry.Name)
+	if err != nil {
+		return err
+	}
+
+	warnings, verr := cat.Validate(entry.Name)
+	if verr != nil {
+		return fmt.Errorf("%s saved, but it does not render:\n  %v\nfix it with `ray template edit %s`, or restore the default with `ray template reset %s`",
+			entry.Name, verr, entry.Name, entry.Name)
+	}
+	for _, w := range warnings {
+		fmt.Fprintf(errOut, "warning: %s: %s\n", entry.Name, w)
+	}
+	if bytes.Equal(before, after) {
+		fmt.Fprintf(out, "%s: no changes\n", entry.Name)
+		return nil
+	}
+	now, err := cat.Lookup(entry.Name)
+	if err != nil {
+		return err
+	}
+	if now.State == catalog.Current {
+		fmt.Fprintf(out, "%s: current (matches the default)\n", entry.Name)
+		return nil
+	}
+	fmt.Fprintf(out, "%s: %s\n", entry.Name, now.State)
+	return nil
 }
