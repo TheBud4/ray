@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -18,6 +19,7 @@ import (
 	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/rayconfig"
 	"github.com/TheBud4/ray/internal/runner"
+	"github.com/TheBud4/ray/internal/scaffold"
 	"github.com/TheBud4/ray/internal/store"
 	"github.com/TheBud4/ray/internal/testenv"
 )
@@ -1529,5 +1531,48 @@ func TestRunStopsBeforeAnyEffectWhenTheProjectBaselineIsUnreadable(t *testing.T)
 	}
 	if _, err := os.Stat(filepath.Join(target, "CLAUDE.md")); !os.IsNotExist(err) {
 		t.Errorf("CLAUDE.md was written despite the error (stat err = %v)", err)
+	}
+}
+
+// Um template revertido à mão fica igual ao embutido com a linha-base velha; o
+// init ai a corrige, senão o próximo upgrade do binário o trataria como editado.
+func TestRunRecordsTheBaselineOfATemplateThatAlreadyMatchesTheDefault(t *testing.T) {
+	home := newHome(t)
+	seedComponent(t, home, "s")
+	writeProfile(t, home.ProfilesDir, testProfile())
+	const rel = "CLAUDE.md.tmpl"
+	fresh, err := fs.ReadFile(scaffold.EmbeddedTemplates(), rel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(home.TemplatesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home.TemplatesDir, rel), fresh, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st := store.New(home.StoreDir)
+	if err := st.SetPristine(home.TemplatesDir, rel, store.HashBytes([]byte("an older default"))); err != nil {
+		t.Fatal(err)
+	}
+
+	opts := Options{Profile: "test", Target: t.TempDir(), NoGlobal: true, Out: &bytes.Buffer{}}
+	if _, err := Run(&runner.FakeRunner{}, allFound, opts, home); err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if h, ok := st.PristineHash(home.TemplatesDir, rel); !ok || h != store.HashBytes(fresh) {
+		t.Errorf("baseline = %q, %v; want the embedded hash", h, ok)
+	}
+
+	// --dry-run não grava.
+	if err := st.SetPristine(home.TemplatesDir, rel, store.HashBytes([]byte("an older default"))); err != nil {
+		t.Fatal(err)
+	}
+	opts = Options{Profile: "test", Target: t.TempDir(), NoGlobal: true, DryRun: true, Out: &bytes.Buffer{}}
+	if _, err := Run(&runner.FakeRunner{}, allFound, opts, home); err != nil {
+		t.Fatalf("dry-run Run() error = %v", err)
+	}
+	if h, _ := st.PristineHash(home.TemplatesDir, rel); h != store.HashBytes([]byte("an older default")) {
+		t.Error("dry-run changed the baseline")
 	}
 }

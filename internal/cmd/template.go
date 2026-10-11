@@ -10,13 +10,14 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/TheBud4/ray/internal/catalog"
+	"github.com/TheBud4/ray/internal/linediff"
 	"github.com/TheBud4/ray/internal/raypaths"
 	"github.com/TheBud4/ray/internal/store"
 )
 
 func newTemplateCmd() *cobra.Command {
 	c := groupCmd("template", "Inspect and edit the scaffold templates in the overlay")
-	c.AddCommand(newTemplateListCmd(), newTemplateShowCmd(), newTemplatePathCmd(), newTemplateEditCmd())
+	c.AddCommand(newTemplateListCmd(), newTemplateShowCmd(), newTemplatePathCmd(), newTemplateEditCmd(), newTemplateResetCmd())
 	return c
 }
 
@@ -242,5 +243,63 @@ func runTemplateEdit(cat catalog.Templates, name string, spawn func(editor, path
 		return nil
 	}
 	fmt.Fprintf(out, "%s: %s\n", entry.Name, now.State)
+	return nil
+}
+
+func newTemplateResetCmd() *cobra.Command {
+	var force bool
+	c := &cobra.Command{
+		Use:               "reset <name>",
+		Short:             "Restore a template to the default embedded in ray",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: templateNames,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cat, err := templateCatalog(true)
+			if err != nil {
+				return err
+			}
+			return runTemplateReset(cat, args[0], force, flagDryRun, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		},
+	}
+	c.Flags().BoolVar(&force, "force", false, "discard a local edit")
+	return c
+}
+
+// changedLines conta as linhas que diferem entre dois conteúdos.
+func changedLines(overlay, embedded []byte) int {
+	d, err := linediff.Unified(string(embedded), string(overlay), "a", "b")
+	if err != nil {
+		return -1
+	}
+	n := 0
+	for _, l := range strings.Split(d, "\n") {
+		if (strings.HasPrefix(l, "+") && !strings.HasPrefix(l, "+++ ")) || (strings.HasPrefix(l, "-") && !strings.HasPrefix(l, "--- ")) {
+			n++
+		}
+	}
+	return n
+}
+
+func runTemplateReset(cat catalog.Templates, name string, force, dryRun bool, out, errOut io.Writer) error {
+	if dryRun {
+		e, err := cat.PlanReset(name, force, changedLines)
+		if err != nil {
+			return err
+		}
+		p, err := cat.Path(e.Name)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "+ reset %s (%s)\n", e.Name, p)
+		return nil
+	}
+	action, baselineErr, err := cat.Reset(name, force, changedLines)
+	if err != nil {
+		return err
+	}
+	if baselineErr != nil {
+		fmt.Fprintf(errOut, "warning: %s: baseline not recorded (%v)\n", name, baselineErr)
+	}
+	fmt.Fprintf(out, "%s: %s\n", name, action)
 	return nil
 }

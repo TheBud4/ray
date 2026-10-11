@@ -198,6 +198,18 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 			if err := st.SetPristine(home.TemplatesDir, s.Rel, s.Hash); err != nil {
 				sum.Warnings = append(sum.Warnings, fmt.Sprintf("template %s: pristine baseline not recorded (%v)", s.Rel, err))
 			}
+		case scaffold.TemplateCurrent:
+			// Igual ao embutido mas com a linha-base ausente ou velha (revertido
+			// à mão, ou anterior à linha-base): sem corrigi-la, o próximo upgrade
+			// do binário o trataria como editado sem ninguém ter editado.
+			if opts.DryRun {
+				continue
+			}
+			if h, ok := st.PristineHash(home.TemplatesDir, s.Rel); !ok || h != s.Hash {
+				if err := st.SetPristine(home.TemplatesDir, s.Rel, s.Hash); err != nil {
+					sum.Warnings = append(sum.Warnings, fmt.Sprintf("template %s: pristine baseline not recorded (%v)", s.Rel, err))
+				}
+			}
 		case scaffold.TemplateKept:
 			sum.Warnings = append(sum.Warnings, fmt.Sprintf("template %s: %s", s.Rel, s.Reason))
 		}
