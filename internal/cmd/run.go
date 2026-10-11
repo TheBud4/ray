@@ -14,6 +14,7 @@ import (
 	"github.com/TheBud4/ray/internal/raypaths"
 	"github.com/TheBud4/ray/internal/runfile"
 	"github.com/TheBud4/ray/internal/runner"
+	"github.com/TheBud4/ray/internal/ui"
 )
 
 var flagRunList bool
@@ -44,13 +45,25 @@ func newRunCmd() *cobra.Command {
 				return err
 			}
 
-			r := runner.ExecRunner{DryRun: flagDryRun, Out: cmd.OutOrStdout()}
-			return runRunCmdIO(commands, alias, extra, flagRunList, r, flagVerbose,
-				runIO{In: os.Stdin, Out: cmd.OutOrStdout(), Err: cmd.ErrOrStderr()})
+			return runRunCmdIO(commands, alias, extra, flagRunList,
+				newRunRunner(flagDryRun, cmd.OutOrStdout()), flagVerbose, runIOFrom(cmd))
 		},
 	}
 	c.Flags().BoolVar(&flagRunList, "list", false, "list available aliases")
 	return c
+}
+
+// newRunRunner monta o runner do `ray run`. É uma variável para um teste poder
+// registrar o que o runner recebe.
+var newRunRunner = func(dryRun bool, out io.Writer) runner.Runner {
+	return runner.ExecRunner{DryRun: dryRun, Out: out}
+}
+
+// runIOFrom liga o passo ao terminal: o filho herda o *os.File de verdade, não
+// o Printer que embrulha a saída. Um writer que não é *os.File faz o Go criar um
+// pipe no lugar do terminal, e o filho deixa de ver um TTY.
+func runIOFrom(cmd *cobra.Command) runIO {
+	return runIO{In: os.Stdin, Out: ui.Raw(cmd.OutOrStdout()), Err: ui.Raw(cmd.ErrOrStderr())}
 }
 
 // splitAliasArgs separa o alias dos args após `--` (dashAt = -1 quando não há
