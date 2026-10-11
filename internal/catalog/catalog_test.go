@@ -1,0 +1,230 @@
+package catalog
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"runtime"
+	"slices"
+	"testing"
+
+	"github.com/TheBud4/ray/internal/scaffold"
+	"github.com/TheBud4/ray/internal/store"
+	"github.com/TheBud4/ray/internal/testenv"
+)
+
+const sample = "CLAUDE.md.tmpl" // um template embutido estável nos testes
+
+// fixture monta um overlay vazio em t.TempDir() com a linha-base num Store real,
+// do mesmo jeito que o cmd a liga.
+type fixture struct {
+	t   *testing.T
+	dir string
+	st  *store.Store
+	cat Templates
+}
+
+func newFixture(t *testing.T) *fixture {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), "templates")
+	st := store.New(filepath.Join(t.TempDir(), "store"))
+	f := &fixture{t: t, dir: dir, st: st}
+	f.cat = Templates{
+		Dir:         dir,
+		Pristine:    func(rel string) (string, bool) { return st.PristineHash(dir, rel) },
+		SetPristine: func(rel, hash string) error { return st.SetPristine(dir, rel, hash) },
+	}
+	return f
+}
+
+func (f *fixture) embedded(name string) []byte {
+	f.t.Helper()
+	b, err := scaffold.EmbeddedTemplates().(interface {
+		ReadFile(string) ([]byte, error)
+	}).ReadFile(name)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	return b
+}
+
+func (f *fixture) overlay(name, content string) {
+	f.t.Helper()
+	p := filepath.Join(f.dir, filepath.FromSlash(name))
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		f.t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+		f.t.Fatal(err)
+	}
+}
+
+func (f *fixture) baseline(name string, content []byte) {
+	f.t.Helper()
+	if err := f.st.SetPristine(f.dir, name, store.HashBytes(content)); err != nil {
+		f.t.Fatal(err)
+	}
+}
+
+func (f *fixture) state(name string) Entry {
+	f.t.Helper()
+	e, err := f.cat.Lookup(name)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	return e
+}
+
+func (f *fixture) tree() []string {
+	f.t.Helper()
+	var out []string
+	_ = filepath.WalkDir(f.dir, func(p string, d os.DirEntry, err error) error {
+		if err == nil {
+			rel, _ := filepath.Rel(f.dir, p)
+			out = append(out, rel)
+		}
+		return nil
+	})
+	return out
+}
+
+// A matriz de estados tem de coincidir com o que o EnsureTemplates faz — o list
+// não pode discordar do init ai.
+func TestListStateMatchesWhatEnsureTemplatesDoes(t *testing.T) {
+	type kase struct {
+		name       string
+		setup      func(f *fixture, fresh []byte)
+		want       State
+		noBaseline bool
+	}
+	cases := []kase{
+		{"no overlay", func(f *fixture, fresh []byte) {}, New, false},
+		{"equal, no baseline", func(f *fixture, fresh []byte) { f.overlay(sample, string(fresh)) }, Current, false},
+		{"equal, matching baseline", func(f *fixture, fresh []byte) {
+			f.overlay(sample, string(fresh))
+			f.baseline(sample, fresh)
+		}, Current, false},
+		{"equal, stale baseline", func(f *fixture, fresh []byte) {
+			f.overlay(sample, string(fresh))
+			f.baseline(sample, []byte("older"))
+		}, Current, false},
+		{"older version, untouched", func(f *fixture, fresh []byte) {
+			f.overlay(sample, "older version\n")
+			f.baseline(sample, []byte("older version\n"))
+		}, Outdated, false},
+		{"edited, baseline is the default", func(f *fixture, fresh []byte) {
+			f.overlay(sample, "mine\n")
+			f.baseline(sample, fresh)
+		}, Edited, false},
+		{"differs, no baseline", func(f *fixture, fresh []byte) { f.overlay(sample, "mine\n") }, Edited, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := newFixture(t)
+			c.setup(f, f.embedded(sample))
+			before := f.tree()
+
+			e := f.state(sample)
+			if e.State != c.want || e.NoBaseline != c.noBaseline {
+				t.Errorf("state = %s (noBaseline %v), want %s (noBaseline %v)", e.State, e.NoBaseline, c.want, c.noBaseline)
+			}
+			if after := f.tree(); !slices.Equal(before, after) {
+				t.Errorf("List changed the overlay: %v -> %v", before, after)
+			}
+		})
+	}
+}
+
+func TestListFindsCustomTemplatesAndIgnoresJunk(t *testing.T) {
+	f := newFixture(t)
+	f.overlay("mine/extra.md.tmpl", "x")
+	for _, junk := range []string{".CLAUDE.md.tmpl.swp", "CLAUDE.md.tmpl~", ".DS_Store", "notes.txt", ".hidden/y.tmpl", "mine/.z.md.tmpl"} {
+		f.overlay(junk, "junk")
+	}
+	entries, err := f.cat.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var customs []string
+	for _, e := range entries {
+		if e.State == Custom {
+			customs = append(customs, e.Name)
+		}
+	}
+	if !slices.Equal(customs, []string{"mine/extra.md.tmpl"}) {
+		t.Errorf("custom = %v, want only mine/extra.md.tmpl", customs)
+	}
+}
+
+// Só vale um nome exatamente igual a um que o List devolve.
+func TestLookupRejectsAnythingButAnExactName(t *testing.T) {
+	f := newFixture(t)
+	for _, bad := range []string{"../x", "/etc/passwd", "claude/../CLAUDE.md.tmpl", sample + "/", "nope.tmpl", ""} {
+		if _, err := f.cat.Lookup(bad); !errors.Is(err, ErrUnknown) {
+			t.Errorf("Lookup(%q) error = %v, want ErrUnknown", bad, err)
+		}
+	}
+}
+
+// O init ai sincroniza antes de renderizar: o que ele usaria num outdated é o embutido.
+func TestReadReturnsWhatTheNextInitAiWouldUse(t *testing.T) {
+	f := newFixture(t)
+	fresh := f.embedded(sample)
+
+	f.overlay(sample, "older\n")
+	f.baseline(sample, []byte("older\n"))
+	if got, _ := f.cat.Read(sample); string(got) != string(fresh) {
+		t.Errorf("outdated Read = %q, want the embedded template", got)
+	}
+
+	f.overlay(sample, "mine\n")
+	if got, _ := f.cat.Read(sample); string(got) != "mine\n" {
+		t.Errorf("edited Read = %q, want the overlay", got)
+	}
+}
+
+// Um overlay mantido por um gerenciador de dotfiles pode ser um symlink: o list
+// tem de enxergar o que o init ai enxerga.
+func TestListFollowsAnOverlayThatIsASymlink(t *testing.T) {
+	f := newFixture(t)
+	real := filepath.Join(t.TempDir(), "real")
+	if err := os.MkdirAll(filepath.Join(real, "mine"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(real, "mine", "extra.md.tmpl"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(f.dir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(real, f.dir); err != nil {
+		testenv.SymlinkUnavailable(t, err)
+	}
+	e, err := f.cat.Lookup("mine/extra.md.tmpl")
+	if err != nil || e.State != Custom {
+		t.Errorf("Lookup through a symlinked overlay = %+v, %v; want a custom template", e, err)
+	}
+}
+
+// Arquivo vazio no overlay é uma edição como outra qualquer.
+func TestAnEmptyOverlayFileIsEditedNotMissing(t *testing.T) {
+	f := newFixture(t)
+	f.overlay(sample, "")
+	if e := f.state(sample); e.State != Edited {
+		t.Errorf("state of an empty overlay file = %s, want edited", e.State)
+	}
+	if got, err := f.cat.Read(sample); err != nil || len(got) != 0 {
+		t.Errorf("Read = %q, %v; want empty content", got, err)
+	}
+}
+
+// No Windows o usuário digita o nome com "\"; a comparação é por "/".
+func TestLookupAcceptsBackslashesOnWindows(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("backslash is a path separator only on Windows")
+	}
+	f := newFixture(t)
+	if _, err := f.cat.Lookup(`claude\hooks\guard-add.sh.tmpl`); err != nil {
+		t.Errorf("Lookup with backslashes error = %v", err)
+	}
+}

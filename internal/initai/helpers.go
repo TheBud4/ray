@@ -115,25 +115,6 @@ func runOne(r runner.Runner, c runner.Command) (ok bool, reason string) {
 	return true, ""
 }
 
-// dedupScaffoldFiles mantém base inteiro e acrescenta de extra só os paths
-// ausentes em base — a receita "ganha".
-func dedupScaffoldFiles(base, extra []profile.ScaffoldFile) []profile.ScaffoldFile {
-	seen := make(map[string]bool, len(base))
-	out := make([]profile.ScaffoldFile, len(base))
-	copy(out, base)
-	for _, f := range base {
-		seen[f.Path] = true
-	}
-	for _, f := range extra {
-		if seen[f.Path] {
-			continue
-		}
-		out = append(out, f)
-		seen[f.Path] = true
-	}
-	return out
-}
-
 // mergeSettings une os settings da receita aos do ray: `hooks` é unido por
 // evento (entradas da receita primeiro, as do ray depois) para que os hooks do
 // ray não apaguem os da receita; as demais chaves são uma união rasa em que b
