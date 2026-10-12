@@ -3,6 +3,7 @@ package serve
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -441,5 +442,47 @@ func TestAReplacementCharacterTypedOnPurposeIsSaved(t *testing.T) {
 	info := a.load(t, name)
 	if code, res := a.put(t, name, "ok \uFFFD\n", info["hash"]); code != 200 {
 		t.Errorf("PUT with U+FFFD = %d %v, want 200", code, res)
+	}
+}
+
+// Linha-base ilegível: quem escreve responde 422 e nada é gravado.
+func TestAnUnreadableBaselineRefusesTheWrite(t *testing.T) {
+	a := newAPI(t, func(o *Options) {
+		o.Templates.Verify = func() error { return errors.New("pristine.yaml: unreadable") }
+	})
+	name := a.first(t)
+	info := a.load(t, name)
+	code, res := a.put(t, name, "# mine\n", info["hash"])
+	if code != 422 || res["codigo"] != "refused" || !strings.Contains(res["detalhe"].(string), "unreadable") {
+		t.Errorf("PUT with an unreadable baseline = %d %v, want 422 refused naming the cause", code, res)
+	}
+	if _, err := os.Stat(filepath.Join(a.dir, name)); !os.IsNotExist(err) {
+		t.Errorf("a refused save created the file: %v", err)
+	}
+}
+
+func TestJSONWithUnknownFieldsOrTrailingValuesIs400(t *testing.T) {
+	a := newAPI(t, nil)
+	name := a.first(t)
+	info := a.load(t, name)
+	bodies := map[string]string{
+		"unknown field": `{"name":"` + name + `","content":"x","baseHash":"` + info["hash"].(string) + `","admin":true}`,
+		"two values":    `{"name":"` + name + `","content":"x","baseHash":"` + info["hash"].(string) + `"}{"name":"other"}`,
+		"wrong type":    `{"name":"` + name + `","content":7,"baseHash":""}`,
+	}
+	for label, body := range bodies {
+		req := httptest.NewRequest("PUT", "/api/template", strings.NewReader(body))
+		req.Host = a.addr
+		req.Header.Set("X-Ray-Token", "tok")
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Origin", "http://"+a.addr)
+		rec := httptest.NewRecorder()
+		a.h.ServeHTTP(rec, req)
+		if rec.Code != 400 {
+			t.Errorf("%s = %d, want 400", label, rec.Code)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(a.dir, name)); !os.IsNotExist(err) {
+		t.Errorf("a refused body created the file: %v", err)
 	}
 }
