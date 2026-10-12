@@ -17,6 +17,7 @@ import (
 	"github.com/TheBud4/ray/internal/preflight"
 	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/rayconfig"
+	"github.com/TheBud4/ray/internal/report"
 	"github.com/TheBud4/ray/internal/runner"
 	"github.com/TheBud4/ray/internal/scaffold"
 	"github.com/TheBud4/ray/internal/store"
@@ -66,6 +67,28 @@ type Summary struct {
 	// Target é o alvo, em caminho absoluto: o rodapé o usa para dizer onde os
 	// próximos passos valem.
 	Target string
+
+	// Entries são os mesmos resultados das listas acima, tipados e na ordem em
+	// que aconteceram, com o motivo quando há um. Profile é o nome da receita
+	// resolvida.
+	Entries []report.Entry
+	Profile string
+}
+
+// add grava a entrada tipada e, na lista plana que lhe corresponde, o nome:
+// as listas continuam valendo para quem ainda não lê só as entradas.
+func (s *Summary) add(kind report.Kind, name string, outcome report.Outcome, detail string) {
+	s.Entries = append(s.Entries, report.Entry{Kind: kind, Name: name, Outcome: outcome, Detail: detail})
+	switch {
+	case outcome == report.Installed:
+		s.Installed = append(s.Installed, name)
+	case outcome == report.Failed:
+		s.Failed = append(s.Failed, name)
+	case outcome == report.Kept:
+		s.Skipped = append(s.Skipped, name)
+	case outcome == report.Created && kind == report.File:
+		s.Created = append(s.Created, name)
+	}
 }
 
 // versionedPaths reduz a lista de arquivos criados aos caminhos de topo que o
@@ -278,20 +301,21 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 			if state.HasGlobal(g.Key) && !opts.ReinstallGlobal {
 				continue
 			}
-			allOK := true
+			var failures []string
 			for _, c := range g.Commands {
 				if ok, reason := runOne(r, c); !ok {
-					allOK = false
-					sum.Warnings = append(sum.Warnings, fmt.Sprintf("`%s`: %s", c.String(), reason))
+					failure := fmt.Sprintf("`%s`: %s", c.String(), reason)
+					failures = append(failures, failure)
+					sum.Warnings = append(sum.Warnings, failure)
 				}
 			}
-			if allOK {
-				sum.Installed = append(sum.Installed, g.Key)
+			if len(failures) == 0 {
+				sum.add(report.Global, g.Key, report.Installed, "")
 				if !opts.DryRun {
 					state.AddGlobal(g.Key)
 				}
 			} else {
-				sum.Failed = append(sum.Failed, g.Key)
+				sum.add(report.Global, g.Key, report.Failed, strings.Join(failures, "; "))
 			}
 		}
 		if !opts.DryRun {
@@ -314,7 +338,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	for _, c := range prof.Components {
 		srcDir := filepath.Join(home.ComponentsDir, c.Name)
 		if info, statErr := os.Stat(srcDir); statErr != nil || !info.IsDir() {
-			sum.Failed = append(sum.Failed, c.Name)
+			sum.add(report.Component, c.Name, report.Failed, "not found at "+srcDir)
 			sum.Warnings = append(sum.Warnings, fmt.Sprintf("component %q not found at %s", c.Name, srcDir))
 			continue
 		}
@@ -335,14 +359,14 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 			if opts.DryRun {
 				fmt.Fprintf(out, "+ preserve %s (edited locally)\n", c.Name)
 			}
-			sum.Skipped = append(sum.Skipped, c.Name)
+			sum.add(report.Component, c.Name, report.Kept, reason)
 			sum.Warnings = append(sum.Warnings, fmt.Sprintf("%s: %s", c.Name, reason))
 			continue
 		}
 
 		if opts.DryRun {
 			fmt.Fprintf(out, "+ copy %s -> %s\n", c.Name, destDir)
-			sum.Installed = append(sum.Installed, c.Name)
+			sum.add(report.Component, c.Name, report.Installed, "")
 			continue
 		}
 
@@ -351,7 +375,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 			return Summary{}, err
 		}
 		if err := store.CopyTree(sources[c.Name], destDir); err != nil {
-			sum.Failed = append(sum.Failed, c.Name)
+			sum.add(report.Component, c.Name, report.Failed, err.Error())
 			continue
 		}
 		leafHash, err := store.HashTree(destDir)
@@ -361,7 +385,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		if err := baseline.SetPristine(c.Name, leafHash); err != nil {
 			return Summary{}, err
 		}
-		sum.Installed = append(sum.Installed, c.Name)
+		sum.add(report.Component, c.Name, report.Installed, "")
 	}
 
 	// 7c. comandos por-projeto das integrações (ex. `graphify update .`) —
@@ -372,7 +396,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	for _, c := range plan.Commands {
 		c.Dir = target
 		if ok, reason := runOne(r, c); ok {
-			sum.Installed = append(sum.Installed, c.String())
+			sum.add(report.Command, c.String(), report.Installed, "")
 		} else {
 			sum.Warnings = append(sum.Warnings, fmt.Sprintf("`%s` failed (%s); run it again once the project has content", c.String(), reason))
 		}
@@ -389,7 +413,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		return Summary{}, err
 	}
 	if changed {
-		sum.Created = append(sum.Created, ".mcp.json")
+		sum.add(report.File, ".mcp.json", report.Created, "")
 	}
 
 	// 9. scaffold (orientação + arquivos de sistema).
@@ -408,8 +432,12 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	// Acumula em vez de atribuir: o passo 8 já pode ter posto `.mcp.json` aqui,
 	// e o 7b já pode ter posto componentes preservados em Skipped; atribuir
 	// os descartaria em silêncio. Os passos 11 e 12 já acumulavam.
-	sum.Created = append(sum.Created, res.Created...)
-	sum.Skipped = append(sum.Skipped, res.Skipped...)
+	for _, p := range res.Created {
+		sum.add(report.File, p, report.Created, "")
+	}
+	for _, p := range res.Skipped {
+		sum.add(report.File, p, report.Kept, "already there")
+	}
 
 	// 10. settings.json. Vem depois do scaffold porque ele cita os scripts de
 	// hook que o scaffold grava: se o scaffold falha, não sobra um settings
@@ -422,7 +450,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		return Summary{}, err
 	}
 	if changed {
-		sum.Created = append(sum.Created, ".claude/settings.json")
+		sum.add(report.File, ".claude/settings.json", report.Created, "")
 	}
 
 	// 11. .gitignore (I1) — regra-mãe: conteúdo de IA vendorizado é
@@ -435,7 +463,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		return Summary{}, err
 	}
 	if changed {
-		sum.Created = append(sum.Created, ".gitignore")
+		sum.add(report.File, ".gitignore", report.Created, "")
 	}
 	// Só leitura (vale no dry-run): se o usuário ignora .claude/ inteiro, a
 	// lista de exceções que o ray acabou de pôr não tem efeito.
@@ -458,7 +486,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 				return Summary{}, err
 			}
 		}
-		sum.Created = append(sum.Created, ".claude/.ray-profile")
+		sum.add(report.File, ".claude/.ray-profile", report.Created, "")
 	}
 
 	// Projeto montado antes de a linha-base ir para o projeto: leva para o arquivo
@@ -470,10 +498,11 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	}
 
 	if after, err := os.ReadFile(baseline.Path()); err == nil && !bytes.Equal(baselineBefore, after) {
-		sum.Created = append(sum.Created, store.BaselineFile)
+		sum.add(report.File, store.BaselineFile, report.Created, "")
 	}
 
 	sum.Target = target
+	sum.Profile = prof.Name
 	sum.DryRun = opts.DryRun
 	sum.HadFailure = len(sum.Failed) > 0
 	sum.VersionedPaths = versionedPaths(target, sum.Created)
