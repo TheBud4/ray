@@ -146,9 +146,12 @@ func TestSaveRoundTripOfACRLFTemplateIsNoChanges(t *testing.T) {
 
 func TestSaveRefusesWhenTheBaselineIsUnreadable(t *testing.T) {
 	f := newFixture(t)
-	f.cat.Verify = func() error { return errors.New("pristine.yaml: unreadable") }
-	if _, err := f.cat.Save(sample, []byte("x"), ""); err == nil {
-		t.Error("Save with an unreadable baseline succeeded; want an error")
+	info, _ := f.cat.Info(sample)
+	errUnreadable := errors.New("pristine.yaml: unreadable")
+	f.cat.Verify = func() error { return errUnreadable }
+	// A base é a certa de propósito: sem o Verify, nada mais recusaria.
+	if _, err := f.cat.Save(sample, []byte("x"), info.Hash); !errors.Is(err, errUnreadable) {
+		t.Errorf("Save error = %v, want the Verify error", err)
 	}
 	if entries, _ := os.ReadDir(f.dir); len(entries) != 0 {
 		t.Errorf("a refused save created files: %v", entries)
