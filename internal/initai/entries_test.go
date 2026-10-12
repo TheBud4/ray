@@ -25,27 +25,26 @@ func names(entries []report.Entry, keep func(report.Entry) bool) []string {
 	return out
 }
 
-// assertEntriesMirrorTheLists confere que os itens tipados dizem o mesmo que as
-// listas planas, na mesma ordem: as listas continuam valendo até o cmd passar a
-// ler só os itens.
-func assertEntriesMirrorTheLists(t *testing.T, sum Summary) {
-	t.Helper()
-	outcome := func(o report.Outcome) func(report.Entry) bool {
-		return func(e report.Entry) bool { return e.Outcome == o }
+// withOutcome devolve os nomes das entradas com o resultado o, de qualquer
+// tipo, na ordem em que foram gravadas.
+func withOutcome(entries []report.Entry, o report.Outcome) []string {
+	return names(entries, func(e report.Entry) bool { return e.Outcome == o })
+}
+
+// createdFiles devolve os nomes dos arquivos criados, na ordem em que foram
+// gravados.
+func createdFiles(entries []report.Entry) []string {
+	return names(entries, func(e report.Entry) bool { return e.Kind == report.File && e.Outcome == report.Created })
+}
+
+// entryFor devolve a entrada de um tipo e nome.
+func entryFor(entries []report.Entry, kind report.Kind, name string) (report.Entry, bool) {
+	for _, e := range entries {
+		if e.Kind == kind && e.Name == name {
+			return e, true
+		}
 	}
-	if got := names(sum.Entries, outcome(report.Installed)); !slices.Equal(got, sum.Installed) {
-		t.Errorf("Installed entries = %v, Installed list = %v", got, sum.Installed)
-	}
-	if got := names(sum.Entries, outcome(report.Failed)); !slices.Equal(got, sum.Failed) {
-		t.Errorf("Failed entries = %v, Failed list = %v", got, sum.Failed)
-	}
-	if got := names(sum.Entries, outcome(report.Kept)); !slices.Equal(got, sum.Skipped) {
-		t.Errorf("Kept entries = %v, Skipped list = %v", got, sum.Skipped)
-	}
-	created := names(sum.Entries, func(e report.Entry) bool { return e.Kind == report.File && e.Outcome == report.Created })
-	if !slices.Equal(created, sum.Created) {
-		t.Errorf("file Created entries = %v, Created list = %v", created, sum.Created)
-	}
+	return report.Entry{}, false
 }
 
 func runEntries(t *testing.T, home Home, target string, fr runner.Runner, opts Options) Summary {
@@ -90,7 +89,6 @@ func TestRunEntriesRecordTheHappyPath(t *testing.T) {
 		report.Entry{Kind: report.File, Name: ".claude/.ray-profile", Outcome: report.Created},
 		report.Entry{Kind: report.File, Name: store.BaselineFile, Outcome: report.Created},
 	)
-	assertEntriesMirrorTheLists(t, sum)
 }
 
 func TestRunEntriesRecordAMissingComponentWithItsPath(t *testing.T) {
@@ -103,7 +101,6 @@ func TestRunEntriesRecordAMissingComponentWithItsPath(t *testing.T) {
 		Kind: report.Component, Name: "s", Outcome: report.Failed,
 		Detail: "not found at " + filepath.Join(home.ComponentsDir, "s"),
 	})
-	assertEntriesMirrorTheLists(t, sum)
 }
 
 // Repetir o init ai: o componente intocado é recopiado (Installed), o que o
@@ -124,7 +121,6 @@ func TestRunEntriesRecordARepeatedRun(t *testing.T) {
 	if created := names(sum.Entries, func(e report.Entry) bool { return e.Outcome == report.Created }); len(created) != 0 {
 		t.Errorf("second run created %v, want nothing", created)
 	}
-	assertEntriesMirrorTheLists(t, sum)
 }
 
 func TestRunEntriesRecordAnEditedComponentAsKeptWithTheReason(t *testing.T) {
@@ -149,7 +145,6 @@ func TestRunEntriesRecordAnEditedComponentAsKeptWithTheReason(t *testing.T) {
 	if got == nil || got.Outcome != report.Kept || !strings.HasPrefix(got.Detail, "edited locally") {
 		t.Errorf("component entry = %+v, want Kept with the reason starting \"edited locally\"", got)
 	}
-	assertEntriesMirrorTheLists(t, sum)
 }
 
 func TestRunEntriesRecordAFailedGlobalWithItsReason(t *testing.T) {
@@ -172,7 +167,6 @@ func TestRunEntriesRecordAFailedGlobalWithItsReason(t *testing.T) {
 	if !sum.HadFailure {
 		t.Error("HadFailure = false, want the failed global to fail the run")
 	}
-	assertEntriesMirrorTheLists(t, sum)
 }
 
 // O índice do graphify é regenerável: o comando por projeto que falha é só um
@@ -210,5 +204,4 @@ func TestRunEntriesInDryRunAreWhatWouldBeDone(t *testing.T) {
 	if sum.Profile != "test" {
 		t.Errorf("Profile = %q, want the resolved recipe name", sum.Profile)
 	}
-	assertEntriesMirrorTheLists(t, sum)
 }

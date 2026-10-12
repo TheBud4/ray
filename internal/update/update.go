@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/TheBud4/ray/internal/profile"
@@ -46,25 +47,25 @@ type Options struct {
 
 // Summary é o resultado de Run.
 type Summary struct {
-	Tools      []string
-	Updated    []string
-	Unchanged  []string
-	Skipped    []string
-	Failed     []string
+	// Warnings são os avisos que não pertencem a um item: o motivo de um item
+	// mora no Detail da entrada dele, não aqui.
 	Warnings   []string
 	HadFailure bool
 
-	// Entries são os mesmos resultados das listas acima, tipados e na ordem em
-	// que aconteceram, com o motivo quando há um. Profile é o nome da receita
-	// resolvida.
+	// Entries são os resultados, tipados e na ordem em que aconteceram, com o
+	// motivo quando há um. Profile é o nome da receita resolvida.
 	Entries []report.Entry
 	Profile string
 }
 
-// add acrescenta uma entrada tipada. As listas planas são preenchidas à parte,
-// onde cada resultado acontece.
+// add acrescenta uma entrada tipada.
 func (s *Summary) add(e report.Entry) {
 	s.Entries = append(s.Entries, e)
+}
+
+// hadFailure diz se algum item falhou.
+func (s *Summary) hadFailure() bool {
+	return slices.ContainsFunc(s.Entries, func(e report.Entry) bool { return e.Outcome == report.Failed })
 }
 
 // Run executa `ray update`. r executa ações efetivas (ferramentas, cópia de
@@ -148,12 +149,9 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 	if !opts.NoGlobal {
 		for _, cmd := range toolUpgradeCommands(prof.Integrations) {
 			if ok, reason := runOne(r, cmd); ok {
-				sum.Tools = append(sum.Tools, cmd.String())
 				sum.add(report.Entry{Kind: report.Command, Name: cmd.String(), Outcome: report.Updated, Detail: "upgraded"})
 			} else {
-				sum.Failed = append(sum.Failed, cmd.String())
 				sum.add(report.Entry{Kind: report.Command, Name: cmd.String(), Outcome: report.Failed, Detail: reason})
-				sum.Warnings = append(sum.Warnings, fmt.Sprintf("`%s`: %s", cmd.String(), reason))
 			}
 		}
 	}
@@ -163,7 +161,6 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 	for _, c := range prof.Components {
 		srcDir := filepath.Join(home.ComponentsDir, c.Name)
 		if info, statErr := os.Stat(srcDir); statErr != nil || !info.IsDir() {
-			sum.Skipped = append(sum.Skipped, fmt.Sprintf("%s: not found at %s", c.Name, srcDir))
 			sum.add(report.Entry{Kind: report.Component, Name: c.Name, Outcome: report.Kept, Detail: "not found at " + srcDir})
 			continue
 		}
@@ -187,7 +184,6 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 					return Summary{}, err
 				}
 			}
-			sum.Unchanged = append(sum.Unchanged, c.Name)
 			sum.add(report.Entry{Kind: report.Component, Name: c.Name, Outcome: report.Unchanged})
 			continue
 		}
@@ -197,21 +193,16 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 		if opts.DryRun {
 			if !overwrite {
 				fmt.Fprintf(out, "+ preserve %s (edited locally)\n", c.Name)
-				sum.Skipped = append(sum.Skipped, c.Name)
 				sum.add(report.Entry{Kind: report.Component, Name: c.Name, Outcome: report.Kept, Detail: reason})
-				sum.Warnings = append(sum.Warnings, fmt.Sprintf("%s: %s", c.Name, reason))
 				continue
 			}
 			fmt.Fprintf(out, "+ re-copy %s -> %s\n", c.Name, onDisk)
-			sum.Updated = append(sum.Updated, c.Name)
 			sum.add(report.Entry{Kind: report.Component, Name: c.Name, Outcome: report.Updated})
 			continue
 		}
 
 		if !overwrite {
-			sum.Skipped = append(sum.Skipped, c.Name)
 			sum.add(report.Entry{Kind: report.Component, Name: c.Name, Outcome: report.Kept, Detail: reason})
-			sum.Warnings = append(sum.Warnings, fmt.Sprintf("%s: %s", c.Name, reason))
 			continue
 		}
 
@@ -219,14 +210,12 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 			return Summary{}, err
 		}
 		if err := store.CopyTree(sources[c.Name], onDisk); err != nil {
-			sum.Failed = append(sum.Failed, c.Name)
 			sum.add(report.Entry{Kind: report.Component, Name: c.Name, Outcome: report.Failed, Detail: err.Error()})
 			continue
 		}
 		if err := baseline.SetPristine(c.Name, freshHash); err != nil {
 			return Summary{}, err
 		}
-		sum.Updated = append(sum.Updated, c.Name)
 		sum.add(report.Entry{Kind: report.Component, Name: c.Name, Outcome: report.Updated})
 	}
 
@@ -239,7 +228,7 @@ func Run(r runner.Runner, check runner.Runner, opts Options, home Home) (Summary
 	}
 
 	sum.Profile = prof.Name
-	sum.HadFailure = len(sum.Failed) > 0
+	sum.HadFailure = sum.hadFailure()
 	return sum, nil
 }
 
