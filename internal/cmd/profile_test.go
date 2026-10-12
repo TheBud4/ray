@@ -69,24 +69,23 @@ func TestRunProfileListMarksBrokenProfiles(t *testing.T) {
 	}
 }
 
-func TestRunProfileShowPrintsComponents(t *testing.T) {
-	dir := t.TempDir()
-	p := &profile.Profile{
+func TestProfileShowPrintsComponents(t *testing.T) {
+	home := dryRunHome(t)
+	fixHome(t, "")
+	if err := os.MkdirAll(filepath.Join(home, "components", "s"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestProfile(t, filepath.Join(home, "profiles"), &profile.Profile{
 		Name:        "test",
 		Description: "a test profile",
 		Components:  []profile.Component{{Name: "s", Dest: ".claude/skills"}},
-	}
-	if err := profile.WriteNew(dir, p); err != nil {
-		t.Fatal(err)
-	}
+	})
 
-	var out bytes.Buffer
-	if err := runProfileShow(dir, "test", &out); err != nil {
-		t.Fatalf("runProfileShow() error = %v", err)
+	got, err := execRoot(t, "profile", "show", "test")
+	if err != nil {
+		t.Fatalf("profile show error = %v", err)
 	}
-
-	got := out.String()
-	want := "s -> " + filepath.Join(".claude/skills", "s")
+	want := "✓ s  -> " + filepath.Join(".claude/skills", "s")
 	if !strings.Contains(got, want) {
 		t.Errorf("output = %q, want it to contain %q: the component's local name and dest, never a download command", got, want)
 	}
@@ -95,23 +94,22 @@ func TestRunProfileShowPrintsComponents(t *testing.T) {
 // O graphify é o servidor sem args da receita, e era ele que saía como
 // "graphify: graphify-mcp " — um espaço pendurado no fim da linha, porque o
 // formato juntava os args mesmo quando não havia nenhum.
-func TestRunProfileShowLeavesNoTrailingSpaceOnAServerWithoutArgs(t *testing.T) {
-	dir := t.TempDir()
-	p := &profile.Profile{
+func TestProfileShowLeavesNoTrailingSpaceOnAServerWithoutArgs(t *testing.T) {
+	home := dryRunHome(t)
+	writeTestProfile(t, filepath.Join(home, "profiles"), &profile.Profile{
 		Name:         "test",
 		Description:  "a test profile",
 		Integrations: profile.Integrations{CodeGraph: true},
-	}
-	if err := profile.WriteNew(dir, p); err != nil {
-		t.Fatal(err)
-	}
+	})
 
-	var out bytes.Buffer
-	if err := runProfileShow(dir, "test", &out); err != nil {
-		t.Fatalf("runProfileShow() error = %v", err)
+	out, err := execRoot(t, "profile", "show", "test")
+	if err != nil {
+		t.Fatalf("profile show error = %v", err)
 	}
-
-	for _, line := range strings.Split(out.String(), "\n") {
+	if !strings.Contains(out, "MCP servers") {
+		t.Fatalf("the code-graph server is missing from\n%s", out)
+	}
+	for _, line := range strings.Split(out, "\n") {
 		if strings.TrimRight(line, " ") != line {
 			t.Errorf("line %q has trailing whitespace", line)
 		}
