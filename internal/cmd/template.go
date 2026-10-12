@@ -42,6 +42,7 @@ func templateCatalog(verify bool) (catalog.Templates, error) {
 		Dir:         dir,
 		Pristine:    func(rel string) (string, bool) { return st.PristineHash(dir, rel) },
 		SetPristine: func(rel, hash string) error { return st.SetPristine(dir, rel, hash) },
+		Verify:      st.Verify,
 	}, nil
 }
 

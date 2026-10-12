@@ -40,11 +40,14 @@ type Entry struct {
 // ErrUnknown é devolvido para um nome que List não conhece.
 var ErrUnknown = errors.New("unknown template")
 
-// Templates é o overlay em Dir e a linha-base dele, injetada.
+// Templates é o overlay em Dir e a linha-base dele, injetada. Verify, opcional,
+// confere se a linha-base está legível antes de Save decidir o estado ou
+// gravar; nil não confere.
 type Templates struct {
 	Dir         string
 	Pristine    func(rel string) (string, bool)
 	SetPristine func(rel, hash string) error
+	Verify      func() error
 }
 
 // List devolve os templates embutidos, com o estado que EnsureTemplates daria,
@@ -204,10 +207,15 @@ func (t Templates) writeDefault(name string) (baselineErr, err error) {
 func (t Templates) refuseSymlink(name string) error {
 	dest := filepath.Join(t.Dir, filepath.FromSlash(name))
 	if fi, err := os.Lstat(dest); err == nil && fi.Mode()&os.ModeSymlink != 0 {
-		target, _ := os.Readlink(dest)
-		return fmt.Errorf("%s is a symlink to %s; change the file it points to or remove the link", name, target)
+		return t.symlinkError(name)
 	}
 	return nil
+}
+
+// symlinkError é a recusa de rel, um caminho do overlay que é symlink.
+func (t Templates) symlinkError(rel string) error {
+	target, _ := os.Readlink(filepath.Join(t.Dir, filepath.FromSlash(rel)))
+	return fmt.Errorf("%s is a symlink to %s; change the file it points to or remove the link", rel, target)
 }
 
 // Prepare deixa name pronto para edição, como o `init ai` o deixaria: New e
@@ -326,14 +334,22 @@ func (t Templates) Validate(name string) (warnings []string, err error) {
 	if err != nil {
 		return nil, err
 	}
+	return validate(e.Name, func(d scaffold.Data) ([]byte, error) {
+		return scaffold.Render(e.Name, t.Dir, d)
+	})
+}
+
+// validate renderiza name com cada conjunto de dados de exemplo por render e
+// aplica os avisos: é a regra que Validate e Save compartilham.
+func validate(name string, render func(scaffold.Data) ([]byte, error)) (warnings []string, err error) {
 	var rendered []byte
 	for _, d := range exampleData {
-		rendered, err = scaffold.Render(e.Name, t.Dir, d)
+		rendered, err = render(d)
 		if err != nil {
 			return nil, err
 		}
 	}
-	if strings.HasSuffix(e.Name, ".sh.tmpl") && strings.Contains(string(rendered), "\r\n") {
+	if IsHook(name) && strings.Contains(string(rendered), "\r\n") {
 		warnings = append(warnings, "CRLF line endings: the hook will fail in bash")
 	}
 	return warnings, nil
