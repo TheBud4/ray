@@ -51,6 +51,61 @@ origem do nome do perfil — a tela lê o registro em `.claude/.ray-profile`, o
 rótulo, e unificá-los faria a tela pagar o carregamento de receita que a decisão
 acima acabou de evitar.
 
+## Saída do terminal
+
+Todo comando fala o mesmo vocabulário visual, e quem decide como cada linha
+aparece é o pacote `internal/ui`: o `cmd` diz o que a linha *é* (título, seção,
+item, resumo, tabela, diff, erro) e o `ui` escolhe o marcador e a cor.
+
+| Papel | Marcador | Cor (só no terminal) |
+|---|---|---|
+| título (`init ai · demo`) | nome em negrito + detalhe | detalhe cinza |
+| seção (`Components`, `Files`) | negrito | — |
+| feito / falhou / atenção | `✓` / `✗` / `⚠` | verde / vermelho / amarelo |
+| criado / atualizado / preservado | `+` / `~` / `=` | verde / amarelo / cinza |
+| resumo (`1 failed · 3 created`) | contagens ligadas por ` · ` | cada contagem na sua cor |
+| diff | `+` / `-` / `@@` | verde / vermelho / ciano |
+| erro | `✗ mensagem` | vermelho |
+
+**O que tem de valer:**
+
+- **Uma só estrutura.** Sem terminal interativo, ou com `NO_COLOR`, o layout é o
+  mesmo, sem cor. A cor reforça o marcador e nunca o substitui; não existe
+  formato antigo para pipe nem `--plain`.
+- **A cor liga por esta precedência**, decidida por fluxo (`ray … 2>erros.txt`
+  colore o stdout e não o arquivo): `--color always|never` > `NO_COLOR`
+  definido e não vazio > `TERM=dumb` > a saída ser um terminal. `TERM` ausente
+  não desliga (no Windows ele normalmente não existe). A flag `--color` exige
+  valor e recusa o que não for `auto`, `always` ou `never` no parse.
+- **Saída redirecionada nunca tem escape.** Só os métodos semânticos do `ui`
+  emitem escape; `Write` é transparente. Por isso `template show`, os
+  comandos `path` (feitos para `$(…)`), `--help`, `--version`, `completion` e
+  `__complete` saem byte a byte iguais mesmo com `--color always`.
+- **O `--dry-run` não muda.** As linhas `+ …` que os pacotes de domínio imprimem
+  continuam como estão; só o resumo final fala no condicional (`would install`,
+  `would create`, `would skip`) e não mostra `Next steps`.
+- **O erro é uma linha `✗`.** Nasce em `Execute`, não no embrulho da raiz, então
+  vale também para flag inválida, argumento errado e subcomando desconhecido.
+  Só a primeira linha de um erro de várias leva o marcador e o vermelho. Exit 1.
+- **O processo filho do `ray run` recebe o writer cru**, e herda o terminal:
+  servidor de dev e REPL mantêm a cor e o `TTY`.
+- **Alinhamento pela largura visível** (runes, não bytes): nome com acento
+  alinha, e a cor não desalinha tabela.
+- Caminhos de componente são exibidos com a home abreviada em `~`, só na
+  exibição.
+- **Nenhum literal de escape fora de `internal/ui`** (teste estático). No
+  Windows, o console é ligado por `SetConsoleMode` com
+  `ENABLE_VIRTUAL_TERMINAL_PROCESSING`; a ligação em um console real não é
+  alcançada pelo CI.
+
+`init ai`, `new` e `update` listam todos os itens, sem truncar, em seções na
+ordem `Tools`, `Components`, `Files` (seção vazia não aparece). A contagem do
+resumo é a de todas as linhas listadas, na ordem `failed`, `installed`,
+`updated`, `created`, `unchanged`, `kept`. O motivo de um item mora ao lado dele
+(`not found at …`, `already there`) e não se repete como aviso; um componente
+preservado por edição local sai `kept — edited locally` e uma única linha
+`⚠ use --force to overwrite the components kept above` aparece antes do resumo.
+
 ## `ray status`
 
 Diagnostica o ambiente vendorizado **deste projeto**. A fronteira com o
@@ -191,7 +246,7 @@ execução escreveu e que precisa ser versionado, seguido do commit e do `claude
 - **Se a execução falhou pela metade, o rodapé inteiro some.** Mandar commitar um
   ambiente quebrado é pior que não dizer nada, porque grava o estado quebrado.
 - **Em `--dry-run` o rodapé também some.** Nada foi escrito, e o `git add` de
-  caminhos que não existem contradiria o "Would create" do resumo.
+  caminhos que não existem contradiria o "would create" do resumo.
 
 O `.gitignore` entra na lista, e é o caso que mais importa: ele não está na
 whitelist do próprio bloco porque *é* o arquivo que a contém — sem ele
@@ -225,7 +280,7 @@ guardada em `.claude/.ray-pristine.yaml` (no projeto, versionada), e o commit n�
 muda o conteúdo do arquivo. Por morar no projeto, ela viaja: mover a pasta ou
 clonar o repositório não faz os componentes virarem "procedência desconhecida". Rodar `init ai`
 de novo no mesmo alvo segue a mesma política: componente editado é preservado
-(entra em `Skipped`, com aviso) e a linha-base não se move; só `--force`
+(aparece como `kept — edited locally`, com a dica do `--force`) e a linha-base não se move; só `--force`
 sobrescreve.
 
 Antes de copiar, `init ai` e `update` conferem a origem de cada componente: um
@@ -272,7 +327,7 @@ contradiria a saída dos passos globais impressa logo acima.
 
 **Um caso é de classe diferente e mais grave:** componente sem pasta
 correspondente em `~/.ray/components/` era o tipo de coisa fácil de descartar
-em silêncio. Não é: entra no resumo (`Failed` no `init ai`, `Skipped` no
+em silêncio. Não é: entra no resumo (`✗` no `init ai`, `=` no
 `update`) nomeando o caminho que faltou — receita com componente inexistente é
 situação a relatar, não erro a engolir.
 

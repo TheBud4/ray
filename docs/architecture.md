@@ -55,6 +55,7 @@ internal/
 ├── catalog/      # núcleo de leitura e edição do overlay de templates e
 │                 #   checagem de receita
 ├── update/       # `ray update`: recópia local protegendo edição
+├── report/       # itens tipados (`Entry`) que initai e update devolvem no resumo
 │
 ├── store/        # linha-base pristina (hash) para decidir "foi editado?":
 │                 #   a do projeto (versionada) e a do overlay de templates
@@ -74,6 +75,7 @@ internal/
 ├── safepath/     # confere que um destino, seguindo symlink, fica dentro do projeto
 ├── runfile/      # aliases do `ray run` (ray.yaml do projeto + global)
 ├── preflight/    # fonte única de checagem de dependências externas
+├── ui/           # apresentação: papéis da saída, cor, console do Windows
 ├── runner/       # ÚNICA fronteira para processos externos
 └── openutil/     # abre um caminho no app default do sistema
 ```
@@ -104,6 +106,14 @@ o código sozinho não conta:
   rede — é o que o mantém testável só com memória.
 - `catalog` importa `scaffold`, `store`, `profile` e `fsutil`; `scaffold` não
   importa `catalog`. `linediff` é usado pelo `cmd` (`template diff` e `reset`).
+- `ui` é o único pacote que conhece escape ANSI e o console do Windows
+  (`kernel32`). O `cmd` diz o papel da linha; os pacotes de domínio não importam
+  `ui`, e as linhas `+ …` do `--dry-run` que eles imprimem saem sem cor. O writer
+  que vai a um processo filho passa por `ui.Raw`, para o filho herdar o terminal
+  em vez de um pipe.
+- `report` é compartilhado por `initai` e `update`, que devolvem `Summary` com
+  `Entries`; o `cmd` renderiza essas entradas e não lê mais nada além delas e
+  dos avisos que não pertencem a um item.
 - `vault` **valida** o cérebro, nunca o cria. O `ray` é consumidor da vault do
   usuário, não dono dela.
 
