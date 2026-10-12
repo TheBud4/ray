@@ -11,6 +11,7 @@ import (
 	"github.com/TheBud4/ray/internal/rayconfig"
 	"github.com/TheBud4/ray/internal/raypaths"
 	"github.com/TheBud4/ray/internal/runner"
+	"github.com/TheBud4/ray/internal/ui"
 	"github.com/TheBud4/ray/internal/vault"
 )
 
@@ -74,7 +75,7 @@ func runBrainSet(configPath, path string, out io.Writer) error {
 	if err := cfg.SetBrain(configPath, path); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "brain set to %s\n", path)
+	ui.For(out).Result(ui.OK, "brain set to "+path, "")
 	return nil
 }
 
@@ -100,7 +101,7 @@ func runBrainStatus(configPath string, out io.Writer) error {
 	}
 	path := cfg.BrainPath()
 	if path == "" {
-		fmt.Fprintln(out, "brain: not configured (run `ray brain set <path>`)")
+		ui.For(out).Warning("brain: not configured (run `ray brain set <path>`)", "")
 		return nil
 	}
 	st, err := vault.Stat(path)

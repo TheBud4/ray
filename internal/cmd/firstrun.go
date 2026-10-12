@@ -1,10 +1,10 @@
 package cmd
 
 import (
-	"fmt"
 	"io"
 
 	"github.com/TheBud4/ray/internal/status"
+	"github.com/TheBud4/ray/internal/ui"
 )
 
 // runFirstRun imprime a tela de `ray` sem subcomando. Ela orienta, não
@@ -26,20 +26,28 @@ func runFirstRun(target string, out io.Writer) error {
 		return err
 	}
 
-	fmt.Fprintln(out, "ray — versioned AI environments")
+	p := ui.For(out)
+	p.Line("ray — versioned AI environments")
+	p.Blank()
 
 	if facts.HasEnvironment {
-		fmt.Fprintln(out)
-		printFacts(out, facts.Profile, facts.Inventory)
-		fmt.Fprintln(out, "\nNext steps:")
-		fmt.Fprintln(out, "  claude                start the session")
-		fmt.Fprintln(out, "  ray status            diagnose the environment")
+		if printFacts(out, facts.Profile, facts.Inventory) {
+			p.Blank()
+		}
+		p.Section("Next steps")
+		p.Steps([][2]string{
+			{"claude", "start the session"},
+			{"ray status", "diagnose the environment"},
+		})
 	} else {
-		fmt.Fprintln(out, "\nNext steps:")
-		fmt.Fprintln(out, "  ray new go my-app     new project, environment included")
-		fmt.Fprintln(out, "  ray init ai           environment only, in this directory")
+		p.Section("Next steps")
+		p.Steps([][2]string{
+			{"ray new go my-app", "new project, environment included"},
+			{"ray init ai", "environment only, in this directory"},
+		})
 	}
 
-	fmt.Fprintln(out, "\n`ray --help` lists every command")
+	p.Blank()
+	p.Line("`ray --help` lists every command")
 	return nil
 }

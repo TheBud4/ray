@@ -10,6 +10,7 @@ import (
 	"github.com/TheBud4/ray/internal/raypaths"
 	"github.com/TheBud4/ray/internal/runner"
 	"github.com/TheBud4/ray/internal/status"
+	"github.com/TheBud4/ray/internal/ui"
 )
 
 func newStatusCmd() *cobra.Command {
@@ -52,49 +53,77 @@ func runStatus(target string, out io.Writer) error {
 	return nil
 }
 
-// printStatus renderiza os três níveis do design: fato sempre, nota quando o
-// estado é esperado mas o usuário precisa saber, e ⚠ só quando algo está
-// errado agora. Ambiente são imprime duas linhas — é isso que faz o ⚠
-// significar alguma coisa quando aparece.
-func printStatus(out io.Writer, rep status.Report) {
-	printStatusFacts(out, rep)
+// statusWarning é um aviso do diagnóstico: a manchete e, se houver, a dica do
+// que fazer. Os dois vêm separados da origem — o cmd nunca parte uma string,
+// porque um Problem pode trazer " — " no próprio texto.
+type statusWarning struct {
+	Headline, Hint string
+}
 
-	if rep.Git == status.GitNeverTracked && len(rep.AddPaths) > 0 {
-		fmt.Fprintln(out, "\nenvironment not versioned yet:")
-		// Caminhos por nome, nunca `git add -A`/`.`: o guard-add.sh que o
-		// ray instala avisa contra add cego, e o status não pode
-		// contradizer o hook.
-		fmt.Fprintf(out, "  git add %s\n", strings.Join(rep.AddPaths, " "))
-	}
+// printStatus renderiza os dois níveis do design: fato e ⚠. O ambiente ainda não
+// versionado é ⚠ de propósito: é o estado em que um clone novo não o reproduz, e
+// o aviso traz o `git add` pronto. Ambiente versionado e são imprime só o
+// título e o veredito — é isso que faz o ⚠ significar alguma coisa quando
+// aparece.
+func printStatus(out io.Writer, rep status.Report) {
+	p := ui.For(out)
+	p.Title("status", strings.Join(nonEmpty(rep.Profile, inventoryText(rep.Inventory)), " · "))
+	p.Blank()
 
 	warnings := statusWarnings(rep)
 	if len(warnings) == 0 {
-		fmt.Fprintln(out, "\nall in order")
+		p.Verdict(ui.OK, "all in order", "")
 		return
 	}
-	fmt.Fprintln(out)
 	for _, w := range warnings {
-		fmt.Fprintf(out, "⚠ %s\n", w)
+		p.Warning(w.Headline, w.Hint)
 	}
+	p.Blank()
+	label := "warnings"
+	if len(warnings) == 1 {
+		label = "warning"
+	}
+	p.Summary(ui.Count{N: len(warnings), Label: label, Color: ui.Yellow})
 }
 
-func printStatusFacts(out io.Writer, rep status.Report) {
-	printFacts(out, rep.Profile, rep.Inventory)
+// nonEmpty devolve só as partes não vazias, na ordem dada.
+func nonEmpty(parts ...string) []string {
+	var kept []string
+	for _, s := range parts {
+		if s != "" {
+			kept = append(kept, s)
+		}
+	}
+	return kept
 }
 
-// printFacts imprime a linha de fatos do ambiente: perfil e inventário,
-// juntados com · e omitindo o que for zero. Compartilhada com a tela de `ray`
-// sem subcomando para que as duas nomeiem as mesmas coisas do mesmo jeito.
-func printFacts(out io.Writer, profile string, inv status.Inventory) {
-	parts := []string{}
-	if profile != "" {
-		parts = append(parts, "profile: "+profile)
+// printFacts imprime a linha de fatos do ambiente: o perfil como título e o
+// inventário como detalhe; sem perfil, só o inventário. Compartilhada com a
+// tela de `ray` sem subcomando para que as duas nomeiem as mesmas coisas do
+// mesmo jeito. Devolve se imprimiu alguma linha.
+func printFacts(out io.Writer, profile string, inv status.Inventory) bool {
+	p := ui.For(out)
+	inventory := inventoryText(inv)
+	switch {
+	case profile != "":
+		p.Title(profile, inventory)
+	case inventory != "":
+		p.Line(inventory)
+	default:
+		return false
 	}
+	return true
+}
+
+// inventoryText monta o inventário: contagens juntadas com · e sem o que for
+// zero.
+func inventoryText(inv status.Inventory) string {
+	var parts []string
 	// Os dois rótulos vêm escritos, não derivados de uma regra sobre o "s"
 	// final: um ambiente com uma skill só é comum, e "1 skills" na primeira
 	// linha do primeiro comando que a pessoa roda é o tipo de descuido que
 	// ela leva para a opinião sobre o resto.
-	for _, p := range []struct {
+	for _, c := range []struct {
 		n         int
 		one, many string
 	}{
@@ -103,33 +132,42 @@ func printFacts(out io.Writer, profile string, inv status.Inventory) {
 		{inv.Commands, "command", "commands"},
 		{inv.MCPServers, "MCP server", "MCP servers"},
 	} {
-		if p.n > 0 {
-			label := p.many
-			if p.n == 1 {
-				label = p.one
+		if c.n > 0 {
+			label := c.many
+			if c.n == 1 {
+				label = c.one
 			}
-			parts = append(parts, fmt.Sprintf("%d %s", p.n, label))
+			parts = append(parts, fmt.Sprintf("%d %s", c.n, label))
 		}
 	}
-	if len(parts) > 0 {
-		fmt.Fprintln(out, strings.Join(parts, " · "))
-	}
+	return strings.Join(parts, " · ")
 }
 
 // statusWarnings junta tudo que merece ⚠. Componente intocado fica de fora:
 // não é notícia, e listá-lo enterraria o que é.
-func statusWarnings(rep status.Report) []string {
-	var w []string
-	if rep.Git == status.GitDirty {
-		w = append(w, fmt.Sprintf(".claude/: %d changed and not committed", rep.DirtyN))
+func statusWarnings(rep status.Report) []statusWarning {
+	var w []statusWarning
+	if rep.Git == status.GitNeverTracked && len(rep.AddPaths) > 0 {
+		// Caminhos por nome, nunca `git add -A`/`.`: o guard-add.sh que o ray
+		// instala avisa contra add cego, e o status não pode contradizer o
+		// hook.
+		w = append(w, statusWarning{
+			Headline: "environment not versioned yet",
+			Hint:     "git add " + strings.Join(rep.AddPaths, " "),
+		})
 	}
-	w = append(w, rep.Problems...)
+	if rep.Git == status.GitDirty {
+		w = append(w, statusWarning{Headline: fmt.Sprintf(".claude/: %d changed and not committed", rep.DirtyN)})
+	}
+	for _, problem := range rep.Problems {
+		w = append(w, statusWarning{Headline: problem})
+	}
 	for _, f := range rep.Forks {
 		switch f.State {
 		case status.ForkEdited:
-			w = append(w, fmt.Sprintf("%s: edited locally — `ray update` will preserve it", f.Coord))
+			w = append(w, statusWarning{Headline: f.Coord + ": edited locally", Hint: "`ray update` will preserve it"})
 		case status.ForkUnknown:
-			w = append(w, fmt.Sprintf("%s: unknown provenance (no pristine baseline)", f.Coord))
+			w = append(w, statusWarning{Headline: f.Coord + ": unknown provenance (no pristine baseline)"})
 		}
 	}
 	return w
