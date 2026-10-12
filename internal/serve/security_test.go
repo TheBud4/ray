@@ -3,6 +3,7 @@ package serve
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -179,5 +180,34 @@ func TestGETNeverChangesState(t *testing.T) {
 	h, addr, tok := newTestHandler(t)
 	if rec := do(h, "GET", "/api/ping", addr, tok, nil); rec.Code != 200 {
 		t.Errorf("GET without Origin = %d, want 200 (reads need no Origin)", rec.Code)
+	}
+}
+
+// Um cliente que não declara o tamanho (chunked) ou mente nele não passa do
+// limite: quem corta é o MaxBytesReader, não o Content-Length.
+func TestBodyWithoutAContentLengthIsStillCutAt2MiB(t *testing.T) {
+	h, addr, tok := newTestHandler(t)
+	req := httptest.NewRequest("POST", "/api/ping", strings.NewReader(strings.Repeat("a", 2<<20+1)))
+	req.ContentLength = -1
+	req.Host = addr
+	req.Header.Set("X-Ray-Token", tok)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "http://"+addr)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 413 {
+		t.Errorf("chunked body over 2 MiB = %d, want 413", rec.Code)
+	}
+}
+
+// O token tem de ser comparado em tempo constante; nenhum teste de
+// comportamento distingue isso de ==, então o código-fonte é conferido.
+func TestTheTokenIsComparedInConstantTime(t *testing.T) {
+	src, err := os.ReadFile("security.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(src), "subtle.ConstantTimeCompare") {
+		t.Error("security.go must compare the token with subtle.ConstantTimeCompare")
 	}
 }
