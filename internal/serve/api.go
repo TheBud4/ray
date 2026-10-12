@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"github.com/TheBud4/ray/internal/catalog"
 )
@@ -188,21 +187,14 @@ type saveResponse struct {
 	Hash        string      `json:"hash"`
 }
 
-// save grava o template, serializado com as outras escritas.
-//
-// Um conteúdo com U+FFFD é recusado como não-UTF-8: o JSON troca todo byte
-// inválido por esse caractere, então ele é a única marca que chega aqui de um
-// arquivo que não era UTF-8 — gravá-lo trocaria os bytes originais em silêncio.
+// save grava o template, serializado com as outras escritas. O JSON só traz
+// UTF-8 válido, e um U+FFFD no conteúdo é texto legítimo; a gravação por cima
+// de um arquivo que não é UTF-8 o catalog recusa com ErrNotUTF8.
 func (a *apiHandler) save(w http.ResponseWriter, r *http.Request) {
 	var req saveRequest
 	if !decodeBody(w, r, &req) || tooLarge(w, req.Content) {
 		return
 	}
-	if strings.ContainsRune(req.Content, utf8.RuneError) {
-		writeCode(w, codeNotUTF8, catalog.ErrNotUTF8.Error()+": it carries U+FFFD, the mark of bytes lost when decoding")
-		return
-	}
-
 	writeMu.Lock()
 	res, err := a.templates.Save(req.Name, []byte(req.Content), req.BaseHash)
 	writeMu.Unlock()

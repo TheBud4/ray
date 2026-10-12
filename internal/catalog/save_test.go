@@ -186,3 +186,20 @@ func TestSaveBoundsTheRenderOfARecursiveTemplate(t *testing.T) {
 		t.Fatalf("Save = %+v, %v; want the content kept and a ceiling RenderError", res, err)
 	}
 }
+
+// Um arquivo que não é UTF-8 não faz o ida-e-volta pelo editor sem perder bytes:
+// a gravação por cima dele é recusada, e os bytes ficam como estão.
+func TestSaveRefusesToOverwriteAFileThatIsNotUTF8(t *testing.T) {
+	f := newFixture(t)
+	f.overlay(sample, "ok \xff\xfe\n")
+	info, _ := f.cat.Info(sample)
+	if info.UTF8 {
+		t.Fatal("Info.UTF8 = true for a file with invalid bytes")
+	}
+	if _, err := f.cat.Save(sample, []byte("ok\n"), info.Hash); !errors.Is(err, ErrNotUTF8) {
+		t.Errorf("error = %v, want ErrNotUTF8", err)
+	}
+	if got := f.read(sample); got != "ok \xff\xfe\n" {
+		t.Errorf("the original bytes must survive a refused save, file = %q", got)
+	}
+}

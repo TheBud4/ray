@@ -180,7 +180,6 @@ func TestAPIRejectsNamesOutsideTheList(t *testing.T) {
 func TestAPIMapsTypedErrors(t *testing.T) {
 	a := newAPI(t, nil)
 	name := a.first(t)
-	hash := a.load(t, name)["hash"]
 	cases := []struct {
 		label   string
 		name    string
@@ -191,7 +190,6 @@ func TestAPIMapsTypedErrors(t *testing.T) {
 	}{
 		{"hook", hook, "x", "", 403, "read-only-on-web"},
 		{"stale", name, "x", "0000", 409, "stale"},
-		{"not utf-8", name, "\xff\xfe", hash, 422, "not-utf8"},
 	}
 	for _, c := range cases {
 		code, res := a.put(t, c.name, c.content, c.base)
@@ -408,5 +406,40 @@ func TestUnknownAPIRoutesAre404WithJSONErrors(t *testing.T) {
 	code, res := a.call(t, "GET", "/api/nope", nil)
 	if code != 404 || res["codigo"] == nil {
 		t.Errorf("unknown route = %d %v, want 404 with a JSON error body", code, res)
+	}
+}
+
+// O JSON do navegador só carrega UTF-8 válido, então o risco real é outro:
+// salvar de volta um arquivo do disco que não é UTF-8 perderia os bytes dele.
+func TestRefusesToSaveOverAFileThatIsNotUTF8(t *testing.T) {
+	a := newAPI(t, nil)
+	name := a.first(t)
+	if err := os.MkdirAll(filepath.Dir(filepath.Join(a.dir, name)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(a.dir, name)
+	if err := os.WriteFile(path, []byte("ok \xff\xfe\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	info := a.load(t, name)
+	if info["utf8"] != false {
+		t.Fatalf("info = %v, want utf8 false for a file with invalid bytes", info)
+	}
+	code, res := a.put(t, name, "ok\n", info["hash"])
+	if code != 422 || res["codigo"] != "not-utf8" {
+		t.Errorf("PUT over a non-UTF-8 file = %d %v, want 422 not-utf8", code, res)
+	}
+	if got, _ := os.ReadFile(path); string(got) != "ok \xff\xfe\n" {
+		t.Errorf("the original bytes must survive a refused save, file = %q", got)
+	}
+}
+
+// Um U+FFFD escrito de propósito é conteúdo legítimo e passa.
+func TestAReplacementCharacterTypedOnPurposeIsSaved(t *testing.T) {
+	a := newAPI(t, nil)
+	name := a.first(t)
+	info := a.load(t, name)
+	if code, res := a.put(t, name, "ok \uFFFD\n", info["hash"]); code != 200 {
+		t.Errorf("PUT with U+FFFD = %d %v, want 200", code, res)
 	}
 }

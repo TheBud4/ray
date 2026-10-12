@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path"
@@ -19,7 +20,9 @@ var (
 	ErrStale = errors.New("the template changed on disk since it was loaded")
 	// ErrReadOnly recusa a gravação de um hook pela web.
 	ErrReadOnly = errors.New("hooks are read-only on the web; use `ray template edit`")
-	// ErrNotUTF8 recusa um conteúdo que não é UTF-8 válido.
+	// ErrNotUTF8 recusa um conteúdo que não é UTF-8 válido, e também a gravação
+	// por cima de um arquivo que não é: o editor o leu com bytes trocados por
+	// U+FFFD, e gravar por cima perderia os originais.
 	ErrNotUTF8 = errors.New("the content is not valid UTF-8")
 )
 
@@ -37,8 +40,9 @@ type SaveResult struct {
 // Save grava content como o template name, se o arquivo ainda é o que o cliente
 // leu (baseHash, o Hash de Info). Nada é gravado quando uma conferência falha;
 // elas vêm em ordem, das baratas às que leem o disco: nome da lista, hook,
-// UTF-8, linha-base legível, symlink no caminho e base defasada. content é
-// gravado como veio, com o fim de linha que o cliente restaurou.
+// UTF-8 do conteúdo, linha-base legível, symlink no caminho, UTF-8 do arquivo
+// atual e base defasada. content é gravado como veio, com o fim de linha que o
+// cliente restaurou.
 func (t Templates) Save(name string, content []byte, baseHash string) (SaveResult, error) {
 	e, err := t.Lookup(name)
 	if err != nil {
@@ -63,6 +67,9 @@ func (t Templates) Save(name string, content []byte, baseHash string) (SaveResul
 	before, err := t.Read(e.Name)
 	if err != nil {
 		return SaveResult{}, err
+	}
+	if !utf8.Valid(before) {
+		return SaveResult{}, fmt.Errorf("%w: %s on disk has bytes that are not UTF-8 and the editor would lose them; use `ray template edit`", ErrNotUTF8, e.Name)
 	}
 	if store.HashBytes(before) != baseHash {
 		return SaveResult{}, ErrStale
