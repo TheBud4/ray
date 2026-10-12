@@ -67,28 +67,26 @@ func names(entries []report.Entry, keep func(report.Entry) bool) []string {
 	return out
 }
 
-// assertEntriesMirrorTheLists: as listas planas continuam preenchidas até o cmd
-// passar a ler só os itens; elas e os itens dizem o mesmo.
-func assertEntriesMirrorTheLists(t *testing.T, sum Summary) {
-	t.Helper()
-	of := func(kind report.Kind, o report.Outcome) []string {
-		return names(sum.Entries, func(e report.Entry) bool { return e.Kind == kind && e.Outcome == o })
+// entryNames devolve os nomes das entradas de um tipo e resultado, na ordem em
+// que foram gravadas.
+func entryNames(entries []report.Entry, kind report.Kind, o report.Outcome) []string {
+	return names(entries, func(e report.Entry) bool { return e.Kind == kind && e.Outcome == o })
+}
+
+// withOutcome devolve os nomes das entradas com o resultado o, de qualquer
+// tipo, na ordem em que foram gravadas.
+func withOutcome(entries []report.Entry, o report.Outcome) []string {
+	return names(entries, func(e report.Entry) bool { return e.Outcome == o })
+}
+
+// entryFor devolve a entrada de um tipo e nome.
+func entryFor(entries []report.Entry, kind report.Kind, name string) (report.Entry, bool) {
+	for _, e := range entries {
+		if e.Kind == kind && e.Name == name {
+			return e, true
+		}
 	}
-	if got := of(report.Component, report.Updated); !slices.Equal(got, sum.Updated) {
-		t.Errorf("Updated entries = %v, Updated list = %v", got, sum.Updated)
-	}
-	if got := of(report.Component, report.Unchanged); !slices.Equal(got, sum.Unchanged) {
-		t.Errorf("Unchanged entries = %v, Unchanged list = %v", got, sum.Unchanged)
-	}
-	if got := of(report.Command, report.Updated); !slices.Equal(got, sum.Tools) {
-		t.Errorf("tool entries = %v, Tools list = %v", got, sum.Tools)
-	}
-	if got := names(sum.Entries, func(e report.Entry) bool { return e.Outcome == report.Failed }); !slices.Equal(got, sum.Failed) {
-		t.Errorf("Failed entries = %v, Failed list = %v", got, sum.Failed)
-	}
-	if got := of(report.Component, report.Kept); len(got) != len(sum.Skipped) {
-		t.Errorf("Kept entries = %v, Skipped list = %v", got, sum.Skipped)
-	}
+	return report.Entry{}, false
 }
 
 func TestRunEntriesRecordAnUpdatedComponentAndTheUpgradedTools(t *testing.T) {
@@ -109,7 +107,6 @@ func TestRunEntriesRecordAnUpdatedComponentAndTheUpgradedTools(t *testing.T) {
 		report.Entry{Kind: report.Command, Name: "uv tool upgrade headroom-ai", Outcome: report.Updated, Detail: "upgraded"},
 		report.Entry{Kind: report.Command, Name: "uv tool upgrade graphifyy", Outcome: report.Updated, Detail: "upgraded"},
 	)
-	assertEntriesMirrorTheLists(t, sum)
 }
 
 func TestRunEntriesRecordAnUnchangedComponent(t *testing.T) {
@@ -123,7 +120,6 @@ func TestRunEntriesRecordAnUnchangedComponent(t *testing.T) {
 	sum := updateWith(t, home, target, &runner.FakeRunner{}, Options{NoGlobal: true})
 
 	assertHasEntries(t, sum, report.Entry{Kind: report.Component, Name: "s", Outcome: report.Unchanged})
-	assertEntriesMirrorTheLists(t, sum)
 }
 
 func TestRunEntriesRecordAnEditedComponentAsKeptWithTheReason(t *testing.T) {
@@ -147,7 +143,6 @@ func TestRunEntriesRecordAnEditedComponentAsKeptWithTheReason(t *testing.T) {
 			if got == nil || got.Outcome != report.Kept || !strings.HasPrefix(got.Detail, "edited locally") {
 				t.Errorf("component entry = %+v, want Kept with the reason starting \"edited locally\"", got)
 			}
-			assertEntriesMirrorTheLists(t, sum)
 		})
 	}
 }
@@ -164,7 +159,6 @@ func TestRunEntriesRecordAMissingComponentAsKeptWithItsPath(t *testing.T) {
 		Kind: report.Component, Name: "s", Outcome: report.Kept,
 		Detail: "not found at " + filepath.Join(home.ComponentsDir, "s"),
 	})
-	assertEntriesMirrorTheLists(t, sum)
 }
 
 func TestRunEntriesRecordAFailedToolUpgradeWithItsReason(t *testing.T) {
@@ -186,5 +180,4 @@ func TestRunEntriesRecordAFailedToolUpgradeWithItsReason(t *testing.T) {
 	if !sum.HadFailure {
 		t.Error("HadFailure = false, want the failed upgrade to fail the run")
 	}
-	assertEntriesMirrorTheLists(t, sum)
 }

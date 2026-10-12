@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/TheBud4/ray/internal/report"
 	"github.com/TheBud4/ray/internal/runner"
 )
 
@@ -107,8 +108,8 @@ func TestRunCopiesAComponentWhoseFolderIsASymlink(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if !slices.Contains(sum.Installed, "s") {
-		t.Errorf("Installed = %v, want it to contain s (Failed = %v)", sum.Installed, sum.Failed)
+	if installed := withOutcome(sum.Entries, report.Installed); !slices.Contains(installed, "s") {
+		t.Errorf("Installed = %v, want it to contain s (Failed = %v)", installed, withOutcome(sum.Entries, report.Failed))
 	}
 	if b, _ := os.ReadFile(filepath.Join(target, ".claude", "skills", "s", "SKILL.md")); string(b) != "# real" {
 		t.Errorf("copied SKILL.md = %q, want %q", b, "# real")

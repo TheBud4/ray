@@ -11,6 +11,7 @@ import (
 
 	"github.com/TheBud4/ray/internal/initai"
 	"github.com/TheBud4/ray/internal/profile"
+	"github.com/TheBud4/ray/internal/report"
 	"github.com/TheBud4/ray/internal/runner"
 	"github.com/TheBud4/ray/internal/store"
 )
@@ -325,8 +326,8 @@ func TestInitAIDryRunUsesTheRecipeTheRealRunWouldUse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("initai.Run() error = %v", err)
 	}
-	for _, it := range sum.Installed {
-		if it == "s" {
+	for _, e := range sum.Entries {
+		if e.Name == "s" && e.Outcome == report.Installed {
 			t.Error("dry-run would install component s from the outdated file; the real run uses the factory recipe, which has none")
 		}
 	}

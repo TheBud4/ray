@@ -19,6 +19,7 @@ import (
 	"github.com/TheBud4/ray/internal/preflight"
 	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/rayconfig"
+	"github.com/TheBud4/ray/internal/report"
 	"github.com/TheBud4/ray/internal/runner"
 	"github.com/TheBud4/ray/internal/scaffold"
 	"github.com/TheBud4/ray/internal/store"
@@ -103,7 +104,7 @@ func TestRunBuildModeFullFlow(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 	if sum.HadFailure {
-		t.Fatalf("HadFailure = true, Failed = %v", sum.Failed)
+		t.Fatalf("HadFailure = true, Failed = %v", withOutcome(sum.Entries, report.Failed))
 	}
 
 	for _, p := range []string{"CLAUDE.md", ".mcp.json", ".claude/settings.json", ".claude/hooks/session-start.sh", ".claude/skills/s/SKILL.md"} {
@@ -127,7 +128,7 @@ func TestRunWritesGitignore(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 	if sum.HadFailure {
-		t.Fatalf("HadFailure = true, Failed = %v", sum.Failed)
+		t.Fatalf("HadFailure = true, Failed = %v", withOutcome(sum.Entries, report.Failed))
 	}
 
 	data, err := os.ReadFile(filepath.Join(target, ".gitignore"))
@@ -141,14 +142,8 @@ func TestRunWritesGitignore(t *testing.T) {
 		}
 	}
 
-	found := false
-	for _, c := range sum.Created {
-		if c == ".gitignore" {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("Summary.Created = %v, want it to include .gitignore", sum.Created)
+	if created := createdFiles(sum.Entries); !slices.Contains(created, ".gitignore") {
+		t.Errorf("created files = %v, want them to include .gitignore", created)
 	}
 }
 
@@ -169,8 +164,8 @@ func TestRunDryRunWritesNothing(t *testing.T) {
 			t.Errorf("%s should not exist after dry-run, stat err = %v", p, statErr)
 		}
 	}
-	if len(sum.Created) == 0 {
-		t.Error("Summary.Created should still report what would be created in dry-run")
+	if len(createdFiles(sum.Entries)) == 0 {
+		t.Error("created files should still report what would be created in dry-run")
 	}
 }
 
@@ -209,11 +204,11 @@ func TestRunComponentFailureDoesNotAbort(t *testing.T) {
 	if !sum.HadFailure {
 		t.Fatal("HadFailure = false, want true")
 	}
-	if !slices.Contains(sum.Failed, "s") {
-		t.Errorf("Failed = %v, want it to include the failed component name", sum.Failed)
+	if failed := withOutcome(sum.Entries, report.Failed); !slices.Contains(failed, "s") {
+		t.Errorf("Failed = %v, want it to include the failed component name", failed)
 	}
-	if !hasWarning(sum, "not found") {
-		t.Errorf("Warnings = %v, want one naming the missing component path", sum.Warnings)
+	if e, _ := entryFor(sum.Entries, report.Component, "s"); !strings.Contains(e.Detail, "not found") {
+		t.Errorf("component entry = %+v, want its reason naming the missing component path", e)
 	}
 
 	// Steps 8-10 still ran despite the isolated component failure.
@@ -288,7 +283,7 @@ func TestRunSkipsAlreadyInstalledGlobals(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 	if sum.HadFailure {
-		t.Fatalf("HadFailure = true, Failed = %v", sum.Failed)
+		t.Fatalf("HadFailure = true, Failed = %v", withOutcome(sum.Entries, report.Failed))
 	}
 
 	for _, call := range fr.Calls {
@@ -321,7 +316,7 @@ func TestRunNoGlobalSkipsAllGlobalInstalls(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 	if sum.HadFailure {
-		t.Fatalf("HadFailure = true, Failed = %v", sum.Failed)
+		t.Fatalf("HadFailure = true, Failed = %v", withOutcome(sum.Entries, report.Failed))
 	}
 
 	for _, call := range fr.Calls {
@@ -376,7 +371,7 @@ func TestRunWritesProfileRecord(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 	if sum.HadFailure {
-		t.Fatalf("HadFailure = true, Failed = %v", sum.Failed)
+		t.Fatalf("HadFailure = true, Failed = %v", withOutcome(sum.Entries, report.Failed))
 	}
 
 	data, err := os.ReadFile(filepath.Join(target, ".claude", ".ray-profile"))
@@ -400,7 +395,7 @@ func TestRunWritesPristineHashForCopiedComponent(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 	if sum.HadFailure {
-		t.Fatalf("HadFailure = true, Failed = %v", sum.Failed)
+		t.Fatalf("HadFailure = true, Failed = %v", withOutcome(sum.Entries, report.Failed))
 	}
 
 	onDiskHash, err := store.HashTree(filepath.Join(target, ".claude", "skills", "s"))
@@ -461,14 +456,13 @@ func TestRunTwicePreservesEditedComponentAndItsPristine(t *testing.T) {
 	if pristineAfter != pristineBefore {
 		t.Errorf("PristineHash() = %q after second Run, want it unchanged (%q)", pristineAfter, pristineBefore)
 	}
-	if !slices.ContainsFunc(sum.Warnings, func(w string) bool { return strings.Contains(w, "edited locally") }) {
-		t.Errorf("Warnings = %v, want one explaining the component was edited locally", sum.Warnings)
+	if e, _ := entryFor(sum.Entries, report.Component, "s"); !strings.Contains(e.Detail, "edited locally") {
+		t.Errorf("component entry = %+v, want its reason explaining the component was edited locally", e)
 	}
 }
 
-// O componente preservado precisa aparecer em Skipped: o passo do scaffold
-// atribuía o próprio Skipped por cima e descartava o que o passo dos
-// componentes já tinha registrado.
+// O componente preservado precisa aparecer entre os mantidos junto do que o
+// scaffold manteve: um passo não pode descartar o que o anterior registrou.
 func TestRunKeepsEditedComponentInSkippedAfterScaffold(t *testing.T) {
 	home := newHome(t)
 	seedComponent(t, home, "s")
@@ -488,12 +482,13 @@ func TestRunKeepsEditedComponentInSkippedAfterScaffold(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second Run() error = %v", err)
 	}
-	if !slices.Contains(sum.Skipped, "s") {
-		t.Errorf("Skipped = %v, want it to list the preserved component %q", sum.Skipped, "s")
+	kept := withOutcome(sum.Entries, report.Kept)
+	if !slices.Contains(kept, "s") {
+		t.Errorf("Kept = %v, want it to list the preserved component %q", kept, "s")
 	}
 	// O scaffold também pula o que já existe: os dois conjuntos se somam.
-	if !slices.Contains(sum.Skipped, "CLAUDE.md") {
-		t.Errorf("Skipped = %v, want the scaffold's own skip (CLAUDE.md) kept too", sum.Skipped)
+	if !slices.Contains(kept, "CLAUDE.md") {
+		t.Errorf("Kept = %v, want the scaffold's own skip (CLAUDE.md) kept too", kept)
 	}
 }
 
@@ -644,7 +639,7 @@ func TestRunWithoutPristineKeepsDivergentComponentAndCopiesIdenticalOne(t *testi
 				t.Errorf("SKILL.md = %q, want %q", got, tc.wantDisk)
 			}
 			_, hasPristine := store.ProjectBaseline(target).PristineHash("s")
-			preserved := slices.Contains(sum.Skipped, "s")
+			preserved := slices.Contains(withOutcome(sum.Entries, report.Kept), "s")
 			if tc.onDisk != "# s" {
 				if !preserved || hasPristine {
 					t.Errorf("preserved = %v, hasPristine = %v; want preserved and no baseline invented", preserved, hasPristine)
@@ -704,8 +699,8 @@ func TestRunDryRunReportsPreserveForEditedComponentAndCopyForUneditedOne(t *test
 			if strings.Contains(out.String(), tc.notWantOut) {
 				t.Errorf("output = %q, must not contain %q", out.String(), tc.notWantOut)
 			}
-			if got := slices.Contains(sum.Skipped, "s"); got != tc.wantSkip {
-				t.Errorf("Skipped = %v, want component skipped = %v", sum.Skipped, tc.wantSkip)
+			if kept := withOutcome(sum.Entries, report.Kept); slices.Contains(kept, "s") != tc.wantSkip {
+				t.Errorf("Kept = %v, want component skipped = %v", kept, tc.wantSkip)
 			}
 			if got, _ := os.ReadFile(skill); string(got) != wantDisk {
 				t.Errorf("SKILL.md = %q, dry-run must not write (want %q)", got, wantDisk)
@@ -735,7 +730,7 @@ func TestRunCopiesMultipleComponentsToTheirOwnDest(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 	if sum.HadFailure {
-		t.Fatalf("HadFailure = true, Failed = %v", sum.Failed)
+		t.Fatalf("HadFailure = true, Failed = %v", withOutcome(sum.Entries, report.Failed))
 	}
 	if _, err := os.Stat(filepath.Join(target, ".claude/skills/s/SKILL.md")); err != nil {
 		t.Fatalf("first component content missing: %v", err)
@@ -743,15 +738,6 @@ func TestRunCopiesMultipleComponentsToTheirOwnDest(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(target, ".claude/agents/reviewer/SKILL.md")); err != nil {
 		t.Fatalf("second component content missing at its own dest: %v", err)
 	}
-}
-
-func hasWarning(sum Summary, substr string) bool {
-	for _, w := range sum.Warnings {
-		if strings.Contains(w, substr) {
-			return true
-		}
-	}
-	return false
 }
 
 func mcpServerNames(t *testing.T, target string) []string {
@@ -790,8 +776,8 @@ func TestRunRecordsMCPJSONInCreated(t *testing.T) {
 	if len(mcpServerNames(t, target)) == 0 {
 		t.Fatal("setup is wrong: no MCP server was written, the assertion below would be vacuous")
 	}
-	if !slices.Contains(sum.Created, ".mcp.json") {
-		t.Errorf("Created = %v, want it to contain .mcp.json", sum.Created)
+	if created := createdFiles(sum.Entries); !slices.Contains(created, ".mcp.json") {
+		t.Errorf("created files = %v, want them to contain .mcp.json", created)
 	}
 }
 
@@ -954,8 +940,8 @@ func TestRunTwicePreservesEditedComponentWhoseHashCannotBeComputed(t *testing.T)
 			if string(got) != "# edited by the user" {
 				t.Errorf("SKILL.md = %q, want the user's edit preserved", got)
 			}
-			if !slices.Contains(sum.Skipped, "s") {
-				t.Errorf("Skipped = %v, want it to include the component", sum.Skipped)
+			if kept := withOutcome(sum.Entries, report.Kept); !slices.Contains(kept, "s") {
+				t.Errorf("Kept = %v, want it to include the component", kept)
 			}
 		})
 	}
@@ -1120,16 +1106,16 @@ func TestRunPerProjectCommandFailureIsAWarningNotAFailure(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Run() error = %v", err)
 			}
-			if sum.HadFailure || len(sum.Failed) != 0 {
-				t.Errorf("HadFailure = %v, Failed = %v; want none: an index that could not be built is not a failed environment", sum.HadFailure, sum.Failed)
+			if failed := withOutcome(sum.Entries, report.Failed); sum.HadFailure || len(failed) != 0 {
+				t.Errorf("HadFailure = %v, Failed = %v; want none: an index that could not be built is not a failed environment", sum.HadFailure, failed)
 			}
 			if !slices.ContainsFunc(sum.Warnings, func(w string) bool {
 				return strings.Contains(w, "graphify update .") && strings.Contains(w, "failed")
 			}) {
 				t.Errorf("Warnings = %v, want one saying `graphify update .` failed", sum.Warnings)
 			}
-			if slices.Contains(sum.Installed, "graphify update .") {
-				t.Errorf("Installed = %v, must not list the command that failed", sum.Installed)
+			if installed := withOutcome(sum.Entries, report.Installed); slices.Contains(installed, "graphify update .") {
+				t.Errorf("Installed = %v, must not list the command that failed", installed)
 			}
 		})
 	}
@@ -1149,7 +1135,7 @@ func TestRunPerProjectCommandExecErrorIsAWarning(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 	if sum.HadFailure {
-		t.Errorf("HadFailure = true, Failed = %v; want a warning only", sum.Failed)
+		t.Errorf("HadFailure = true, Failed = %v; want a warning only", withOutcome(sum.Entries, report.Failed))
 	}
 	if !slices.ContainsFunc(sum.Warnings, func(w string) bool { return strings.Contains(w, "graphify update .") }) {
 		t.Errorf("Warnings = %v, want one mentioning the command", sum.Warnings)
@@ -1203,10 +1189,9 @@ func TestRunFailureCarriesItsReason(t *testing.T) {
 		if !sum.HadFailure {
 			t.Fatal("HadFailure = false, want the failed install to fail the run")
 		}
-		if !slices.ContainsFunc(sum.Warnings, func(w string) bool {
-			return strings.Contains(w, "uv tool install graphifyy") && strings.Contains(w, "exit 2: error: No space left on device")
-		}) {
-			t.Errorf("Warnings = %v, want the failed command with its exit code and stderr", sum.Warnings)
+		if e, _ := entryFor(sum.Entries, report.Global, "code_graph"); e.Outcome != report.Failed ||
+			!strings.Contains(e.Detail, "uv tool install graphifyy") || !strings.Contains(e.Detail, "exit 2: error: No space left on device") {
+			t.Errorf("global entry = %+v, want it Failed with the failed command, its exit code and stderr", e)
 		}
 	})
 	t.Run("per-project command", func(t *testing.T) {
@@ -1426,15 +1411,15 @@ func TestRunCreatedListsOnlyWhatChanged(t *testing.T) {
 
 	first := run(false)
 	for _, f := range configFiles {
-		if !slices.Contains(first.Created, f) {
-			t.Errorf("first run: Created = %v, want it to include %q", first.Created, f)
+		if created := createdFiles(first.Entries); !slices.Contains(created, f) {
+			t.Errorf("first run: created files = %v, want them to include %q", created, f)
 		}
 	}
 
 	for name, sum := range map[string]Summary{"second run": run(false), "dry-run over a complete environment": run(true)} {
 		for _, f := range configFiles {
-			if slices.Contains(sum.Created, f) {
-				t.Errorf("%s: Created = %v, want %q out of it: its content did not change", name, sum.Created, f)
+			if created := createdFiles(sum.Entries); slices.Contains(created, f) {
+				t.Errorf("%s: created files = %v, want %q out of them: its content did not change", name, created, f)
 			}
 		}
 	}
@@ -1497,9 +1482,9 @@ func TestRunKnowsTheBaselineAfterTheProjectIsCopiedElsewhere(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() on the copy error = %v", err)
 	}
-	reasons := strings.Join(sum.Warnings, "\n")
-	if !strings.Contains(reasons, "last pristine") || strings.Contains(reasons, "no pristine baseline") {
-		t.Errorf("Warnings = %q, want the decision made from the baseline that travelled, not the no-baseline fallback", reasons)
+	e, _ := entryFor(sum.Entries, report.Component, "s")
+	if !strings.Contains(e.Detail, "last pristine") || strings.Contains(e.Detail, "no pristine baseline") {
+		t.Errorf("component entry = %+v, want the decision made from the baseline that travelled, not the no-baseline fallback", e)
 	}
 }
 

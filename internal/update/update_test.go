@@ -13,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/TheBud4/ray/internal/profile"
+	"github.com/TheBud4/ray/internal/report"
 	"github.com/TheBud4/ray/internal/runner"
 	"github.com/TheBud4/ray/internal/store"
 	"github.com/TheBud4/ray/internal/testenv"
@@ -135,7 +136,7 @@ func TestRunDirtyTreeWithForceProceeds(t *testing.T) {
 		t.Fatalf("Run() error = %v, want nil with --force", err)
 	}
 	if sum.HadFailure {
-		t.Fatalf("HadFailure = true, Failed = %v", sum.Failed)
+		t.Fatalf("HadFailure = true, Failed = %v", withOutcome(sum.Entries, report.Failed))
 	}
 }
 
@@ -154,8 +155,8 @@ func TestRunDirtyTreeAllowsDryRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v, want nil — a dry-run cannot dirty anything", err)
 	}
-	if len(sum.Updated) == 0 {
-		t.Error("Summary.Updated is empty, want the dry-run to still report the plan")
+	if len(entryNames(sum.Entries, report.Component, report.Updated)) == 0 {
+		t.Error("updated components are empty, want the dry-run to still report the plan")
 	}
 }
 
@@ -171,7 +172,7 @@ func TestRunCleanTreeProceeds(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 	if sum.HadFailure {
-		t.Fatalf("HadFailure = true, Failed = %v", sum.Failed)
+		t.Fatalf("HadFailure = true, Failed = %v", withOutcome(sum.Entries, report.Failed))
 	}
 }
 
@@ -243,7 +244,7 @@ func TestRunUpgradesTools(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 	if sum.HadFailure {
-		t.Fatalf("HadFailure = true, Failed = %v", sum.Failed)
+		t.Fatalf("HadFailure = true, Failed = %v", withOutcome(sum.Entries, report.Failed))
 	}
 
 	wantCmds := []string{"uv tool upgrade headroom-ai", "uv tool upgrade graphifyy"}
@@ -276,11 +277,11 @@ func TestRunReportsToolUpgradesApartFromComponents(t *testing.T) {
 	}
 
 	for _, want := range []string{"uv tool upgrade headroom-ai", "uv tool upgrade graphifyy"} {
-		if !slices.Contains(sum.Tools, want) {
-			t.Errorf("Tools = %v, want it to include %q", sum.Tools, want)
+		if tools := entryNames(sum.Entries, report.Command, report.Updated); !slices.Contains(tools, want) {
+			t.Errorf("upgraded tools = %v, want them to include %q", tools, want)
 		}
-		if slices.Contains(sum.Updated, want) {
-			t.Errorf("Updated = %v, want the tool upgrade %q out of it", sum.Updated, want)
+		if updated := entryNames(sum.Entries, report.Component, report.Updated); slices.Contains(updated, want) {
+			t.Errorf("updated components = %v, want the tool upgrade %q out of them", updated, want)
 		}
 	}
 }
@@ -298,7 +299,7 @@ func TestRunNoGlobalSkipsToolUpgrades(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 	if sum.HadFailure {
-		t.Fatalf("HadFailure = true, Failed = %v", sum.Failed)
+		t.Fatalf("HadFailure = true, Failed = %v", withOutcome(sum.Entries, report.Failed))
 	}
 
 	for _, call := range fr.Calls {
@@ -307,8 +308,8 @@ func TestRunNoGlobalSkipsToolUpgrades(t *testing.T) {
 		}
 	}
 	// O passo project-local segue: --no-global recorta a máquina, não o alvo.
-	if len(sum.Updated) == 0 {
-		t.Error("Updated is empty, want the project-local content step to still run")
+	if len(entryNames(sum.Entries, report.Component, report.Updated)) == 0 {
+		t.Error("updated components are empty, want the project-local content step to still run")
 	}
 }
 
@@ -341,7 +342,7 @@ func TestRunOverwritesWhenDiskMatchesPristine(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 	if sum.HadFailure {
-		t.Fatalf("HadFailure = true, Failed = %v", sum.Failed)
+		t.Fatalf("HadFailure = true, Failed = %v", withOutcome(sum.Entries, report.Failed))
 	}
 
 	got, err := os.ReadFile(filepath.Join(pristineDir, "SKILL.md"))
@@ -351,14 +352,8 @@ func TestRunOverwritesWhenDiskMatchesPristine(t *testing.T) {
 	if string(got) != "# new upstream" {
 		t.Errorf("SKILL.md = %q, want the fresh upstream content", got)
 	}
-	found := false
-	for _, u := range sum.Updated {
-		if u == coordS {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("Updated = %v, want it to include %q", sum.Updated, coordS)
+	if updated := entryNames(sum.Entries, report.Component, report.Updated); !slices.Contains(updated, coordS) {
+		t.Errorf("updated components = %v, want them to include %q", updated, coordS)
 	}
 
 	newPristine, ok := store.ProjectBaseline(target).PristineHash(coordS)
@@ -407,17 +402,8 @@ func TestRunSkipsForkWithoutForce(t *testing.T) {
 	if string(got) != "# my local edit" {
 		t.Errorf("SKILL.md = %q, want the local edit to survive (fork protected)", got)
 	}
-	found := false
-	for _, s := range sum.Skipped {
-		if s == coordS {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("Skipped = %v, want it to include %q", sum.Skipped, coordS)
-	}
-	if len(sum.Warnings) == 0 {
-		t.Error("Warnings is empty, want a fork warning")
+	if e, _ := entryFor(sum.Entries, report.Component, coordS); e.Outcome != report.Kept || e.Detail == "" {
+		t.Errorf("component entry = %+v, want it Kept with the fork reason", e)
 	}
 }
 
@@ -448,7 +434,7 @@ func TestRunForceOverwritesFork(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 	if sum.HadFailure {
-		t.Fatalf("HadFailure = true, Failed = %v", sum.Failed)
+		t.Fatalf("HadFailure = true, Failed = %v", withOutcome(sum.Entries, report.Failed))
 	}
 
 	got, err := os.ReadFile(filepath.Join(skillDir, "SKILL.md"))
@@ -484,12 +470,14 @@ func TestRunNewCloneNoPristineMatchesUpstreamRecordsPristine(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 	if sum.HadFailure {
-		t.Fatalf("HadFailure = true, Failed = %v", sum.Failed)
+		t.Fatalf("HadFailure = true, Failed = %v", withOutcome(sum.Entries, report.Failed))
 	}
 	// O conteúdo já é o do upstream: não há o que recopiar, só o pristino a
 	// gravar. Dizer "Updated" aqui afirmaria uma mudança que não houve.
-	if !slices.Contains(sum.Unchanged, coordS) || slices.Contains(sum.Updated, coordS) {
-		t.Errorf("Unchanged = %v, Updated = %v, want %q only in Unchanged (matches upstream, not a fork)", sum.Unchanged, sum.Updated, coordS)
+	unchanged := entryNames(sum.Entries, report.Component, report.Unchanged)
+	updated := entryNames(sum.Entries, report.Component, report.Updated)
+	if !slices.Contains(unchanged, coordS) || slices.Contains(updated, coordS) {
+		t.Errorf("Unchanged = %v, Updated = %v, want %q only in Unchanged (matches upstream, not a fork)", unchanged, updated, coordS)
 	}
 
 	if _, ok := store.ProjectBaseline(target).PristineHash(coordS); !ok {
@@ -532,11 +520,11 @@ func TestRunIdenticalComponentIsNeitherRecopiedNorReportedUpdated(t *testing.T) 
 		t.Fatalf("Run() error = %v", err)
 	}
 
-	if !slices.Contains(sum.Unchanged, coordS) {
-		t.Errorf("Unchanged = %v, want it to include %q", sum.Unchanged, coordS)
+	if unchanged := entryNames(sum.Entries, report.Component, report.Unchanged); !slices.Contains(unchanged, coordS) {
+		t.Errorf("Unchanged = %v, want it to include %q", unchanged, coordS)
 	}
-	if slices.Contains(sum.Updated, coordS) {
-		t.Errorf("Updated = %v, want %q out of it: nothing changed", sum.Updated, coordS)
+	if updated := entryNames(sum.Entries, report.Component, report.Updated); slices.Contains(updated, coordS) {
+		t.Errorf("Updated = %v, want %q out of it: nothing changed", updated, coordS)
 	}
 	info, err := os.Stat(file)
 	if err != nil {
@@ -574,14 +562,8 @@ func TestRunNewCloneNoPristineDiffersFromUpstreamSkips(t *testing.T) {
 	if string(got) != "# something else entirely" {
 		t.Errorf("SKILL.md = %q, want it untouched (ambiguous fork, no pristine baseline)", got)
 	}
-	found := false
-	for _, s := range sum.Skipped {
-		if s == coordS {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("Skipped = %v, want it to include %q", sum.Skipped, coordS)
+	if kept := entryNames(sum.Entries, report.Component, report.Kept); !slices.Contains(kept, coordS) {
+		t.Errorf("kept components = %v, want them to include %q", kept, coordS)
 	}
 }
 
@@ -600,14 +582,8 @@ func TestRunSkipsComponentNotFoundInComponentsDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	found := false
-	for _, s := range sum.Skipped {
-		if strings.Contains(s, "not found") {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("Skipped = %v, want an entry naming the missing component", sum.Skipped)
+	if e, _ := entryFor(sum.Entries, report.Component, coordS); e.Outcome != report.Kept || !strings.Contains(e.Detail, "not found") {
+		t.Errorf("component entry = %+v, want it Kept with a reason naming the missing component", e)
 	}
 }
 
@@ -627,8 +603,8 @@ func TestRunDryRunFetchesNothing(t *testing.T) {
 	if _, statErr := os.Stat(filepath.Join(target, ".claude", "skills", "s", "SKILL.md")); !os.IsNotExist(statErr) {
 		t.Error("content should not exist after dry-run")
 	}
-	if len(sum.Updated) == 0 {
-		t.Error("Summary.Updated should still report what would be updated in dry-run")
+	if len(entryNames(sum.Entries, report.Component, report.Updated)) == 0 {
+		t.Error("updated components should still report what would be updated in dry-run")
 	}
 }
 
@@ -664,22 +640,11 @@ func TestRunDryRunReportsForkAsSkipped(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 
-	for _, u := range sum.Updated {
-		if u == coordS {
-			t.Errorf("Updated = %v, want %q out of it — the real run preserves a local edit", sum.Updated, coordS)
-		}
+	if updated := entryNames(sum.Entries, report.Component, report.Updated); slices.Contains(updated, coordS) {
+		t.Errorf("Updated = %v, want %q out of it — the real run preserves a local edit", updated, coordS)
 	}
-	found := false
-	for _, s := range sum.Skipped {
-		if s == coordS {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("Skipped = %v, want it to include %q", sum.Skipped, coordS)
-	}
-	if len(sum.Warnings) == 0 {
-		t.Error("Warnings is empty, want the fork warning in dry-run too")
+	if e, _ := entryFor(sum.Entries, report.Component, coordS); e.Outcome != report.Kept || e.Detail == "" {
+		t.Errorf("component entry = %+v, want it Kept with the fork reason in dry-run too", e)
 	}
 }
 
@@ -710,11 +675,8 @@ func TestRunDryRunDecidesExactlyLikeRealRunWithoutPristine(t *testing.T) {
 		t.Fatalf("Run() error = %v", err)
 	}
 
-	if !slices.Contains(sum.Skipped, coordS) {
-		t.Errorf("Skipped = %v, want it to include %q — no pristine, disk differs from the local component", sum.Skipped, coordS)
-	}
-	if len(sum.Warnings) == 0 {
-		t.Error("Warnings is empty, want the same reason a real run would give")
+	if e, _ := entryFor(sum.Entries, report.Component, coordS); e.Outcome != report.Kept || e.Detail == "" {
+		t.Errorf("component entry = %+v, want it Kept — no pristine, disk differs from the local component — with the same reason a real run would give", e)
 	}
 }
 
@@ -869,11 +831,8 @@ func TestRunPreservesEditedComponentWhoseHashCannotBeComputed(t *testing.T) {
 	if _, err := os.Lstat(filepath.Join(skillDir, "dangling")); err != nil {
 		t.Errorf("the symlink was removed (%v), want the folder untouched", err)
 	}
-	if !slices.Contains(sum.Skipped, coordS) {
-		t.Errorf("Skipped = %v, want it to include %q", sum.Skipped, coordS)
-	}
-	if len(sum.Warnings) == 0 {
-		t.Error("Warnings is empty, want a warning explaining why it was kept")
+	if e, _ := entryFor(sum.Entries, report.Component, coordS); e.Outcome != report.Kept || e.Detail == "" {
+		t.Errorf("component entry = %+v, want it Kept with a reason explaining why", e)
 	}
 }
 
@@ -906,13 +865,11 @@ func TestRunToolUpgradeFailureCarriesItsReason(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if !sum.HadFailure || !slices.Contains(sum.Failed, "uv tool upgrade headroom-ai") {
-		t.Errorf("HadFailure = %v, Failed = %v; want the upgrade reported as failed", sum.HadFailure, sum.Failed)
+	if failed := withOutcome(sum.Entries, report.Failed); !sum.HadFailure || !slices.Contains(failed, "uv tool upgrade headroom-ai") {
+		t.Errorf("HadFailure = %v, Failed = %v; want the upgrade reported as failed", sum.HadFailure, failed)
 	}
-	if !slices.ContainsFunc(sum.Warnings, func(w string) bool {
-		return strings.Contains(w, "uv tool upgrade headroom-ai") && strings.Contains(w, "exit 1: error: network unreachable")
-	}) {
-		t.Errorf("Warnings = %v, want the failed command with its exit code and stderr", sum.Warnings)
+	if e, _ := entryFor(sum.Entries, report.Command, "uv tool upgrade headroom-ai"); !strings.Contains(e.Detail, "exit 1: error: network unreachable") {
+		t.Errorf("tool entry = %+v, want the failed command with its exit code and stderr", e)
 	}
 }
 
@@ -973,12 +930,12 @@ func TestRunKnowsTheBaselineAfterTheProjectIsCopiedElsewhere(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() on the copy error = %v", err)
 	}
-	if !slices.Contains(sum.Skipped, coordS) {
-		t.Fatalf("Skipped = %v, want the edited component preserved", sum.Skipped)
+	e, _ := entryFor(sum.Entries, report.Component, coordS)
+	if e.Outcome != report.Kept {
+		t.Fatalf("component entry = %+v, want the edited component preserved", e)
 	}
-	reasons := strings.Join(sum.Warnings, "\n")
-	if !strings.Contains(reasons, "last pristine") || strings.Contains(reasons, "no pristine baseline") {
-		t.Errorf("Warnings = %q, want the decision made from the baseline that travelled (\"differs from last pristine\"), not the no-baseline fallback", reasons)
+	if !strings.Contains(e.Detail, "last pristine") || strings.Contains(e.Detail, "no pristine baseline") {
+		t.Errorf("component entry = %+v, want the decision made from the baseline that travelled (\"differs from last pristine\"), not the no-baseline fallback", e)
 	}
 }
 
@@ -1012,8 +969,8 @@ func TestRunKeepsUsingALegacyStoreBaselineAndPromotesIt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if !slices.Contains(sum.Updated, coordS) {
-		t.Fatalf("Updated = %v, Skipped = %v, want the unedited component updated using the legacy baseline", sum.Updated, sum.Skipped)
+	if updated := entryNames(sum.Entries, report.Component, report.Updated); !slices.Contains(updated, coordS) {
+		t.Fatalf("Updated = %v, Kept = %v, want the unedited component updated using the legacy baseline", updated, entryNames(sum.Entries, report.Component, report.Kept))
 	}
 	if got, ok := store.ProjectBaseline(target).PristineHash(coordS); !ok || got == v1 {
 		t.Errorf("project baseline = (%q, %v), want the new hash recorded in the project's own file", got, ok)
@@ -1048,8 +1005,8 @@ func TestRunPromotesALegacyBaselineEvenWhenNothingChanges(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
-	if !slices.Contains(sum.Unchanged, coordS) {
-		t.Fatalf("Unchanged = %v, want the identical component", sum.Unchanged)
+	if unchanged := entryNames(sum.Entries, report.Component, report.Unchanged); !slices.Contains(unchanged, coordS) {
+		t.Fatalf("Unchanged = %v, want the identical component", unchanged)
 	}
 	if got, ok := store.ProjectBaseline(target).PristineHash(coordS); !ok || got != h {
 		t.Errorf("project baseline = (%q, %v), want the legacy entry promoted even though nothing changed", got, ok)

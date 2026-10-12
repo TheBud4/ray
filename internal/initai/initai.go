@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -48,14 +49,12 @@ type Options struct {
 
 // Summary é o resultado final de Run.
 type Summary struct {
-	Installed  []string
-	Failed     []string
-	Created    []string
-	Skipped    []string
+	// Warnings são os avisos que não pertencem a um item: o motivo de um item
+	// mora no Detail da entrada dele, não aqui.
 	Warnings   []string
 	HadFailure bool
 
-	// DryRun diz que nada foi escrito: as listas acima são o que seria feito.
+	// DryRun diz que nada foi escrito: as entradas são o que seria feito.
 	DryRun bool
 
 	// VersionedPaths são os caminhos de topo a passar para `git add`;
@@ -68,27 +67,31 @@ type Summary struct {
 	// próximos passos valem.
 	Target string
 
-	// Entries são os mesmos resultados das listas acima, tipados e na ordem em
-	// que aconteceram, com o motivo quando há um. Profile é o nome da receita
-	// resolvida.
+	// Entries são os resultados, tipados e na ordem em que aconteceram, com o
+	// motivo quando há um. Profile é o nome da receita resolvida.
 	Entries []report.Entry
 	Profile string
 }
 
-// add grava a entrada tipada e, na lista plana que lhe corresponde, o nome:
-// as listas continuam valendo para quem ainda não lê só as entradas.
+// add grava a entrada tipada.
 func (s *Summary) add(kind report.Kind, name string, outcome report.Outcome, detail string) {
 	s.Entries = append(s.Entries, report.Entry{Kind: kind, Name: name, Outcome: outcome, Detail: detail})
-	switch {
-	case outcome == report.Installed:
-		s.Installed = append(s.Installed, name)
-	case outcome == report.Failed:
-		s.Failed = append(s.Failed, name)
-	case outcome == report.Kept:
-		s.Skipped = append(s.Skipped, name)
-	case outcome == report.Created && kind == report.File:
-		s.Created = append(s.Created, name)
+}
+
+// hadFailure diz se algum item falhou.
+func (s *Summary) hadFailure() bool {
+	return slices.ContainsFunc(s.Entries, func(e report.Entry) bool { return e.Outcome == report.Failed })
+}
+
+// createdFiles são os nomes dos arquivos criados, na ordem em que o foram.
+func (s *Summary) createdFiles() []string {
+	var out []string
+	for _, e := range s.Entries {
+		if e.Kind == report.File && e.Outcome == report.Created {
+			out = append(out, e.Name)
+		}
 	}
+	return out
 }
 
 // versionedPaths reduz a lista de arquivos criados aos caminhos de topo que o
@@ -99,7 +102,7 @@ func (s *Summary) add(kind report.Kind, name string, outcome report.Outcome, det
 // deliberado que não haja `-A` nem `.`: o guard-add.sh, que o próprio ray
 // instala, avisa contra `git add` cego.
 //
-// Normaliza antes de colapsar porque `Created` não é uma lista sanitizada: o
+// Normaliza antes de colapsar porque os arquivos criados não são sanitizados: o
 // `profile.Validate` só recusa path vazio, então uma receita customizada pode
 // trazer `./x` ou caminho absoluto. Sem normalizar, `./x` virava `.` e era
 // descartado — o arquivo sumia do `git add`, que é a falha exata que este
@@ -304,9 +307,7 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 			var failures []string
 			for _, c := range g.Commands {
 				if ok, reason := runOne(r, c); !ok {
-					failure := fmt.Sprintf("`%s`: %s", c.String(), reason)
-					failures = append(failures, failure)
-					sum.Warnings = append(sum.Warnings, failure)
+					failures = append(failures, fmt.Sprintf("`%s`: %s", c.String(), reason))
 				}
 			}
 			if len(failures) == 0 {
@@ -325,8 +326,8 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		}
 	}
 
-	// A linha-base do projeto é versionada: se este passo a muda, ela entra no
-	// Created e no `git add` do rodapé.
+	// A linha-base do projeto é versionada: se este passo a muda, ela entra nos
+	// arquivos criados e no `git add` do rodapé.
 	baselineBefore, _ := os.ReadFile(baseline.Path())
 
 	// 7b. componentes locais (skills/agents) — copiados de
@@ -339,7 +340,6 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 		srcDir := filepath.Join(home.ComponentsDir, c.Name)
 		if info, statErr := os.Stat(srcDir); statErr != nil || !info.IsDir() {
 			sum.add(report.Component, c.Name, report.Failed, "not found at "+srcDir)
-			sum.Warnings = append(sum.Warnings, fmt.Sprintf("component %q not found at %s", c.Name, srcDir))
 			continue
 		}
 
@@ -360,7 +360,6 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 				fmt.Fprintf(out, "+ preserve %s (edited locally)\n", c.Name)
 			}
 			sum.add(report.Component, c.Name, report.Kept, reason)
-			sum.Warnings = append(sum.Warnings, fmt.Sprintf("%s: %s", c.Name, reason))
 			continue
 		}
 
@@ -390,9 +389,9 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 
 	// 7c. comandos por-projeto das integrações (ex. `graphify update .`) —
 	// roda depois de 7b para achar o conteúdo vendorizado já no disco.
-	// A falha vira aviso, não Failed: o resultado desses comandos (o índice do
-	// graphify) é regenerável, e numa pasta ainda sem código o graphify sai com
-	// 1 sem que nada tenha dado errado. Não aborta o loop.
+	// A falha vira aviso, não entrada Failed: o resultado desses comandos (o
+	// índice do graphify) é regenerável, e numa pasta ainda sem código o
+	// graphify sai com 1 sem que nada tenha dado errado. Não aborta o loop.
 	for _, c := range plan.Commands {
 		c.Dir = target
 		if ok, reason := runOne(r, c); ok {
@@ -404,8 +403,8 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 
 	// 8. servers MCP.
 	// .mcp.json é vendorizado (está na whitelist do .gitignore) e, quando muda,
-	// precisa entrar no Created: é dele que sai o `git add` do rodapé de
-	// próximos passos.
+	// precisa entrar nos arquivos criados: é deles que sai o `git add` do
+	// rodapé de próximos passos.
 	changed, err := writeChanged(filepath.Join(target, ".mcp.json"), opts.DryRun, out, func(w io.Writer) error {
 		return mcp.WriteServers(target, plan.Servers, opts.DryRun, w)
 	})
@@ -429,9 +428,6 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	if err != nil {
 		return Summary{}, err
 	}
-	// Acumula em vez de atribuir: o passo 8 já pode ter posto `.mcp.json` aqui,
-	// e o 7b já pode ter posto componentes preservados em Skipped; atribuir
-	// os descartaria em silêncio. Os passos 11 e 12 já acumulavam.
 	for _, p := range res.Created {
 		sum.add(report.File, p, report.Created, "")
 	}
@@ -504,8 +500,8 @@ func Run(r runner.Runner, l preflight.Looker, opts Options, home Home) (Summary,
 	sum.Target = target
 	sum.Profile = prof.Name
 	sum.DryRun = opts.DryRun
-	sum.HadFailure = len(sum.Failed) > 0
-	sum.VersionedPaths = versionedPaths(target, sum.Created)
+	sum.HadFailure = sum.hadFailure()
+	sum.VersionedPaths = versionedPaths(target, sum.createdFiles())
 	sum.InGitRepo = inGitRepo(target)
 	return sum, nil
 }

@@ -71,7 +71,7 @@ func TestRunNewCreatesGitInitsAndRunsInitAI(t *testing.T) {
 		t.Fatalf("runNew() error = %v", err)
 	}
 	if sum.HadFailure {
-		t.Fatalf("HadFailure = true, Failed = %v", sum.Failed)
+		t.Fatalf("HadFailure = true, Entries = %+v", sum.Entries)
 	}
 
 	if _, err := os.Stat(filepath.Join(sandbox, "myproj")); err != nil {
