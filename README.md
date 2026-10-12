@@ -111,8 +111,14 @@ execução criou.
 
 Flags globais: `--verbose` (`-v`; só o `ray run` o lê, e imprime cada passo antes de
 rodá-lo), `--dry-run` (imprime o que seria feito, sem
-executar nem escrever nada) e `--version`, que não tem forma curta — o `-v` é da
-verbosidade.
+executar nem escrever nada), `--color auto|always|never` (veja abaixo) e
+`--version`, que não tem forma curta — o `-v` é da verbosidade. No `ray run`, as
+flags do **seu** comando vão depois do `--`, inclusive um `--color` dele.
+
+A saída tem marcadores (`✓ ✗ ⚠ + ~ =`) e seções; a cor só reforça. Ela liga
+quando a saída é um terminal e some em pipe e arquivo, sem mudar o layout.
+`--color always` força, `--color never` desliga, e `NO_COLOR` (definido e não
+vazio) desliga também; a flag vence a variável.
 
 O `--version` sai do que o `go install` grava no binário: build de tag mostra a
 versão do módulo, build local mostra `devel` com revisão, data e `dirty` quando
