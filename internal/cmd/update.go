@@ -7,7 +7,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/TheBud4/ray/internal/raypaths"
+	"github.com/TheBud4/ray/internal/report"
 	"github.com/TheBud4/ray/internal/runner"
+	"github.com/TheBud4/ray/internal/ui"
 	"github.com/TheBud4/ray/internal/update"
 )
 
@@ -88,29 +90,30 @@ func runUpdate(r runner.Runner, check runner.Runner, opts update.Options, home u
 	return nil
 }
 
+// printUpdateSummary renderiza o resumo do update: seções de entradas, avisos,
+// a linha de "sem componentes" quando for o caso, e a contagem.
 func printUpdateSummary(out io.Writer, sum update.Summary) {
-	printList := func(label string, items []string) {
-		if len(items) == 0 {
-			return
-		}
-		fmt.Fprintf(out, "%s:\n", label)
-		for _, it := range items {
-			fmt.Fprintf(out, "  - %s\n", it)
-		}
-	}
-	printList("Tools upgraded", sum.Tools)
-	printList("Updated", sum.Updated)
-	printList("Unchanged", sum.Unchanged)
-	printList("Skipped", sum.Skipped)
-	printList("Failed", sum.Failed)
-	printList("Warnings", sum.Warnings)
+	p := ui.For(out)
+	p.Title("update", sum.Profile)
+	printEntrySections(p, sum.Entries)
+	printWarnings(p, sum.Warnings, sum.Entries)
 
-	// Cinco listas vazias só acontecem quando o perfil não tem componente:
-	// todo componente processado cai em alguma delas. Passo global
-	// bem-sucedido (Tools) não conta — por isso a linha fala de componentes, e
-	// não "nada a fazer", que contradiria a lista de ferramentas logo acima
-	// quando o --no-global não foi passado.
-	if len(sum.Updated)+len(sum.Unchanged)+len(sum.Skipped)+len(sum.Failed)+len(sum.Warnings) == 0 {
-		fmt.Fprintln(out, "no components to update")
+	// Sem entrada de componente nem aviso, o perfil não tem componente: todo
+	// componente processado vira uma entrada. Passo global bem-sucedido não
+	// conta — por isso a linha fala de componentes, e não "nada a fazer", que
+	// contradiria a seção Tools logo acima quando o --no-global não foi passado.
+	if len(sum.Warnings) == 0 && !hasComponent(sum.Entries) {
+		p.Blank()
+		p.Line("no components to update")
 	}
+	printEntryTally(p, sum.Entries, false)
+}
+
+func hasComponent(entries []report.Entry) bool {
+	for _, e := range entries {
+		if e.Kind == report.Component {
+			return true
+		}
+	}
+	return false
 }

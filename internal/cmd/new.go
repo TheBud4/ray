@@ -46,7 +46,7 @@ func newNewCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			printInitAISummary(cmd.OutOrStdout(), sum)
+			printInitAISummary(cmd.OutOrStdout(), "new", sum)
 			if sum.HadFailure {
 				return fmt.Errorf("one or more steps failed; see summary above")
 			}
