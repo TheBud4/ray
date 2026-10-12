@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/TheBud4/ray/internal/runner"
+	"github.com/TheBud4/ray/internal/ui"
 )
 
 type stubLooker map[string]bool
@@ -290,5 +291,116 @@ func TestRunDoctorFixDoesNotClaimUVWasInstalledWhenItFailed(t *testing.T) {
 	}
 	if !strings.Contains(got, "✗ fix uv failed: exit 6: curl: (6) Could not resolve host") {
 		t.Errorf("output = %q, want the uv fix failure reported", got)
+	}
+}
+
+func TestRunDoctorTableIsAlignedByTheUiTable(t *testing.T) {
+	l := stubLooker{"node": true, "python3.10+": true, "uv": true}
+	var out bytes.Buffer
+	_ = runDoctor(l, &runner.FakeRunner{}, false, &out)
+	want := "NAME         FOUND  REQUIRED  HINT\n" +
+		"npx          no     no        install Node.js — needed by recipes whose create: step runs npx (e.g. web)\n" +
+		"node         yes    no\n" +
+		"jq           no     no        install jq — the warning hooks no-op without it\n" +
+		"python3.10+  yes    yes\n" +
+		"uv           yes    yes\n" +
+		"headroom     no     no        ray doctor --fix\n" +
+		"graphify     no     no        ray doctor --fix\n"
+	if out.String() != want {
+		t.Errorf("table =\n%q\nwant\n%q", out.String(), want)
+	}
+	assertNoEscape(t, out.String())
+
+	l = stubLooker{"npx": true, "node": true, "jq": true, "python3.10+": true, "uv": true, "headroom": true, "graphify": true}
+	out.Reset()
+	if err := runDoctor(l, &runner.FakeRunner{}, false, &out); err != nil {
+		t.Fatal(err)
+	}
+	want = "NAME         FOUND  REQUIRED\n" +
+		"npx          yes    no\n" +
+		"node         yes    no\n" +
+		"jq           yes    no\n" +
+		"python3.10+  yes    yes\n" +
+		"uv           yes    yes\n" +
+		"headroom     yes    no\n" +
+		"graphify     yes    no\n"
+	if out.String() != want {
+		t.Errorf("table without a HINT column =\n%q\nwant\n%q", out.String(), want)
+	}
+}
+
+// FOUND ganha cor: yes verde; no vermelho se a dependência é obrigatória e
+// cinza se é opcional. A cor não desalinha as colunas.
+func TestRunDoctorColorsTheFoundColumn(t *testing.T) {
+	l := stubLooker{"node": true, "uv": true} // python3.10+ (obrigatório) e npx (opcional) faltam
+	var out bytes.Buffer
+	_ = runDoctor(l, &runner.FakeRunner{}, false, ui.New(&out, true))
+	lines := strings.Split(out.String(), "\n")
+	byName := map[string]string{}
+	for _, l := range lines {
+		if f := strings.Fields(l); len(f) > 0 {
+			byName[strings.TrimPrefix(f[0], esc+"[90m")] = l
+		}
+	}
+	if !strings.HasPrefix(lines[0], esc+"[90mNAME"+esc+"[0m         "+esc+"[90mFOUND"+esc+"[0m  "+esc+"[90mREQUIRED"+esc+"[0m  "+esc+"[90mHINT"+esc+"[0m") {
+		t.Errorf("header = %q, want every cell gray", lines[0])
+	}
+	cases := map[string]string{
+		"node":        "node         " + esc + "[32myes" + esc + "[0m    no",
+		"python3.10+": "python3.10+  " + esc + "[31mno" + esc + "[0m     yes",
+		"npx":         "npx          " + esc + "[90mno" + esc + "[0m     no",
+	}
+	for name, want := range cases {
+		if !strings.HasPrefix(byName[name], want) {
+			t.Errorf("%s line = %q, want it to start with %q", name, byName[name], want)
+		}
+	}
+}
+
+func TestRunDoctorFixMessagesUseTheWarningAndFailureLines(t *testing.T) {
+	l := stubLooker{"npx": true, "node": true} // uv, headroom e graphify ausentes
+	var out bytes.Buffer
+	_ = runDoctor(l, &runner.FakeRunner{}, true, &out)
+	want := "⚠ skip fix headroom: needs uv, which was just installed — reopen your shell and run `ray doctor --fix` again\n"
+	if !strings.Contains(out.String(), want) {
+		t.Errorf("output lacks %q:\n%s", want, out.String())
+	}
+	assertNoEscape(t, out.String())
+
+	out.Reset()
+	l = stubLooker{"npx": true, "node": true, "python3.10+": true, "uv": true}
+	_ = runDoctor(l, exitRunner{code: 1, stderr: "boom\n"}, true, ui.New(&out, true))
+	want = esc + "[31m✗ fix headroom failed: exit 1: boom" + esc + "[0m\n"
+	if !strings.Contains(out.String(), want) {
+		t.Errorf("a failed fix is a red ✗ line (%q) in\n%q", want, out.String())
+	}
+}
+
+func TestRunDoctorJustInstalledUVIsAWarningLine(t *testing.T) {
+	fr := &runner.FakeRunner{}
+	l := flippingLooker{
+		before: map[string]bool{"npx": true, "node": true},
+		after:  map[string]bool{"npx": true, "node": true, "uv": true, "python3.10+": true},
+		fr:     fr,
+	}
+	var out bytes.Buffer
+	if err := runDoctor(l, fr, true, &out); err != nil {
+		t.Fatal(err)
+	}
+	want := "⚠ uv was just installed — reopen your shell so PATH picks it up.\n"
+	if !strings.Contains(out.String(), want) {
+		t.Errorf("output lacks %q:\n%s", want, out.String())
+	}
+}
+
+// O doctor deixou o text/tabwriter: uma célula colorida desalinharia a tabela,
+// porque o tabwriter conta o escape como largura.
+func TestDoctorDoesNotUseTabwriter(t *testing.T) {
+	b, err := os.ReadFile("doctor.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "text/tabwriter") {
+		t.Error("doctor.go still imports text/tabwriter; use ui.Table")
 	}
 }

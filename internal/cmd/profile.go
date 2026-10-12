@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -15,6 +14,7 @@ import (
 	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/raypaths"
 	"github.com/TheBud4/ray/internal/store"
+	"github.com/TheBud4/ray/internal/ui"
 )
 
 func newProfileCmd() *cobra.Command {
@@ -98,84 +98,85 @@ func newProfileShowCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runProfileShowWith(dir, args[0], &rep, cmd.OutOrStdout())
+			return runProfileShowWith(dir, args[0], rep, cmd.OutOrStdout())
 		},
 	}
 }
 
-func runProfileShow(dir, name string, out io.Writer) error {
-	return runProfileShowWith(dir, name, nil, out)
-}
-
-// runProfileShowWith imprime o plano de um perfil; com rep, anota cada
-// componente e arquivo com o que o `init ai` faria e termina com um veredito.
-func runProfileShowWith(dir, name string, rep *catalog.Report, out io.Writer) error {
-	p, err := profile.LoadByName(dir, name)
+// runProfileShowWith imprime o plano de um perfil: cada componente e arquivo
+// anotado com o que o `init ai` faria, e um veredito no fim.
+func runProfileShowWith(dir, name string, rep catalog.Report, out io.Writer) error {
+	prof, err := profile.LoadByName(dir, name)
 	if err != nil {
 		return err
 	}
-	plan, err := installer.Resolve(p)
+	plan, err := installer.Resolve(prof)
 	if err != nil {
 		return err
 	}
 
-	fmt.Fprintf(out, "%s — %s\n", p.Name, p.Description)
+	p := ui.For(out)
+	p.Title(prof.Name, prof.Description)
 
-	if len(p.Components) > 0 {
-		fmt.Fprintln(out, "\nComponents (copied from local components dir, never downloaded):")
-		for i, c := range p.Components {
-			line := fmt.Sprintf("  %s -> %s", c.Name, filepath.Join(c.Dest, c.Name))
-			if rep != nil {
-				cr := rep.Components[i]
-				if cr.Status == catalog.ComponentOK {
-					line += "  ok"
-				} else {
-					line += fmt.Sprintf("  %s: %s", cr.Status, cr.Detail)
-				}
+	if len(prof.Components) > 0 {
+		items := make([]ui.Item, len(prof.Components))
+		for i, c := range prof.Components {
+			cr := rep.Components[i]
+			if cr.Status == catalog.ComponentOK {
+				items[i] = ui.Item{Kind: ui.OK, Name: c.Name, Detail: "-> " + cr.Dest}
+			} else {
+				items[i] = ui.Item{Kind: ui.Fail, Name: c.Name, Detail: shortHome(cr.Detail)}
 			}
-			fmt.Fprintln(out, line)
 		}
+		p.Blank()
+		p.Section("Components")
+		p.Items(items)
 	}
-	if rep != nil {
-		fmt.Fprintln(out, "\nFiles:")
-		for _, f := range rep.Files {
+	if len(rep.Files) > 0 {
+		items := make([]ui.Item, len(rep.Files))
+		for i, f := range rep.Files {
 			switch {
 			case f.Template == "":
-				fmt.Fprintf(out, "  %s  %s\n", f.Path, f.Problem)
+				items[i] = ui.Item{Kind: ui.Fail, Name: f.Path, Detail: f.Problem}
 			case f.Problem != "":
-				fmt.Fprintf(out, "  %s <- %s  %s\n", f.Path, f.Template, f.Problem)
+				items[i] = ui.Item{Kind: ui.Fail, Name: f.Path, Detail: "<- " + f.Template + "  " + f.Problem}
 			default:
-				fmt.Fprintf(out, "  %s <- %s  (%s)\n", f.Path, f.Template, f.State)
+				items[i] = ui.Item{Kind: ui.OK, Name: f.Path, Detail: "<- " + f.Template + "  (" + string(f.State) + ")"}
 			}
 		}
+		p.Blank()
+		p.Section("Files")
+		p.Items(items)
 	}
 	if len(plan.Globals) > 0 {
-		fmt.Fprintln(out, "\nGlobals (install-once):")
+		p.Blank()
+		p.Section("Globals (install-once)")
 		for _, g := range plan.Globals {
 			for _, c := range g.Commands {
-				fmt.Fprintf(out, "  [%s] %s\n", g.Key, c.String())
+				p.Line("  [" + g.Key + "] " + c.String())
 			}
 		}
 	}
 	if len(plan.Servers) > 0 {
-		fmt.Fprintln(out, "\nMCP servers:")
+		p.Blank()
+		p.Section("MCP servers")
 		for _, s := range plan.Servers {
 			// Command e Args juntos numa lista só: interpolar os args num %s
 			// separado pendurava um espaço no fim da linha do servidor que não
 			// tem nenhum.
-			fmt.Fprintf(out, "  %s: %s\n", s.Name, strings.Join(append([]string{s.Command}, s.Args...), " "))
+			p.Line("  " + s.Name + ": " + strings.Join(append([]string{s.Command}, s.Args...), " "))
 		}
 	}
-	if rep != nil {
-		if n := rep.Problems(); n == 0 {
-			fmt.Fprintln(out, "\nready")
-		} else {
-			noun := "problems"
-			if n == 1 {
-				noun = "problem"
-			}
-			fmt.Fprintf(out, "\n%d %s: `ray init ai --profile %s` would refuse or skip the items marked above\n", n, noun, name)
+
+	p.Blank()
+	if n := rep.Problems(); n == 0 {
+		p.Verdict(ui.OK, "ready", "")
+	} else {
+		noun := "problems"
+		if n == 1 {
+			noun = "problem"
 		}
+		p.Verdict(ui.Fail, fmt.Sprintf("%d %s", n, noun), fmt.Sprintf("`ray init ai --profile %s` would refuse or skip them", name))
 	}
 	return nil
 }

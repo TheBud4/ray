@@ -130,7 +130,7 @@ if "$ray" template reset "$tpl" >/dev/null 2>&1; then
 fi
 "$ray" template reset "$tpl" --force >/dev/null || fail "template reset --force exited non-zero"
 [ "$(tpl_state)" = "current" ] || fail "template list: $tpl should be current after reset, got '$(tpl_state)'"
-[ "$("$ray" profile show smoke | tail -n 1)" = "ready" ] || fail "profile show: the smoke recipe should be ready"
+[ "$("$ray" profile show smoke | tail -n 1)" = "✓ ready" ] || fail "profile show: the smoke recipe should be ready"
 "$ray" profile show leaky | tail -n 1 | grep -q "1 problem" || fail "profile show does not flag the leaking component"
 
 step "ok"

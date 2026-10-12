@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
 	"github.com/TheBud4/ray/internal/preflight"
 	"github.com/TheBud4/ray/internal/runner"
+	"github.com/TheBud4/ray/internal/ui"
 )
 
 var flagFix bool
@@ -36,6 +36,7 @@ func newDoctorCmd() *cobra.Command {
 // respeita --dry-run, pois instala coisas de verdade).
 func runDoctor(l preflight.Looker, fixRunner runner.Runner, fix bool, out io.Writer) error {
 	checks := preflight.Run(l, true)
+	p := ui.For(out)
 
 	if fix {
 		uvWasMissing := false
@@ -53,9 +54,9 @@ func runDoctor(l preflight.Looker, fixRunner runner.Runner, fix bool, out io.Wri
 				// no início do processo e não acharia o binário recém-posto
 				// em disco.
 				if uvInstalled {
-					fmt.Fprintf(out, "⚠ skip fix %s: needs uv, which was just installed — reopen your shell and run `ray doctor --fix` again\n", c.Name)
+					p.Warning(fmt.Sprintf("skip fix %s: needs uv, which was just installed — reopen your shell and run `ray doctor --fix` again", c.Name), "")
 				} else {
-					fmt.Fprintf(out, "⚠ skip fix %s: needs uv, whose install failed\n", c.Name)
+					p.Warning(fmt.Sprintf("skip fix %s: needs uv, whose install failed", c.Name), "")
 				}
 				continue
 			}
@@ -64,7 +65,7 @@ func runDoctor(l preflight.Looker, fixRunner runner.Runner, fix bool, out io.Wri
 				res, err := fixRunner.Run(context.Background(), cmd)
 				if err != nil || res.ExitCode != 0 {
 					fixOK = false
-					fmt.Fprintf(out, "✗ fix %s failed: %s\n", c.Name, runner.FailureReason(res, err))
+					p.Verdict(ui.Fail, fmt.Sprintf("fix %s failed: %s", c.Name, runner.FailureReason(res, err)), "")
 				}
 			}
 			if c.Name == "uv" {
@@ -73,11 +74,11 @@ func runDoctor(l preflight.Looker, fixRunner runner.Runner, fix bool, out io.Wri
 		}
 		checks = preflight.Run(l, true)
 		if uvInstalled {
-			fmt.Fprintln(out, "uv was just installed — reopen your shell so PATH picks it up.")
+			p.Warning("uv was just installed — reopen your shell so PATH picks it up.", "")
 		}
 	}
 
-	printDoctorTable(out, checks)
+	printDoctorTable(p, checks)
 
 	missing := preflight.MissingRequired(checks)
 	if len(missing) == 0 {
@@ -101,7 +102,7 @@ func fixNeedsUV(fix []runner.Command) bool {
 	return false
 }
 
-func printDoctorTable(out io.Writer, checks []preflight.Check) {
+func printDoctorTable(p *ui.Printer, checks []preflight.Check) {
 	// Conselho só para o que falta: dizer o que fazer com algo presente é
 	// ruído na coluna que existe para ser lida quando algo dá errado. E sem
 	// nada a aconselhar a coluna nem aparece — mesma regra que tirou a linha
@@ -116,20 +117,25 @@ func printDoctorTable(out io.Writer, checks []preflight.Check) {
 		anyAdvice = anyAdvice || advice[i] != ""
 	}
 
-	w := tabwriter.NewWriter(out, 0, 2, 2, ' ', 0)
-	header := "NAME\tFOUND\tREQUIRED"
+	header := []string{"NAME", "FOUND", "REQUIRED"}
 	if anyAdvice {
-		header += "\tHINT"
+		header = append(header, "HINT")
 	}
-	fmt.Fprintln(w, header)
+	rows := make([][]ui.Cell, len(checks))
 	for i, c := range checks {
-		fmt.Fprintf(w, "%s\t%s\t%s", c.Name, yesNo(c.Found), yesNo(c.Required))
-		if anyAdvice {
-			fmt.Fprintf(w, "\t%s", advice[i])
+		found := ui.Cell{Text: yesNo(c.Found), Color: ui.Green}
+		if !c.Found {
+			found.Color = ui.Gray
+			if c.Required {
+				found.Color = ui.Red
+			}
 		}
-		fmt.Fprintln(w)
+		rows[i] = []ui.Cell{{Text: c.Name}, found, {Text: yesNo(c.Required)}}
+		if anyAdvice {
+			rows[i] = append(rows[i], ui.Cell{Text: advice[i]})
+		}
 	}
-	w.Flush()
+	p.Table(header, rows)
 }
 
 func yesNo(b bool) string {

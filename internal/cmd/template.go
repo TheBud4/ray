@@ -13,6 +13,7 @@ import (
 	"github.com/TheBud4/ray/internal/linediff"
 	"github.com/TheBud4/ray/internal/raypaths"
 	"github.com/TheBud4/ray/internal/store"
+	"github.com/TheBud4/ray/internal/ui"
 )
 
 func newTemplateCmd() *cobra.Command {
@@ -86,28 +87,40 @@ func runTemplateList(cat catalog.Templates, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	width := len("NAME")
-	for _, e := range entries {
-		width = max(width, len(e.Name))
-	}
-	fmt.Fprintf(out, "%-*s  %s\n", width, "NAME", "STATE")
+	p := ui.For(out)
+	rows := make([][]ui.Cell, len(entries))
 	counts := map[catalog.State]int{}
-	for _, e := range entries {
+	for i, e := range entries {
 		state := string(e.State)
 		if e.NoBaseline {
 			state += " (no baseline)"
 		}
-		fmt.Fprintf(out, "%-*s  %s\n", width, e.Name, state)
+		rows[i] = []ui.Cell{{Text: e.Name}, {Text: state, Color: stateColor(e.State)}}
 		counts[e.State]++
 	}
-	var parts []string
+	p.Table([]string{"NAME", "STATE"}, rows)
+	var summary []ui.Count
 	for _, s := range []catalog.State{catalog.Edited, catalog.Outdated, catalog.New, catalog.Custom, catalog.Current} {
-		if counts[s] > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s", counts[s], s))
-		}
+		summary = append(summary, ui.Count{N: counts[s], Label: string(s), Color: stateColor(s)})
 	}
-	fmt.Fprintln(out, strings.Join(parts, " · "))
+	p.Summary(summary...)
 	return nil
+}
+
+// stateColor é a cor com que o estado de um template aparece na listagem.
+func stateColor(s catalog.State) ui.Color {
+	switch s {
+	case catalog.Outdated:
+		return ui.Yellow
+	case catalog.New:
+		return ui.Green
+	case catalog.Current:
+		return ui.Gray
+	case catalog.Edited:
+		return ui.Cyan
+	default:
+		return ui.Plain
+	}
 }
 
 func newTemplateShowCmd() *cobra.Command {
@@ -209,7 +222,7 @@ func runTemplateEdit(cat catalog.Templates, name string, spawn func(editor, path
 		return err
 	}
 	if baselineErr != nil {
-		fmt.Fprintf(errOut, "warning: %s: baseline not recorded (%v)\n", entry.Name, baselineErr)
+		ui.For(errOut).Warning(fmt.Sprintf("%s: baseline not recorded (%v)", entry.Name, baselineErr), "")
 	}
 	before, err := cat.Overlay(entry.Name)
 	if err != nil {
@@ -229,10 +242,11 @@ func runTemplateEdit(cat catalog.Templates, name string, spawn func(editor, path
 			entry.Name, verr, entry.Name, entry.Name)
 	}
 	for _, w := range warnings {
-		fmt.Fprintf(errOut, "warning: %s: %s\n", entry.Name, w)
+		ui.For(errOut).Warning(entry.Name+": "+w, "")
 	}
+	p := ui.For(out)
 	if bytes.Equal(before, after) {
-		fmt.Fprintf(out, "%s: no changes\n", entry.Name)
+		p.Result(ui.Kept, entry.Name, "no changes")
 		return nil
 	}
 	now, err := cat.Lookup(entry.Name)
@@ -240,10 +254,10 @@ func runTemplateEdit(cat catalog.Templates, name string, spawn func(editor, path
 		return err
 	}
 	if now.State == catalog.Current {
-		fmt.Fprintf(out, "%s: current (matches the default)\n", entry.Name)
+		p.Result(ui.OK, entry.Name, "current (matches the default)")
 		return nil
 	}
-	fmt.Fprintf(out, "%s: %s\n", entry.Name, now.State)
+	p.Result(ui.Updated, entry.Name, string(now.State))
 	return nil
 }
 
@@ -270,15 +284,16 @@ func runTemplateDiff(cat catalog.Templates, name string, out, errOut io.Writer) 
 	if err != nil {
 		return err
 	}
+	p := ui.For(out)
 	switch e.State {
 	case catalog.Current:
-		fmt.Fprintln(out, "identical to the embedded template")
+		p.Line("identical to the embedded template")
 		return nil
 	case catalog.New:
-		fmt.Fprintln(out, "not in the overlay yet; nothing to compare")
+		p.Line("not in the overlay yet; nothing to compare")
 		return nil
 	case catalog.Custom:
-		fmt.Fprintln(out, "custom template: there is no embedded one to compare to")
+		p.Line("custom template: there is no embedded one to compare to")
 		return nil
 	}
 	embedded, err := cat.Embedded(e.Name)
@@ -290,7 +305,7 @@ func runTemplateDiff(cat catalog.Templates, name string, out, errOut io.Writer) 
 		return err
 	}
 	if lf := func(b []byte) string { return strings.ReplaceAll(string(b), "\r\n", "\n") }; lf(embedded) == lf(overlay) {
-		fmt.Fprintln(out, "differs only in line endings (CRLF)")
+		p.Line("differs only in line endings (CRLF)")
 		return nil
 	}
 	d, err := linediff.Unified(string(embedded), string(overlay), "embedded/"+e.Name, "overlay/"+e.Name)
@@ -298,9 +313,13 @@ func runTemplateDiff(cat catalog.Templates, name string, out, errOut io.Writer) 
 		return err
 	}
 	if e.State == catalog.Outdated {
-		fmt.Fprintln(errOut, "outdated: the embedded template changed; your file is untouched")
+		ui.For(errOut).Warning("outdated: the embedded template changed; your file is untouched", "")
 	}
-	fmt.Fprint(out, d)
+	if d != "" {
+		for line := range strings.SplitSeq(strings.TrimSuffix(d, "\n"), "\n") {
+			p.DiffLine(line)
+		}
+	}
 	return nil
 }
 
@@ -356,8 +375,16 @@ func runTemplateReset(cat catalog.Templates, name string, force, dryRun bool, ou
 		return err
 	}
 	if baselineErr != nil {
-		fmt.Fprintf(errOut, "warning: %s: baseline not recorded (%v)\n", name, baselineErr)
+		ui.For(errOut).Warning(fmt.Sprintf("%s: baseline not recorded (%v)", name, baselineErr), "")
 	}
-	fmt.Fprintf(out, "%s: %s\n", name, action)
+	p := ui.For(out)
+	switch action {
+	case "created":
+		p.Result(ui.Added, name, action)
+	case "already the default":
+		p.Result(ui.Kept, name, action)
+	default:
+		p.Result(ui.OK, name, action)
+	}
 	return nil
 }
