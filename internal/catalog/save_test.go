@@ -2,8 +2,10 @@ package catalog
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/TheBud4/ray/internal/testenv"
@@ -32,8 +34,8 @@ func TestSaveWritesAndClassifies(t *testing.T) {
 	if st := f.state(sample); st.State != Edited || st.NoBaseline {
 		t.Errorf("state after Save = %+v, want edited with a recorded baseline", st)
 	}
-	if res.Hash == "" || res.Hash == info.Hash {
-		t.Errorf("SaveResult.Hash = %q, want the hash of the new content (old %q)", res.Hash, info.Hash)
+	if again, _ := f.cat.Info(sample); res.Hash == "" || res.Hash == info.Hash || res.Hash != again.Hash {
+		t.Errorf("SaveResult.Hash = %q, want the hash Info reports for the saved file (old %q, Info %q)", res.Hash, info.Hash, again.Hash)
 	}
 }
 
@@ -158,13 +160,29 @@ func TestSaveRefusesWhenTheBaselineIsUnreadable(t *testing.T) {
 	}
 }
 
-func TestSaveWarnsAboutCRLFInAHookLikeTemplateOnlyViaValidate(t *testing.T) {
-	// Hooks são somente leitura na web; um template de texto com CRLF não gera
-	// aviso de hook. O aviso continua sendo do Validate, usado pelo Save.
+func TestSaveGivesNoHookWarningForATextTemplateWithCRLF(t *testing.T) {
+	// Hooks são somente leitura na web, então o aviso de CRLF em hook nunca sai
+	// do Save; um template de texto com CRLF não gera aviso nenhum.
 	f := newFixture(t)
 	info, _ := f.cat.Info(sample)
 	res, err := f.cat.Save(sample, []byte("a\r\nb\r\n"), info.Hash)
 	if err != nil || len(res.Warnings) != 0 {
 		t.Errorf("Save = %+v, %v; want no warnings for a text template", res, err)
+	}
+}
+
+func TestSaveBoundsTheRenderOfARecursiveTemplate(t *testing.T) {
+	f := newFixture(t)
+	info, _ := f.cat.Info(sample)
+	// Cada nível chama o anterior duas vezes: sem o teto, a gravação esgotaria a memória.
+	var b strings.Builder
+	b.WriteString(`{{define "l0"}}xxxxxxxxxx{{end}}`)
+	for i := 1; i <= 24; i++ {
+		fmt.Fprintf(&b, `{{define "l%d"}}{{template "l%d"}}{{template "l%d"}}{{end}}`, i, i-1, i-1)
+	}
+	b.WriteString(`{{template "l24"}}`)
+	res, err := f.cat.Save(sample, []byte(b.String()), info.Hash)
+	if err != nil || res.Render == nil || !strings.Contains(res.Render.Message, "ceiling") {
+		t.Fatalf("Save = %+v, %v; want the content kept and a ceiling RenderError", res, err)
 	}
 }
