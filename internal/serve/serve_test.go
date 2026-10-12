@@ -83,17 +83,29 @@ func TestServeAnswersOverRealTCPOnLoopback(t *testing.T) {
 	}
 	addr := ln.Addr().String()
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go Serve(ctx, ln, NewHandler(Options{Token: "tok"}, addr))
+	done := make(chan error, 1)
+	go func() { done <- Serve(ctx, ln, NewHandler(Options{Token: "tok"}, addr)) }()
 
+	client := &http.Client{Transport: &http.Transport{}}
+	defer client.CloseIdleConnections()
 	req, _ := http.NewRequest("GET", "http://"+addr+"/api/ping", nil)
 	req.Header.Set("X-Ray-Token", "tok")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	resp.Body.Close()
 	if resp.StatusCode != 200 {
 		t.Errorf("GET /api/ping over TCP = %d, want 200", resp.StatusCode)
+	}
+	client.CloseIdleConnections()
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("Serve returned %v, want nil", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Serve did not return after the context ended")
 	}
 }

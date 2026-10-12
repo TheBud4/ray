@@ -135,12 +135,32 @@ func TestEveryResponseCarriesTheSecurityHeadersAndNoCookie(t *testing.T) {
 	if cc := do(h, "GET", "/api/ping", addr, tok, nil).Header().Get("Cache-Control"); cc != "no-store" {
 		t.Errorf("/api/ping Cache-Control = %q, want no-store", cc)
 	}
-	// Mesmo as recusas (403/401/405) levam os cabeçalhos.
-	if rec := do(h, "GET", "/api/ping", "evil.com", tok, nil); rec.Header().Get("X-Content-Type-Options") != "nosniff" {
-		t.Errorf("a 403 response lacks the security headers: %v", rec.Header())
+	// Mesmo as recusas levam os cabeçalhos. O http.Error já põe nosniff sozinho,
+	// então o que prova que os cabeçalhos vêm antes das recusas são a CSP e o
+	// Referrer-Policy.
+	refusals := []struct {
+		label string
+		rec   *httptest.ResponseRecorder
+		want  int
+		api   bool
+	}{
+		{"403 wrong Host", do(h, "GET", "/api/ping", "evil.com", tok, nil), 403, true},
+		{"401 no token", do(h, "GET", "/api/ping", addr, "", nil), 401, true},
+		{"405 method", do(h, "DELETE", "/api/ping", addr, tok, nil), 405, true},
+		{"403 wrong Host on static", do(h, "GET", "/", "evil.com", tok, nil), 403, false},
+		{"404 unknown static", do(h, "GET", "/missing", addr, tok, nil), 404, false},
 	}
-	if rec := do(h, "GET", "/api/ping", addr, "", nil); rec.Header().Get("X-Content-Type-Options") != "nosniff" {
-		t.Errorf("a 401 response lacks the security headers: %v", rec.Header())
+	for _, r := range refusals {
+		if r.rec.Code != r.want {
+			t.Fatalf("%s = %d, want %d", r.label, r.rec.Code, r.want)
+		}
+		hd := r.rec.Header()
+		if !strings.Contains(hd.Get("Content-Security-Policy"), "frame-ancestors 'none'") || hd.Get("Referrer-Policy") != "no-referrer" {
+			t.Errorf("%s lacks the CSP or the Referrer-Policy: %v", r.label, hd)
+		}
+		if r.api && hd.Get("Cache-Control") != "no-store" {
+			t.Errorf("%s on /api/ lacks Cache-Control: no-store: %v", r.label, hd)
+		}
 	}
 }
 
