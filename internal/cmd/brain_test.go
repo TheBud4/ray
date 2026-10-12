@@ -10,6 +10,7 @@ import (
 
 	"github.com/TheBud4/ray/internal/rayconfig"
 	"github.com/TheBud4/ray/internal/runner"
+	"github.com/TheBud4/ray/internal/ui"
 )
 
 func TestRunBrainSetPersistsExistingDir(t *testing.T) {
@@ -48,8 +49,17 @@ func TestRunBrainSetConfirmsNamingThePath(t *testing.T) {
 		t.Fatalf("runBrainSet() error = %v", err)
 	}
 
-	if !strings.Contains(out.String(), brain) {
-		t.Errorf("output = %q, want it to confirm by naming %q", out.String(), brain)
+	if want := "✓ brain set to " + brain + "\n"; out.String() != want {
+		t.Errorf("output = %q, want it to confirm by naming the path: %q", out.String(), want)
+	}
+	assertNoEscape(t, out.String())
+
+	out.Reset()
+	if err := runBrainSet(filepath.Join(base, "config.yaml"), brain, ui.New(&out, true)); err != nil {
+		t.Fatal(err)
+	}
+	if want := esc + "[32m✓" + esc + "[0m brain set to " + brain + "\n"; out.String() != want {
+		t.Errorf("colored output = %q, want %q", out.String(), want)
 	}
 }
 
@@ -90,8 +100,17 @@ func TestRunBrainStatusUnconfigured(t *testing.T) {
 	if err := runBrainStatus(configPath, &out); err != nil {
 		t.Fatalf("runBrainStatus() error = %v", err)
 	}
-	if !strings.Contains(out.String(), "not configured") {
-		t.Errorf("output = %q, want a 'not configured' hint", out.String())
+	if want := "⚠ brain: not configured (run `ray brain set <path>`)\n"; out.String() != want {
+		t.Errorf("output = %q, want %q", out.String(), want)
+	}
+	assertNoEscape(t, out.String())
+
+	out.Reset()
+	if err := runBrainStatus(configPath, ui.New(&out, true)); err != nil {
+		t.Fatal(err)
+	}
+	if want := esc + "[33m⚠" + esc + "[0m brain: not configured"; !strings.HasPrefix(out.String(), want) {
+		t.Errorf("colored output = %q, want it to start with %q", out.String(), want)
 	}
 }
 
@@ -119,6 +138,11 @@ func TestRunBrainStatusCountsNotes(t *testing.T) {
 	}
 	if !strings.Contains(got, "markdown files: 1") {
 		t.Errorf("output = %q, want the note count", got)
+	}
+	// Configurado: as três linhas de hoje, sem marcador novo.
+	assertNoEscape(t, got)
+	if strings.ContainsAny(got, "✓⚠✗") {
+		t.Errorf("output = %q, a configured brain status gets no marker", got)
 	}
 }
 

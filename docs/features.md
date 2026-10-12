@@ -59,17 +59,21 @@ pronta (dependências externas, com `--fix`); o `status` pergunta se *este
 projeto* está são. O `status` não repete a tabela de dependências.
 
 O princípio é que **status é diagnóstico, não inventário**: mostra o que está
-errado ou fora do lugar, e cala sobre o que está bem. Ambiente são imprime duas
-linhas. Três níveis de saída, e a distinção entre eles é o coração da feature:
+errado ou fora do lugar, e cala sobre o que está bem. Ambiente versionado e são
+imprime o título com o inventário e `✓ all in order`. Dois níveis de saída, e a
+distinção entre eles é o coração da feature:
 
 | Nível | O que é | Quando aparece |
 |---|---|---|
 | **Fato** | inventário; nunca é alerta | sempre |
-| **Nota** | estado esperado que o usuário precisa saber | ex.: ambiente ainda não versionado |
-| **Problema** (`⚠`) | algo está errado agora | ex.: falta uma negação no `.gitignore` |
+| **Problema** (`⚠`) | algo precisa de ação agora | ex.: ambiente ainda não versionado; falta uma negação no `.gitignore` |
 
-Ambiente são imprime **só fatos**. É isso que faz o `⚠` significar alguma coisa
-quando aparece — alerta que aparece quando não deve treina o usuário a ignorá-lo.
+Ambiente versionado e são imprime **só fatos**. É isso que faz o `⚠` significar
+alguma coisa quando aparece — alerta que aparece quando não deve treina o
+usuário a ignorá-lo. Logo depois do `ray init ai` o ambiente está fora do
+versionamento, e isso é sinalizado com `⚠` e o `git add` por nome: ambiente fora
+do git é exatamente o estado em que um clone novo não o reproduz. Os avisos
+entram no resumo final (`N warnings`).
 
 ### As quatro checagens
 
@@ -92,11 +96,11 @@ Então o comando não decide, e diz que não sabe.
 
 **Git** — duas chamadas, zero heurística, sobre `.claude/` e `.mcp.json`. Não
 inclui `docs/` nem `CLAUDE.md`: são do usuário, e tratar edição deles como desvio
-de ambiente seria falso positivo. Nunca versionado é **nota** com o `git add` que
-resolve; versionado e divergente é **problema**. A distinção entre os dois sai de
-listar os arquivos rastreados, não de adivinhar pelos códigos de status —
-logo depois do `ray init ai` tudo está fora do versionamento, e esse é o estado
-normal, porque o próprio `ray` acabou de pedir o commit.
+de ambiente seria falso positivo. Nunca versionado e versionado e divergente são
+ambos **problema** (`⚠`); o primeiro traz o `git add` que resolve. A distinção
+entre os dois sai de listar os arquivos rastreados, não de adivinhar pelos
+códigos de status — logo depois do `ray init ai` tudo está fora do versionamento,
+e o aviso é o que leva ao commit que o próprio `ray` pediu.
 
 **`.gitignore`** — a falha silenciosa que motivou a feature. O bloco vive entre
 marcadores; se alguém apagar as negações, o conteúdo vendorizado volta a ser
@@ -129,7 +133,7 @@ valer uma skill, e um grupo de comandos com namespace valer um comando só.
 Sem `.claude/.ray-profile`, a checagem de fork inteira cala — não há receita a
 comparar, e `.claude/` copiado à mão é caso normal. Com o registro presente e a
 receita ilegível é o oposto: vira problema, com o erro junto. Os dois casos
-saíam iguais, e o segundo deixava o usuário sem `profile:` na saída e sem pista
+saíam iguais, e o segundo deixava o usuário sem o perfil na saída e sem pista
 do porquê.
 
 **O que tem de valer:**

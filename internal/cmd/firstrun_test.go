@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/TheBud4/ray/internal/ui"
 )
 
 // newEnv monta um .claude/ mínimo em t.TempDir() e devolve o caminho.
@@ -29,6 +31,9 @@ func newEnv(t *testing.T, profileName string) string {
 	return target
 }
 
+const firstRunTitle = "ray — versioned AI environments\n"
+const firstRunFooter = "\n`ray --help` lists every command\n"
+
 // Dentro de um projeto a tela reconhece o ambiente e faz ponte para o status,
 // em vez de mandar criar um projeto que já existe.
 func TestFirstRunInsideAProjectPointsAtTheSession(t *testing.T) {
@@ -37,31 +42,28 @@ func TestFirstRunInsideAProjectPointsAtTheSession(t *testing.T) {
 	if err := runFirstRun(newEnv(t, "go-backend"), &out); err != nil {
 		t.Fatalf("runFirstRun() error = %v", err)
 	}
-	got := out.String()
-	for _, want := range []string{"profile: go-backend", "1 skill", "claude", "ray status"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("output = %q, want it to contain %q", got, want)
-		}
-	}
-	if strings.Contains(got, "ray new go my-app") {
-		t.Errorf("output = %q, want no suggestion to create a project inside one", got)
+	assertNoEscape(t, out.String())
+	want := firstRunTitle + "\ngo-backend · 1 skill\n\nNext steps\n" +
+		"  claude      start the session\n" +
+		"  ray status  diagnose the environment\n" + firstRunFooter
+	if out.String() != want {
+		t.Errorf("output =\n%q\nwant\n%q", out.String(), want)
 	}
 }
 
 // Ambiente copiado à mão: mostra o inventário e omite o perfil, em vez de
-// inventar um.
+// inventar um — e sem título, para não imprimir um " · 1 skill" solto.
 func TestFirstRunInsideAProjectWithoutARecordedProfile(t *testing.T) {
 	var out bytes.Buffer
 
 	if err := runFirstRun(newEnv(t, ""), &out); err != nil {
 		t.Fatalf("runFirstRun() error = %v", err)
 	}
-	got := out.String()
-	if strings.Contains(got, "profile:") {
-		t.Errorf("output = %q, want no profile line without a .ray-profile", got)
-	}
-	if !strings.Contains(got, "1 skill") {
-		t.Errorf("output = %q, want the inventory anyway", got)
+	want := firstRunTitle + "\n1 skill\n\nNext steps\n" +
+		"  claude      start the session\n" +
+		"  ray status  diagnose the environment\n" + firstRunFooter
+	if out.String() != want {
+		t.Errorf("output =\n%q\nwant\n%q", out.String(), want)
 	}
 }
 
@@ -74,19 +76,35 @@ func TestFirstRunOutsideAProjectSuggestsCreatingOne(t *testing.T) {
 	if err := runFirstRun(t.TempDir(), &out); err != nil {
 		t.Fatalf("runFirstRun() error = %v", err)
 	}
-	got := out.String()
-	for _, want := range []string{
-		"Next steps:", "ray new go my-app", "ray init ai", "`ray --help`",
-	} {
-		if !strings.Contains(got, want) {
-			t.Errorf("output = %q, want it to contain %q", got, want)
-		}
+	assertNoEscape(t, out.String())
+	want := firstRunTitle + "\nNext steps\n" +
+		"  ray new go my-app  new project, environment included\n" +
+		"  ray init ai        environment only, in this directory\n" + firstRunFooter
+	if out.String() != want {
+		t.Errorf("output =\n%q\nwant\n%q", out.String(), want)
 	}
 	// init ai não exige mais --profile (RF-07): a sugestão não deve mais
 	// carregar a flag nem o desvio por `ray profile list`.
 	for _, unwanted := range []string{"ray init ai --profile", "ray profile list"} {
-		if strings.Contains(got, unwanted) {
-			t.Errorf("output = %q, want no %q — init ai runs without a profile now", got, unwanted)
+		if strings.Contains(out.String(), unwanted) {
+			t.Errorf("output = %q, want no %q — init ai runs without a profile now", out.String(), unwanted)
+		}
+	}
+}
+
+func TestFirstRunColorsTheProfileTheSectionAndTheCommands(t *testing.T) {
+	var out bytes.Buffer
+	if err := runFirstRun(newEnv(t, "go-backend"), ui.New(&out, true)); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		esc + "[1mgo-backend" + esc + "[22m " + esc + "[90m· 1 skill" + esc + "[0m\n",
+		esc + "[1mNext steps" + esc + "[22m\n",
+		"  " + esc + "[36mclaude" + esc + "[0m      start the session\n",
+		"  " + esc + "[36mray status" + esc + "[0m  diagnose the environment\n",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("colored first run lacks %q in\n%q", want, out.String())
 		}
 	}
 }
@@ -104,7 +122,7 @@ func TestRootWithoutArgsPrintsTheScreenNotTheRawHelp(t *testing.T) {
 		t.Fatalf("Execute() error = %v", err)
 	}
 	got := out.String()
-	if !strings.Contains(got, "Next steps:") {
+	if !strings.Contains(got, "Next steps\n") || strings.Contains(got, "Next steps:") {
 		t.Errorf("output = %q, want the first-run screen", got)
 	}
 	if strings.Contains(got, "Available Commands") {
