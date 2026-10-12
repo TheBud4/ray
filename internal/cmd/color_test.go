@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -234,3 +235,11 @@ func TestSemanticColorNeverTouchesRawOutput(t *testing.T) {
 		})
 	}
 }
+
+// stripEscapes tira as sequências SGR de s: o que sobra é o texto que um
+// terminal sem cor mostraria.
+func stripEscapes(s string) string {
+	return sgrPattern.ReplaceAllString(s, "")
+}
+
+var sgrPattern = regexp.MustCompile("\x1b\\[[0-9;]*m")

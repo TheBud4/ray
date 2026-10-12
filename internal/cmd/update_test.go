@@ -12,7 +12,9 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/TheBud4/ray/internal/profile"
+	"github.com/TheBud4/ray/internal/report"
 	"github.com/TheBud4/ray/internal/runner"
+	"github.com/TheBud4/ray/internal/ui"
 	"github.com/TheBud4/ray/internal/update"
 )
 
@@ -94,34 +96,37 @@ func TestRunUpdatePrintsSummaryAndErrorsOnFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("runUpdate() = nil error, want error: the copy cannot land on a path blocked by a plain file")
 	}
-	if !strings.Contains(out.String(), "Failed") {
-		t.Errorf("output = %q, want it to include a Failed section", out.String())
+	if !strings.Contains(out.String(), "  ✗ s  ") || !strings.Contains(out.String(), "1 failed") {
+		t.Errorf("output = %q, want the failed component line and the failed count", out.String())
 	}
 }
 
-// Quatro listas vazias significam que o perfil não tem componente — todo
-// componente processado cai em alguma delas. Sem esta linha o comando termina
+// Sem nenhuma entrada de componente e sem aviso, o perfil não tem componente —
+// todo componente processado vira uma entrada. Sem esta linha o comando termina
 // com sucesso e sem uma palavra, e quem rodou não sabe se funcionou.
 func TestPrintUpdateSummarySaysWhenThereWasNothing(t *testing.T) {
 	var out bytes.Buffer
-	printUpdateSummary(&out, update.Summary{})
+	printUpdateSummary(&out, update.Summary{Profile: "demo"})
 
-	if got := strings.TrimSpace(out.String()); got != "no components to update" {
-		t.Errorf("output = %q, want %q", got, "no components to update")
+	if want, got := "update · demo\n\nno components to update\n", out.String(); got != want {
+		t.Errorf("output = %q, want %q", got, want)
 	}
 }
 
 // A recíproca, e é ela que impede a correção de virar ruído: execução que
-// processou componente não ganha a linha.
+// processou componente (ou avisou de algo) não ganha a linha.
 func TestPrintUpdateSummaryStaysQuietWhenSomethingHappened(t *testing.T) {
+	entry := func(o report.Outcome) []report.Entry {
+		return []report.Entry{{Kind: report.Component, Name: "skills:o/r#s", Outcome: o}}
+	}
 	cases := []struct {
 		name string
 		sum  update.Summary
 	}{
-		{"updated", update.Summary{Updated: []string{"skills:o/r#s"}}},
-		{"unchanged", update.Summary{Unchanged: []string{"skills:o/r#s"}}},
-		{"skipped", update.Summary{Skipped: []string{"skills:o/r#s"}}},
-		{"failed", update.Summary{Failed: []string{"skills:o/r#s"}}},
+		{"updated", update.Summary{Entries: entry(report.Updated)}},
+		{"unchanged", update.Summary{Entries: entry(report.Unchanged)}},
+		{"kept", update.Summary{Entries: entry(report.Kept)}},
+		{"failed", update.Summary{Entries: entry(report.Failed)}},
 		{"warnings", update.Summary{Warnings: []string{"skills:o/r#s: fork"}}},
 	}
 
@@ -169,20 +174,151 @@ func TestBuildUpdateOptionsMapsFlags(t *testing.T) {
 	}
 }
 
-// Só ferramenta atualizada: a seção aparece com nome próprio, e a linha de "sem
-// componentes" segue valendo — nenhum componente foi processado.
+// Só ferramenta atualizada: a seção Tools aparece, a ferramenta conta em
+// "updated", e a linha de "sem componentes" segue valendo — nenhum componente
+// foi processado.
 func TestPrintUpdateSummaryListsToolsApartFromComponents(t *testing.T) {
 	var out bytes.Buffer
-	printUpdateSummary(&out, update.Summary{Tools: []string{"uv tool upgrade headroom-ai"}})
+	printUpdateSummary(&out, update.Summary{
+		Profile: "demo",
+		Entries: []report.Entry{{Kind: report.Command, Name: "uv tool upgrade headroom-ai", Outcome: report.Updated, Detail: "upgraded"}},
+	})
 
-	got := out.String()
-	if !strings.Contains(got, "Tools upgraded:\n  - uv tool upgrade headroom-ai") {
-		t.Errorf("output = %q, want the tool under its own heading", got)
+	want := "update · demo\n" +
+		"\n" +
+		"Tools\n" +
+		"  ~ uv tool upgrade headroom-ai  upgraded\n" +
+		"\n" +
+		"no components to update\n" +
+		"\n" +
+		"1 updated\n"
+	if got := out.String(); got != want {
+		t.Errorf("output =\n%q\nwant\n%q", got, want)
 	}
-	if strings.Contains(got, "Updated:") {
-		t.Errorf("output = %q, want no Updated section for a tool", got)
+	assertNoEscape(t, out.String())
+}
+
+// A tela aprovada do update (com --no-global): componentes atualizado,
+// inalterado e preservado, a dica do --force uma vez, e o resumo.
+func TestPrintUpdateSummaryShowsComponentsAndTheForceHint(t *testing.T) {
+	var out bytes.Buffer
+	printUpdateSummary(&out, update.Summary{
+		Profile: "demo",
+		Entries: []report.Entry{
+			{Kind: report.Component, Name: "t", Outcome: report.Updated},
+			{Kind: report.Component, Name: "s", Outcome: report.Unchanged},
+			{Kind: report.Component, Name: "u", Outcome: report.Kept, Detail: "edited locally (differs from last pristine); use --force to overwrite"},
+		},
+	})
+	want := "update · demo\n" +
+		"\n" +
+		"Components\n" +
+		"  ~ t  updated\n" +
+		"  = s  unchanged\n" +
+		"  = u  kept — edited locally\n" +
+		"\n" +
+		"⚠ use --force to overwrite the components kept above\n" +
+		"\n" +
+		"1 updated · 1 unchanged · 1 kept\n"
+	if got := out.String(); got != want {
+		t.Errorf("output =\n%q\nwant\n%q", got, want)
 	}
-	if !strings.Contains(got, "no components to update") {
-		t.Errorf("output = %q, want the no-components line when only tools ran", got)
+	assertNoEscape(t, out.String())
+}
+
+// Componente ausente é uma entrada Kept cujo detalhe é o caminho: sai sem o
+// prefixo "kept —", com a home abreviada, e não pede --force (não há edição).
+func TestPrintUpdateSummaryShowsAMissingComponentWithItsPath(t *testing.T) {
+	home := t.TempDir()
+	fixHome(t, home)
+	missing := filepath.Join(home, "components", "x")
+	var out bytes.Buffer
+	printUpdateSummary(&out, update.Summary{
+		Profile: "demo",
+		Entries: []report.Entry{{Kind: report.Component, Name: "x", Outcome: report.Kept, Detail: "not found at " + missing}},
+	})
+	want := "  = x  not found at ~" + string(filepath.Separator) + filepath.Join("components", "x") + "\n"
+	if !strings.Contains(out.String(), want) {
+		t.Errorf("output = %q, want the line %q", out.String(), want)
+	}
+	if strings.Contains(out.String(), "kept —") || strings.Contains(out.String(), "--force") {
+		t.Errorf("output = %q, a missing component is neither \"kept —\" nor fixed by --force", out.String())
+	}
+}
+
+// Falha de ferramenta e de componente aparecem como ✗ com o motivo; o resumo
+// conta as duas.
+func TestPrintUpdateSummaryShowsFailures(t *testing.T) {
+	var out bytes.Buffer
+	printUpdateSummary(&out, update.Summary{
+		Profile: "demo",
+		Entries: []report.Entry{
+			{Kind: report.Command, Name: "uv tool upgrade headroom-ai", Outcome: report.Failed, Detail: "exit 2"},
+			{Kind: report.Component, Name: "s", Outcome: report.Failed, Detail: "permission denied"},
+		},
+		HadFailure: true,
+	})
+	want := "update · demo\n" +
+		"\n" +
+		"Tools\n" +
+		"  ✗ uv tool upgrade headroom-ai  exit 2\n" +
+		"\n" +
+		"Components\n" +
+		"  ✗ s  permission denied\n" +
+		"\n" +
+		"2 failed\n"
+	if got := out.String(); got != want {
+		t.Errorf("output =\n%q\nwant\n%q", got, want)
+	}
+}
+
+// Os avisos que sobram saem como ⚠ antes do resumo, e a dica do --force vem
+// depois deles.
+func TestPrintUpdateSummaryShowsLeftoverWarningsBeforeTheForceHint(t *testing.T) {
+	var out bytes.Buffer
+	printUpdateSummary(&out, update.Summary{
+		Profile:  "demo",
+		Entries:  []report.Entry{{Kind: report.Component, Name: "u", Outcome: report.Kept, Detail: "edited locally (x)"}},
+		Warnings: []string{"baseline not recorded"},
+	})
+	want := "\n⚠ baseline not recorded\n⚠ use --force to overwrite the components kept above\n\n1 kept\n"
+	if !strings.HasSuffix(out.String(), want) {
+		t.Errorf("output = %q, want it to end with %q", out.String(), want)
+	}
+}
+
+// A cor reforça o marcador, nunca o substitui: tirados os escapes, a saída
+// colorida é a mesma do texto simples; e cada papel tem a sua cor.
+func TestPrintUpdateSummaryColorsEachRole(t *testing.T) {
+	sum := update.Summary{
+		Profile: "demo",
+		Entries: []report.Entry{
+			{Kind: report.Component, Name: "t", Outcome: report.Updated},
+			{Kind: report.Component, Name: "s", Outcome: report.Unchanged},
+			{Kind: report.Component, Name: "u", Outcome: report.Kept, Detail: "edited locally (x)"},
+			{Kind: report.Component, Name: "f", Outcome: report.Failed, Detail: "boom"},
+		},
+		HadFailure: true,
+	}
+	var plain, colored bytes.Buffer
+	printUpdateSummary(&plain, sum)
+	printUpdateSummary(ui.New(&colored, true), sum)
+
+	if got := stripEscapes(colored.String()); got != plain.String() {
+		t.Errorf("colored output without escapes =\n%q\nwant the plain output\n%q", got, plain.String())
+	}
+	for _, want := range []string{
+		esc + "[33m~" + esc + "[0m t  " + esc + "[90mupdated" + esc + "[0m\n",
+		esc + "[90m=" + esc + "[0m " + esc + "[90ms" + esc + "[0m  " + esc + "[90munchanged" + esc + "[0m\n",
+		esc + "[90m=" + esc + "[0m " + esc + "[90mu" + esc + "[0m  " + esc + "[90mkept — edited locally" + esc + "[0m\n",
+		esc + "[33m⚠" + esc + "[0m use --force to overwrite the components kept above\n",
+		esc + "[31m1 failed" + esc + "[0m",
+		esc + "[33m1 updated" + esc + "[0m",
+		esc + "[90m1 unchanged" + esc + "[0m",
+		esc + "[90m1 kept" + esc + "[0m",
+	} {
+		if !strings.Contains(colored.String(), want) {
+			t.Errorf("colored output = %q, want it to contain %q", colored.String(), want)
+		}
 	}
 }

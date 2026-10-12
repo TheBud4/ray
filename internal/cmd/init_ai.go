@@ -14,6 +14,7 @@ import (
 	"github.com/TheBud4/ray/internal/profile"
 	"github.com/TheBud4/ray/internal/raypaths"
 	"github.com/TheBud4/ray/internal/runner"
+	"github.com/TheBud4/ray/internal/ui"
 )
 
 var (
@@ -116,34 +117,23 @@ func runInitAI(r runner.Runner, l preflight.Looker, opts initai.Options, home in
 	if err != nil {
 		return err
 	}
-	printInitAISummary(out, sum)
+	printInitAISummary(out, "init ai", sum)
 	if sum.HadFailure {
 		return fmt.Errorf("one or more steps failed; see summary above")
 	}
 	return nil
 }
 
-func printInitAISummary(out io.Writer, sum initai.Summary) {
-	printList := func(label string, items []string) {
-		if len(items) == 0 {
-			return
-		}
-		fmt.Fprintf(out, "%s:\n", label)
-		for _, it := range items {
-			fmt.Fprintf(out, "  - %s\n", it)
-		}
-	}
-	// Em --dry-run nada foi feito: o passado afirmaria o contrário.
-	installed, created, skipped := "Installed", "Created", "Skipped"
-	if sum.DryRun {
-		installed, created, skipped = "Would install", "Would create", "Would skip"
-	}
-	printList(installed, sum.Installed)
-	printList("Failed", sum.Failed)
-	printList(created, sum.Created)
-	printList(skipped, sum.Skipped)
-	printList("Warnings", sum.Warnings)
-	printNextSteps(out, sum)
+// printInitAISummary renderiza o resumo do init ai (e do new, que herda a
+// tela com o próprio título): seções de entradas, avisos, contagem e, se tudo
+// correu bem, os próximos passos.
+func printInitAISummary(out io.Writer, title string, sum initai.Summary) {
+	p := ui.For(out)
+	p.Title(title, sum.Profile)
+	printEntrySections(p, sum.Entries)
+	printWarnings(p, sum.Warnings, sum.Entries)
+	printEntryTally(p, sum.Entries, sum.DryRun)
+	printNextSteps(p, sum)
 }
 
 // printNextSteps fecha o loop do vendoring (I1): o `ray` escreve o ambiente no
@@ -152,24 +142,28 @@ func printInitAISummary(out io.Writer, sum initai.Summary) {
 //
 // Não aparece quando algum passo falhou: mandar commitar um ambiente escrito
 // pela metade grava o estado quebrado. Nem em --dry-run: nada foi escrito, e
-// `git add` de caminhos que não existem contradiz o "Would create" acima.
-func printNextSteps(out io.Writer, sum initai.Summary) {
+// `git add` de caminhos que não existem contradiz o "would create" do resumo.
+func printNextSteps(p *ui.Printer, sum initai.Summary) {
 	if sum.HadFailure || sum.DryRun {
 		return
 	}
-	fmt.Fprintln(out, "\nNext steps:")
+	var steps [][2]string
 	if dest := cdDestination(sum.Target); dest != "" {
 		// Os passos abaixo valem dentro do projeto; quem acabou de rodar
 		// `ray new` ainda está na pasta pai.
-		fmt.Fprintf(out, "  cd %s\n", shellQuote(dest))
+		steps = append(steps, [2]string{"cd " + shellQuote(dest), ""})
 	}
 	if sum.InGitRepo && len(sum.VersionedPaths) > 0 {
 		// Caminhos por nome, nunca `git add -A`/`.`: o guard-add.sh que este
 		// mesmo comando acabou de instalar avisa contra add cego.
-		fmt.Fprintf(out, "  git add %s\n", strings.Join(sum.VersionedPaths, " "))
-		fmt.Fprintln(out, `  git commit -m "chore: vendor ai environment"`)
+		steps = append(steps,
+			[2]string{"git add " + strings.Join(sum.VersionedPaths, " "), ""},
+			[2]string{`git commit -m "chore: vendor ai environment"`, ""})
 	}
-	fmt.Fprintln(out, "  claude")
+	steps = append(steps, [2]string{"claude", ""})
+	p.Blank()
+	p.Section("Next steps")
+	p.Steps(steps)
 }
 
 // cdDestination devolve para onde a pessoa precisa dar `cd` para chegar em

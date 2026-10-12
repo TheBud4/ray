@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -11,7 +12,9 @@ import (
 
 	"github.com/TheBud4/ray/internal/initai"
 	"github.com/TheBud4/ray/internal/profile"
+	"github.com/TheBud4/ray/internal/report"
 	"github.com/TheBud4/ray/internal/runner"
+	"github.com/TheBud4/ray/internal/ui"
 )
 
 func resetInitAIFlags(t *testing.T) {
@@ -120,15 +123,20 @@ func TestRunInitAIPrintsSummaryAndErrorsOnFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("runInitAI() = nil error, want error when a component fails")
 	}
-	if !strings.Contains(out.String(), "Failed") {
-		t.Errorf("output = %q, want it to contain the Failed summary section", out.String())
+	got := out.String()
+	if !strings.Contains(got, "✗ s  not found at") || !strings.Contains(got, "1 failed") {
+		t.Errorf("output = %q, want the failed component line and the failed count", got)
 	}
 }
 
 func TestPrintInitAISummaryFooterInsideGitRepo(t *testing.T) {
 	var out bytes.Buffer
-	printInitAISummary(&out, initai.Summary{
-		Created:        []string{"CLAUDE.md", ".claude/x", ".mcp.json"},
+	printInitAISummary(&out, "init ai", initai.Summary{
+		Entries: []report.Entry{
+			{Kind: report.File, Name: "CLAUDE.md", Outcome: report.Created},
+			{Kind: report.File, Name: ".claude/x", Outcome: report.Created},
+			{Kind: report.File, Name: ".mcp.json", Outcome: report.Created},
+		},
 		VersionedPaths: []string{".claude", ".mcp.json", "CLAUDE.md"},
 		InGitRepo:      true,
 	})
@@ -154,7 +162,7 @@ func TestPrintInitAISummaryFooterInsideGitRepo(t *testing.T) {
 
 func TestPrintInitAISummaryFooterOutsideGitRepo(t *testing.T) {
 	var out bytes.Buffer
-	printInitAISummary(&out, initai.Summary{
+	printInitAISummary(&out, "init ai", initai.Summary{
 		VersionedPaths: []string{".claude", "CLAUDE.md"},
 		InGitRepo:      false,
 	})
@@ -169,8 +177,8 @@ func TestPrintInitAISummaryFooterOutsideGitRepo(t *testing.T) {
 
 func TestPrintInitAISummaryNoFooterOnFailure(t *testing.T) {
 	var out bytes.Buffer
-	printInitAISummary(&out, initai.Summary{
-		Failed:         []string{"some/component"},
+	printInitAISummary(&out, "init ai", initai.Summary{
+		Entries:        []report.Entry{{Kind: report.Component, Name: "some/component", Outcome: report.Failed, Detail: "boom"}},
 		VersionedPaths: []string{".claude"},
 		InGitRepo:      true,
 		HadFailure:     true,
@@ -198,12 +206,13 @@ func TestRunInitAIOnAnEmptyFolderSucceedsAndShowsNextSteps(t *testing.T) {
 		t.Fatalf("runInitAI() error = %v, want nil: %s", err, out.String())
 	}
 	got := out.String()
-	if !strings.Contains(got, "Next steps:") {
+	if !strings.Contains(got, "\nNext steps\n") {
 		t.Errorf("output = %q, want the next-steps footer", got)
 	}
-	if !strings.Contains(got, "Warnings:") || !strings.Contains(got, "graphify update .") {
-		t.Errorf("output = %q, want a warning about `graphify update .`", got)
+	if !strings.Contains(got, "⚠ ") || !strings.Contains(got, "graphify update .") {
+		t.Errorf("output = %q, want a ⚠ warning about `graphify update .`", got)
 	}
+	assertNoEscape(t, got)
 }
 
 // Os próximos passos (`git add`, `claude`) valem DENTRO do projeto. Quando o
@@ -225,8 +234,8 @@ func TestNextStepsStartWithCdWhenTheTargetIsNotTheCurrentDir(t *testing.T) {
 			base := t.TempDir()
 			t.Chdir(base)
 			var out bytes.Buffer
-			printInitAISummary(&out, initai.Summary{
-				Created:        []string{".claude/.ray-profile"},
+			printInitAISummary(&out, "init ai", initai.Summary{
+				Entries:        []report.Entry{{Kind: report.File, Name: ".claude/.ray-profile", Outcome: report.Created}},
 				VersionedPaths: []string{".claude"},
 				InGitRepo:      true,
 				Target:         tc.target(base),
@@ -252,38 +261,219 @@ func TestNextStepsStartWithCdWhenTheTargetIsNotTheCurrentDir(t *testing.T) {
 // Sem alvo conhecido (resumo montado por quem não o informa), nada de cd.
 func TestNextStepsHaveNoCdWithoutAKnownTarget(t *testing.T) {
 	var out bytes.Buffer
-	printInitAISummary(&out, initai.Summary{VersionedPaths: []string{".claude"}, InGitRepo: true})
+	printInitAISummary(&out, "init ai", initai.Summary{VersionedPaths: []string{".claude"}, InGitRepo: true})
 	if strings.Contains(out.String(), "  cd ") {
 		t.Errorf("output = %q, want no cd when the target is unknown", out.String())
 	}
 }
 
-// Num --dry-run nada foi escrito, e "Created:" no passado afirmava o contrário.
-// As listas passam a dizer o que seria feito.
+// A tela aprovada do init ai: seções na ordem Tools, Components, Files; o
+// motivo da falha à direita; o resumo na ordem fixa, e sem Next steps porque
+// algo falhou.
+func TestPrintInitAISummaryShowsSectionsItemsAndTheSummary(t *testing.T) {
+	fixHome(t, "")
+	src := filepath.Join("components", "gone")
+	var out bytes.Buffer
+	printInitAISummary(&out, "init ai", initai.Summary{
+		Profile: "demo",
+		Entries: []report.Entry{
+			{Kind: report.Component, Name: "s", Outcome: report.Installed},
+			{Kind: report.Component, Name: "gone", Outcome: report.Failed, Detail: "not found at " + src},
+			{Kind: report.File, Name: "CLAUDE.md", Outcome: report.Created},
+			{Kind: report.File, Name: ".claude/settings.json", Outcome: report.Created},
+			{Kind: report.File, Name: ".gitignore", Outcome: report.Created},
+			{Kind: report.File, Name: ".claude/handoff.md", Outcome: report.Kept, Detail: "already there"},
+		},
+		HadFailure:     true,
+		VersionedPaths: []string{".claude", "CLAUDE.md"},
+		InGitRepo:      true,
+	})
+	// O nome mais largo da seção Files é ".claude/settings.json" (21 colunas):
+	// o detalhe vem depois do preenchimento até ele, mais 2 espaços.
+	want := "init ai · demo\n" +
+		"\n" +
+		"Components\n" +
+		"  ✓ s\n" +
+		"  ✗ gone  not found at " + src + "\n" +
+		"\n" +
+		"Files\n" +
+		"  + CLAUDE.md\n" +
+		"  + .claude/settings.json\n" +
+		"  + .gitignore\n" +
+		"  = .claude/handoff.md" + strings.Repeat(" ", 21-18+2) + "already there\n" +
+		"\n" +
+		"1 failed · 1 installed · 3 created · 1 kept\n"
+	if got := out.String(); got != want {
+		t.Errorf("summary =\n%q\nwant\n%q", got, want)
+	}
+	assertNoEscape(t, out.String())
+}
+
+// Globais e comandos por projeto são a seção Tools, que vem antes das demais;
+// uma seção sem item não aparece.
+func TestPrintInitAISummaryListsToolsFirstAndOmitsEmptySections(t *testing.T) {
+	var out bytes.Buffer
+	printInitAISummary(&out, "init ai", initai.Summary{
+		Profile: "demo",
+		Entries: []report.Entry{
+			{Kind: report.File, Name: "CLAUDE.md", Outcome: report.Created},
+			{Kind: report.Global, Name: "headroom", Outcome: report.Installed},
+			{Kind: report.Global, Name: "uv", Outcome: report.Failed, Detail: "`uv tool install x`: exit 1"},
+			{Kind: report.Command, Name: "graphify update .", Outcome: report.Installed},
+		},
+		HadFailure: true,
+	})
+	want := "init ai · demo\n" +
+		"\n" +
+		"Tools\n" +
+		"  ✓ headroom\n" +
+		"  ✗ uv" + strings.Repeat(" ", 17-2+2) + "`uv tool install x`: exit 1\n" +
+		"  ✓ graphify update .\n" +
+		"\n" +
+		"Files\n" +
+		"  + CLAUDE.md\n" +
+		"\n" +
+		"1 failed · 2 installed · 1 created\n"
+	if got := out.String(); got != want {
+		t.Errorf("summary =\n%q\nwant\n%q", got, want)
+	}
+	if strings.Contains(out.String(), "Components") {
+		t.Errorf("summary = %q, want no Components section when there is no component", out.String())
+	}
+}
+
+// O caminho da home vira ~ só na exibição, no motivo de um item.
+func TestPrintInitAISummaryAbbreviatesTheHomeInTheDetail(t *testing.T) {
+	home := t.TempDir()
+	fixHome(t, home)
+	var out bytes.Buffer
+	printInitAISummary(&out, "init ai", initai.Summary{
+		Profile: "demo",
+		Entries: []report.Entry{
+			{Kind: report.Component, Name: "gone", Outcome: report.Failed, Detail: "not found at " + filepath.Join(home, "components", "gone")},
+		},
+		HadFailure: true,
+	})
+	want := "  ✗ gone  not found at ~" + string(filepath.Separator) + filepath.Join("components", "gone") + "\n"
+	if !strings.Contains(out.String(), want) {
+		t.Errorf("summary = %q, want the line %q", out.String(), want)
+	}
+	if strings.Contains(out.String(), home) {
+		t.Errorf("summary = %q, must not show the full home path", out.String())
+	}
+}
+
+// Componente editado e preservado: o motivo é cortado em "edited locally", a
+// linha ganha "kept —" e a dica do --force aparece uma vez, depois das
+// seções e antes do resumo.
+func TestPrintInitAISummaryExplainsAKeptComponentOnce(t *testing.T) {
+	reason := "edited locally (differs from last pristine); use --force to overwrite"
+	var out bytes.Buffer
+	printInitAISummary(&out, "init ai", initai.Summary{
+		Profile: "demo",
+		Entries: []report.Entry{
+			{Kind: report.Component, Name: "u", Outcome: report.Kept, Detail: reason},
+			{Kind: report.Component, Name: "v", Outcome: report.Kept, Detail: reason},
+		},
+	})
+	got := out.String()
+	if !strings.Contains(got, "  = u  kept — edited locally\n") || !strings.Contains(got, "  = v  kept — edited locally\n") {
+		t.Errorf("summary = %q, want both kept components with the short reason", got)
+	}
+	if n := strings.Count(got, "use --force to overwrite the components kept above"); n != 1 {
+		t.Errorf("the --force hint appears %d times in %q, want exactly once", n, got)
+	}
+	hint := strings.Index(got, "⚠ use --force to overwrite the components kept above\n")
+	sum := strings.Index(got, "2 kept")
+	if hint < 0 || sum < hint {
+		t.Errorf("summary = %q, want the ⚠ hint before the summary line", got)
+	}
+	if strings.Contains(got, "(differs from last pristine)") {
+		t.Errorf("summary = %q, want the long reason cut at the first parenthesis", got)
+	}
+}
+
+// Avisos que não são de um item (o .gitignore que ignora .claude/, a linha-base
+// não gravada, um comando por projeto que falhou) saem como ⚠ depois das
+// seções e antes do resumo.
+func TestPrintInitAISummaryShowsLeftoverWarningsBeforeTheSummary(t *testing.T) {
+	var out bytes.Buffer
+	printInitAISummary(&out, "init ai", initai.Summary{
+		Profile:  "demo",
+		Entries:  []report.Entry{{Kind: report.File, Name: "CLAUDE.md", Outcome: report.Created}},
+		Warnings: []string{"`graphify update .` failed (exit 1); run it again once the project has content"},
+	})
+	want := "init ai · demo\n" +
+		"\n" +
+		"Files\n" +
+		"  + CLAUDE.md\n" +
+		"\n" +
+		"⚠ `graphify update .` failed (exit 1); run it again once the project has content\n" +
+		"\n" +
+		"1 created\n" +
+		"\n" +
+		"Next steps\n" +
+		"  claude\n"
+	if got := out.String(); got != want {
+		t.Errorf("summary =\n%q\nwant\n%q", got, want)
+	}
+}
+
+// O título leva o perfil resolvido; o `new` herda o resumo com o próprio título.
+func TestPrintInitAISummaryTitleCarriesTheCommandAndTheProfile(t *testing.T) {
+	for _, title := range []string{"init ai", "new"} {
+		var out bytes.Buffer
+		printInitAISummary(&out, title, initai.Summary{Profile: "go"})
+		if want := title + " · go\n"; !strings.HasPrefix(out.String(), want) {
+			t.Errorf("summary = %q, want it to start with %q", out.String(), want)
+		}
+	}
+}
+
+// Next steps é uma seção; os passos saem sem descrição, como hoje.
+func TestPrintInitAISummaryNextStepsAreASectionOfBareCommands(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var out bytes.Buffer
+	printInitAISummary(&out, "init ai", initai.Summary{
+		Profile:        "demo",
+		Entries:        []report.Entry{{Kind: report.File, Name: "CLAUDE.md", Outcome: report.Created}},
+		VersionedPaths: []string{".claude", ".gitignore", "CLAUDE.md"},
+		InGitRepo:      true,
+	})
+	want := "\nNext steps\n" +
+		"  git add .claude .gitignore CLAUDE.md\n" +
+		"  git commit -m \"chore: vendor ai environment\"\n" +
+		"  claude\n"
+	if !strings.HasSuffix(out.String(), want) {
+		t.Errorf("summary = %q, want it to end with %q", out.String(), want)
+	}
+}
+
+// Em --dry-run nada foi escrito: o resumo diz o que seria feito, no
+// condicional, e não afirma o passado.
 func TestPrintInitAISummaryUsesTheConditionalInDryRun(t *testing.T) {
 	sum := initai.Summary{
-		Installed: []string{"s"},
-		Created:   []string{"CLAUDE.md"},
-		Skipped:   []string{"docs/README.md"},
+		Profile: "demo",
+		Entries: []report.Entry{
+			{Kind: report.Component, Name: "s", Outcome: report.Installed},
+			{Kind: report.File, Name: "CLAUDE.md", Outcome: report.Created},
+			{Kind: report.File, Name: "docs/README.md", Outcome: report.Kept, Detail: "already there"},
+		},
 	}
 
 	var real bytes.Buffer
-	printInitAISummary(&real, sum)
-	for _, want := range []string{"Installed:", "Created:", "Skipped:"} {
-		if !strings.Contains(real.String(), want) {
-			t.Errorf("real run output = %q, want %q", real.String(), want)
-		}
+	printInitAISummary(&real, "init ai", sum)
+	if want := "1 installed · 1 created · 1 kept\n"; !strings.Contains(real.String(), want) {
+		t.Errorf("real run output = %q, want %q", real.String(), want)
 	}
 
 	sum.DryRun = true
 	var dry bytes.Buffer
-	printInitAISummary(&dry, sum)
-	for _, want := range []string{"Would install:", "Would create:", "Would skip:"} {
-		if !strings.Contains(dry.String(), want) {
-			t.Errorf("dry-run output = %q, want %q", dry.String(), want)
-		}
+	printInitAISummary(&dry, "init ai", sum)
+	if want := "1 would install · 1 would create · 1 would skip\n"; !strings.Contains(dry.String(), want) {
+		t.Errorf("dry-run output = %q, want %q", dry.String(), want)
 	}
-	for _, bad := range []string{"Installed:", "Created:", "Skipped:"} {
+	for _, bad := range []string{"installed", "created", "kept"} {
 		if strings.Contains(dry.String(), bad) {
 			t.Errorf("dry-run output = %q, want no past-tense %q", dry.String(), bad)
 		}
@@ -292,22 +482,107 @@ func TestPrintInitAISummaryUsesTheConditionalInDryRun(t *testing.T) {
 
 // Em --dry-run nada foi escrito: mandar `git add` dos caminhos e rodar o
 // `claude` num ambiente que não existe seria o rodapé afirmando o contrário do
-// que o resumo acabou de dizer ("Would create").
+// que o resumo acabou de dizer ("would create").
 func TestPrintInitAISummaryNoNextStepsOnDryRun(t *testing.T) {
 	var out bytes.Buffer
-	printInitAISummary(&out, initai.Summary{
-		Created:        []string{"CLAUDE.md"},
+	printInitAISummary(&out, "init ai", initai.Summary{
+		Entries:        []report.Entry{{Kind: report.File, Name: "CLAUDE.md", Outcome: report.Created}},
 		VersionedPaths: []string{".claude", "CLAUDE.md"},
 		InGitRepo:      true,
 		DryRun:         true,
 	})
 	got := out.String()
-	if !strings.Contains(got, "Would create") {
+	if !strings.Contains(got, "would create") {
 		t.Fatalf("summary = %q, want the dry-run wording", got)
 	}
 	for _, forbidden := range []string{"Next steps", "git add", "git commit"} {
 		if strings.Contains(got, forbidden) {
 			t.Errorf("dry-run summary = %q, must not contain %q: nothing was written", got, forbidden)
+		}
+	}
+}
+
+// A cor reforça o marcador, nunca o substitui: tirados os escapes, a saída
+// colorida é a mesma do texto simples; e cada papel tem a sua cor.
+func TestPrintInitAISummaryColorsEachRole(t *testing.T) {
+	fixHome(t, "")
+	sum := initai.Summary{
+		Profile: "demo",
+		Entries: []report.Entry{
+			{Kind: report.Component, Name: "s", Outcome: report.Installed},
+			{Kind: report.Component, Name: "gone", Outcome: report.Failed, Detail: "not found at x"},
+			{Kind: report.File, Name: "CLAUDE.md", Outcome: report.Created},
+			{Kind: report.File, Name: "h.md", Outcome: report.Kept, Detail: "already there"},
+		},
+		HadFailure: true,
+	}
+	var plain, colored bytes.Buffer
+	printInitAISummary(&plain, "init ai", sum)
+	printInitAISummary(ui.New(&colored, true), "init ai", sum)
+
+	if got := stripEscapes(colored.String()); got != plain.String() {
+		t.Errorf("colored output without escapes =\n%q\nwant the plain output\n%q", got, plain.String())
+	}
+	for _, want := range []string{
+		esc + "[1minit ai" + esc + "[22m " + esc + "[90m· demo" + esc + "[0m\n",
+		esc + "[32m✓" + esc + "[0m s\n",
+		esc + "[31m✗" + esc + "[0m " + esc + "[31mgone" + esc + "[0m  " + esc + "[90mnot found at x" + esc + "[0m\n",
+		esc + "[32m+" + esc + "[0m CLAUDE.md\n",
+		esc + "[90m=" + esc + "[0m " + esc + "[90mh.md" + esc + "[0m" + strings.Repeat(" ", 9-4+2) + esc + "[90malready there" + esc + "[0m\n",
+		esc + "[31m1 failed" + esc + "[0m",
+		esc + "[32m1 installed" + esc + "[0m",
+		esc + "[32m1 created" + esc + "[0m",
+		esc + "[90m1 kept" + esc + "[0m",
+	} {
+		if !strings.Contains(colored.String(), want) {
+			t.Errorf("colored output = %q, want it to contain %q", colored.String(), want)
+		}
+	}
+}
+
+// Repetir `init ai` no mesmo projeto: o componente intocado é recopiado (✓), os
+// arquivos de scaffold que já existem saem "= … already there", e nada sai "+".
+func TestRunInitAIRepeatedRunShowsInstalledComponentsAndKeptFiles(t *testing.T) {
+	fixHome(t, "")
+	home := newTestHome(t)
+	home.ComponentsDir = filepath.Join(t.TempDir(), "components")
+	if err := os.MkdirAll(filepath.Join(home.ComponentsDir, "s"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home.ComponentsDir, "s", "SKILL.md"), []byte("# s"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p := newTestProfile(nil)
+	p.Components = []profile.Component{{Name: "s", Dest: ".claude/skills"}}
+	writeTestProfile(t, home.ProfilesDir, p)
+	target := t.TempDir()
+
+	runOnce := func() string {
+		var out bytes.Buffer
+		opts := initai.Options{Profile: "test", Target: target, NoGlobal: true, Out: &out}
+		if err := runInitAI(&runner.FakeRunner{}, allFound, opts, home, &out); err != nil {
+			t.Fatalf("runInitAI() error = %v: %s", err, out.String())
+		}
+		return out.String()
+	}
+
+	first := runOnce()
+	if !strings.Contains(first, "  ✓ s\n") || !strings.Contains(first, "  + CLAUDE.md\n") {
+		t.Fatalf("first run = %q, want the component installed and CLAUDE.md created", first)
+	}
+
+	second := runOnce()
+	assertNoEscape(t, second)
+	if !strings.Contains(second, "  ✓ s\n") {
+		t.Errorf("second run = %q, want the untouched component installed again", second)
+	}
+	// O detalhe vem depois do preenchimento até o maior nome da seção Files.
+	if !regexp.MustCompile(`\n  = CLAUDE\.md +already there\n`).MatchString(second) {
+		t.Errorf("second run = %q, want CLAUDE.md kept as already there", second)
+	}
+	for _, line := range strings.Split(second, "\n") {
+		if strings.HasPrefix(line, "  + ") {
+			t.Errorf("second run lists %q as created; nothing is new in a repeated run", line)
 		}
 	}
 }
