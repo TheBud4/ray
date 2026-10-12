@@ -168,15 +168,40 @@ func render(tmplName, templatesDir string, data Data) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	return renderString(tmplName, raw, data, 0)
+}
+
+// renderString renderiza raw como text/template chamado tmplName com data: é o
+// único caminho de parse e execução, o de render e o de quem renderiza da
+// memória. max > 0 corta a saída em max bytes; a saída exatamente no teto passa.
+func renderString(tmplName string, raw []byte, data Data, max int) ([]byte, error) {
 	t, err := template.New(tmplName).Parse(string(raw))
 	if err != nil {
 		return nil, fmt.Errorf("parsing template %s: %w", tmplName, err)
 	}
 	var buf bytes.Buffer
-	if err := t.Execute(&buf, data); err != nil {
+	var w io.Writer = &buf
+	if max > 0 {
+		w = &ceilingWriter{w: &buf, left: max}
+	}
+	if err := t.Execute(w, data); err != nil {
 		return nil, fmt.Errorf("rendering template %s: %w", tmplName, err)
 	}
 	return buf.Bytes(), nil
+}
+
+// ceilingWriter recusa a escrita que faria a saída passar do teto.
+type ceilingWriter struct {
+	w    io.Writer
+	left int
+}
+
+func (c *ceilingWriter) Write(p []byte) (int, error) {
+	if len(p) > c.left {
+		return 0, ErrOutputTooLarge
+	}
+	c.left -= len(p)
+	return c.w.Write(p)
 }
 
 // readTemplate prefere o overlay e cai para o embed. Um nome ausente dos dois
