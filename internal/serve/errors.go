@@ -36,6 +36,7 @@ const (
 	codeForbidden       = "forbidden"
 	codeMethod          = "method-not-allowed"
 	codePayloadTooLarge = "payload-too-large"
+	codeRenderTimeout   = "render-timeout"
 )
 
 // errorKinds dá a cada código o status e a frase curta.
@@ -59,6 +60,7 @@ var errorKinds = map[string]struct {
 	codeForbidden:       {http.StatusForbidden, "forbidden"},
 	codeMethod:          {http.StatusMethodNotAllowed, "method not allowed"},
 	codePayloadTooLarge: {http.StatusRequestEntityTooLarge, "payload too large"},
+	codeRenderTimeout:   {http.StatusUnprocessableEntity, "the template takes too long to render"},
 }
 
 // writeCode responde o erro de código code com detalhe.
@@ -90,10 +92,24 @@ func codeFor(err error) string {
 		return codeCustom
 	case errors.Is(err, catalog.ErrNotUTF8):
 		return codeNotUTF8
+	case errors.Is(err, errRenderTimeout):
+		return codeRenderTimeout
 	case isIOError(err):
 		return codeInternal
 	}
 	return codeRefused
+}
+
+// writeWriteError responde o erro de uma escrita (Save ou Reset). Os dois
+// podem falhar depois de gravar o arquivo, então uma falha interna não afirma
+// que nada foi gravado.
+func writeWriteError(w http.ResponseWriter, err error) {
+	code := codeFor(err)
+	detalhe := err.Error()
+	if code == codeInternal {
+		detalhe = "the file may already have been written; reload it before saving again: " + detalhe
+	}
+	writeCode(w, code, detalhe)
 }
 
 // isIOError diz se err vem de uma operação do sistema operacional.

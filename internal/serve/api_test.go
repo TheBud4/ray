@@ -2,6 +2,7 @@ package serve
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -484,5 +485,75 @@ func TestJSONWithUnknownFieldsOrTrailingValuesIs400(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(a.dir, name)); !os.IsNotExist(err) {
 		t.Errorf("a refused body created the file: %v", err)
+	}
+}
+
+// Cancelar a requisição não pode liberar a trava: o render continua rodando, e
+// um cliente que aborta cada preview teria N renders ao mesmo tempo.
+func TestCancelledPreviewKeepsTheGateUntilTheRenderEnds(t *testing.T) {
+	entered, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	a := newAPI(t, func(o *Options) {
+		o.previewTimeout = 2 * time.Second
+		o.previewHook = func() {
+			once.Do(func() { close(entered) })
+			<-release
+		}
+	})
+	name := a.first(t)
+	body, _ := json.Marshal(map[string]any{"name": name, "content": "x", "stack": false})
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequestWithContext(ctx, "POST", "/api/preview", bytes.NewReader(body))
+	req.Host = a.addr
+	req.Header.Set("X-Ray-Token", "tok")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "http://"+a.addr)
+	done := make(chan struct{})
+	go func() {
+		a.h.ServeHTTP(httptest.NewRecorder(), req)
+		close(done)
+	}()
+	<-entered
+	cancel()
+	time.Sleep(100 * time.Millisecond) // o handler já viu o cancelamento
+	if code, res := a.call(t, "POST", "/api/preview", map[string]any{"name": name, "content": "y", "stack": false}); code != 503 || res["codigo"] != "busy" {
+		t.Errorf("preview after the first was cancelled mid-render = %d %v, want 503 busy (the render still runs)", code, res)
+	}
+	close(release)
+	<-done
+}
+
+// Um template que não renderiza dentro do prazo não pode ser salvo: o Save
+// renderiza o que grava, e um laço sem saída seguraria o mutex de todas as
+// escritas. A recusa solta o mutex, e o Save seguinte funciona.
+func TestSaveRefusesATemplateThatTakesTooLongToRender(t *testing.T) {
+	var calls atomic.Int32
+	a := newAPI(t, func(o *Options) {
+		o.previewTimeout = 50 * time.Millisecond
+		o.previewHook = func() {
+			if calls.Add(1) == 1 {
+				time.Sleep(400 * time.Millisecond) // o primeiro render "trava"
+			}
+		}
+	})
+	name := a.first(t)
+	info := a.load(t, name)
+	code, res := a.put(t, name, "# slow\n", info["hash"])
+	if code != 422 || res["codigo"] != "render-timeout" {
+		t.Fatalf("PUT of a template that never renders = %d %v, want 422 render-timeout", code, res)
+	}
+	if _, err := os.Stat(filepath.Join(a.dir, name)); !os.IsNotExist(err) {
+		t.Errorf("a refused save created the file: %v", err)
+	}
+	if code, res := a.put(t, name, "# fast\n", info["hash"]); code != 200 {
+		t.Errorf("PUT after the refusal = %d %v, want 200 (the write lock was released)", code, res)
+	}
+}
+
+func TestAMethodNotAllowedOnAKnownRouteIsJSON405(t *testing.T) {
+	a := newAPI(t, nil)
+	code, res := a.call(t, "POST", "/api/templates", map[string]any{})
+	if code != 405 || res["codigo"] != "method-not-allowed" {
+		t.Errorf("POST /api/templates = %d %v, want 405 method-not-allowed in JSON", code, res)
 	}
 }

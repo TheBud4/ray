@@ -187,6 +187,10 @@ type saveResponse struct {
 	Hash        string      `json:"hash"`
 }
 
+// errRenderTimeout recusa a gravação de um template que não renderiza dentro
+// do prazo do preview.
+var errRenderTimeout = errors.New("the template does not render within the preview deadline; fix it before saving")
+
 // save grava o template, serializado com as outras escritas. O JSON só traz
 // UTF-8 válido, e um U+FFFD no conteúdo é texto legítimo; a gravação por cima
 // de um arquivo que não é UTF-8 o catalog recusa com ErrNotUTF8.
@@ -195,18 +199,9 @@ func (a *apiHandler) save(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &req) || tooLarge(w, req.Content) {
 		return
 	}
-	writeMu.Lock()
-	res, err := a.templates.Save(req.Name, []byte(req.Content), req.BaseHash)
-	writeMu.Unlock()
+	res, err := a.saveSerialized(req)
 	if err != nil {
-		code := codeFor(err)
-		detalhe := err.Error()
-		if code == codeInternal {
-			// O Save pode falhar depois de gravar o arquivo: não dá para
-			// afirmar que nada foi gravado.
-			detalhe = "the file may already have been written; reload it before saving again: " + detalhe
-		}
-		writeCode(w, code, detalhe)
+		writeWriteError(w, err)
 		return
 	}
 	out := saveResponse{
@@ -239,17 +234,65 @@ type previewResponse struct {
 	Err    *renderInfo `json:"err"`
 }
 
+// saveSerialized grava req sob writeMu. Antes do Save, o conteúdo passa pelo
+// render com prazo nos dois conjuntos de dados: o Save renderiza o que grava
+// sem prazo, e um template que não termina seguraria o mutex de todas as
+// escritas. Assim o mutex fica preso no máximo dois prazos de preview além do
+// próprio Save. Esse render não usa o portão do preview: um preview em
+// andamento não pode virar 503 numa gravação.
+func (a *apiHandler) saveSerialized(req saveRequest) (catalog.SaveResult, error) {
+	writeMu.Lock()
+	defer writeMu.Unlock()
+	for _, stack := range []bool{false, true} {
+		_, timedOut, err := a.boundedPreview(req.Name, req.Content, stack)
+		if err != nil {
+			return catalog.SaveResult{}, err
+		}
+		if timedOut {
+			return catalog.SaveResult{}, errRenderTimeout
+		}
+	}
+	return a.templates.Save(req.Name, []byte(req.Content), req.BaseHash)
+}
+
 // previewOutcome é o que a goroutine do render devolve.
 type previewOutcome struct {
 	res catalog.PreviewResult
 	err error
 }
 
+// boundedPreview roda o Preview numa goroutine e espera até previewTimeout.
+// Vencido o prazo, devolve timedOut e abandona a goroutine: ela escreve num
+// canal com buffer e termina sozinha, sem bloquear ninguém. Não há como
+// interrompê-la — text/template não aceita cancelamento —, e o teto de saída
+// do Preview não limita a CPU: um template que gira sem produzir saída (um
+// range enorme de corpo vazio) pode rodar indefinidamente. O prazo só limita a
+// taxa: no máximo uma goroutine abandonada nova por prazo vencido.
+func (a *apiHandler) boundedPreview(name, content string, stack bool) (res catalog.PreviewResult, timedOut bool, err error) {
+	done := make(chan previewOutcome, 1)
+	go func() {
+		if a.previewHook != nil {
+			a.previewHook()
+		}
+		res, err := a.templates.Preview(name, []byte(content), stack)
+		done <- previewOutcome{res: res, err: err}
+	}()
+	timer := time.NewTimer(a.previewTimeout)
+	defer timer.Stop()
+	select {
+	case o := <-done:
+		return o.res, false, o.err
+	case <-timer.C:
+		return catalog.PreviewResult{}, true, nil
+	}
+}
+
 // preview renderiza um rascunho sem gravar nada. Só um render roda por vez; o
-// seguinte, com o portão ocupado, é 503 na hora. O render tem prazo: vencido,
-// a resposta é um erro de render e o portão é liberado. A goroutine
-// abandonada não é interrompida (text/template não aceita cancelamento) e
-// continua até terminar, limitada pelo teto de saída do Preview.
+// seguinte, com o portão ocupado, é 503 na hora. O portão só é solto quando o
+// render termina ou o prazo vence — nunca quando o cliente desiste, porque o
+// render continuaria rodando e um cliente que aborta cada pedido teria vários
+// ao mesmo tempo. Vencido o prazo, a resposta é um erro de render; o limite
+// da goroutine abandonada está em boundedPreview.
 func (a *apiHandler) preview(w http.ResponseWriter, r *http.Request) {
 	var req previewRequest
 	if !decodeBody(w, r, &req) || tooLarge(w, req.Content) {
@@ -263,30 +306,14 @@ func (a *apiHandler) preview(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { <-a.renderGate }()
 
-	// Buffer de 1: a goroutine abandonada entrega o resultado sem esperar
-	// por ninguém e termina.
-	done := make(chan previewOutcome, 1)
-	go func() {
-		if a.previewHook != nil {
-			a.previewHook()
-		}
-		res, err := a.templates.Preview(req.Name, []byte(req.Content), req.Stack)
-		done <- previewOutcome{res: res, err: err}
-	}()
-
-	timer := time.NewTimer(a.previewTimeout)
-	defer timer.Stop()
-	select {
-	case o := <-done:
-		if o.err != nil {
-			writeError(w, o.err)
-			return
-		}
-		writeJSON(w, http.StatusOK, previewResponse{Output: o.res.Output, Err: toRenderInfo(o.res.Err)})
-	case <-timer.C:
+	res, timedOut, err := a.boundedPreview(req.Name, req.Content, req.Stack)
+	switch {
+	case err != nil:
+		writeError(w, err)
+	case timedOut:
 		writeJSON(w, http.StatusOK, previewResponse{Err: &renderInfo{Message: "preview timed out"}})
-	case <-r.Context().Done():
-		// O cliente desistiu: não há a quem responder.
+	default:
+		writeJSON(w, http.StatusOK, previewResponse{Output: res.Output, Err: toRenderInfo(res.Err)})
 	}
 }
 
@@ -326,11 +353,9 @@ func (a *apiHandler) reset(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &req) {
 		return
 	}
-	writeMu.Lock()
-	action, baselineErr, err := a.resetWritable(req.Name, req.Force)
-	writeMu.Unlock()
+	action, baselineErr, err := a.resetSerialized(req.Name, req.Force)
 	if err != nil {
-		writeError(w, err)
+		writeWriteError(w, err)
 		return
 	}
 	out := resetResponse{Action: action}
@@ -340,9 +365,10 @@ func (a *apiHandler) reset(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// resetWritable é o Reset do catalog para quem não é hook. Quem chama segura
-// writeMu.
-func (a *apiHandler) resetWritable(name string, force bool) (action string, baselineErr, err error) {
+// resetSerialized é o Reset do catalog para quem não é hook, sob writeMu.
+func (a *apiHandler) resetSerialized(name string, force bool) (action string, baselineErr, err error) {
+	writeMu.Lock()
+	defer writeMu.Unlock()
 	e, err := a.templates.Lookup(name)
 	if err != nil {
 		return "", nil, err
