@@ -84,7 +84,7 @@ func newRootCmdWith(getenv func(string) string) *cobra.Command {
 	// Build the command tree
 	root.AddCommand(newInitCmd(), newNewCmd(), newRunCmd(), newProfileCmd(),
 		newTemplateCmd(), newBrainCmd(), newDoctorCmd(), newUpdateCmd(), newStatsCmd(),
-		newStatusCmd())
+		newStatusCmd(), newServeCmd())
 
 	return root
 

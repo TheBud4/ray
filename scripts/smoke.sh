@@ -133,4 +133,37 @@ fi
 [ "$("$ray" profile show smoke | tail -n 1)" = "✓ ready" ] || fail "profile show: the smoke recipe should be ready"
 "$ray" profile show leaky | tail -n 1 | grep -q "1 problem" || fail "profile show does not flag the leaking component"
 
+step "serve answers only with the token, our Host and our Origin"
+serve_out="$work/serve.out"
+"$ray" serve --no-open --port 0 >"$serve_out" 2>"$work/serve.err" &
+serve_pid=$!
+trap 'kill "$serve_pid" 2>/dev/null || true; rm -rf "$work"' EXIT
+url=""
+tries=0
+while [ "$tries" -lt 100 ]; do
+  tries=$((tries + 1))
+  url="$(grep -oE 'http://127\.0\.0\.1:[0-9]+/#token=[0-9a-f]{64}' "$serve_out" || true)"
+  [ -n "$url" ] && break
+  kill -0 "$serve_pid" 2>/dev/null || fail "serve exited early: $(cat "$work/serve.err")"
+  sleep 0.1
+done
+[ -n "$url" ] || fail "serve did not print the URL with the token within 10 s"
+base="${url%%/#*}"
+tok="${url##*#token=}"
+code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
+[ "$(code "$base/api/templates")" = "401" ] || fail "GET /api/templates without the token is not 401"
+[ "$(code -H "X-Ray-Token: $tok" "$base/api/templates")" = "200" ] || fail "GET /api/templates with the token is not 200"
+[ "$(code -H "X-Ray-Token: $tok" -H 'Host: evil.com' "$base/api/templates")" = "403" ] || fail "a foreign Host header is not 403"
+hash="$(curl -s -H "X-Ray-Token: $tok" "$base/api/template?name=$tpl" | grep -oE '"hash":"[^"]*"' | sed 's/^"hash":"//; s/"$//')"
+[ -n "$hash" ] || fail "GET /api/template did not return a hash"
+body="{\"name\":\"$tpl\",\"content\":\"# smoke\\n\",\"baseHash\":\"$hash\"}"
+[ "$(code -X PUT -H "X-Ray-Token: $tok" -H 'Content-Type: application/json' "$base/api/template" -d "$body")" = "403" ] \
+  || fail "a PUT without Origin is not 403"
+[ "$(code -X PUT -H "X-Ray-Token: $tok" -H 'Content-Type: application/json' -H "Origin: $base" "$base/api/template" -d "$body")" = "200" ] \
+  || fail "a PUT with the token and our Origin is not 200"
+curl -s -H "X-Ray-Token: $tok" "$base/api/template?name=$tpl" | grep -q '"content":"# smoke' || fail "the saved template does not read back"
+kill -INT "$serve_pid"
+wait "$serve_pid" || fail "serve did not exit cleanly on Ctrl-C"
+trap 'rm -rf "$work"' EXIT
+
 step "ok"
