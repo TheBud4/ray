@@ -76,6 +76,9 @@ func buildStaticRoutes(fsys fs.FS, candidates map[string]string) map[string]stat
 //     http://<addr> (403) — barra CSRF de formulário e de outra origem.
 //  6. Corpo de até 2 MiB (413), conferido pelo Content-Length e cortado pelo
 //     MaxBytesReader.
+//
+// Em /api/* as recusas são JSON, no formato de apiError; nas rotas estáticas,
+// texto puro.
 type guard struct {
 	token  string
 	addr   string
@@ -88,14 +91,14 @@ func (g *guard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	setSecurityHeaders(w.Header(), isAPI)
 
 	if g.addr == "" || r.Host != g.addr {
-		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+		refuse(w, isAPI, codeForbidden, "the Host header does not match this server")
 		return
 	}
 	switch r.Method {
 	case http.MethodGet, http.MethodPut, http.MethodPost:
 	default:
 		w.Header().Set("Allow", "GET, PUT, POST")
-		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		refuse(w, isAPI, codeMethod, "allowed methods: GET, PUT, POST")
 		return
 	}
 	if !isAPI {
@@ -103,15 +106,15 @@ func (g *guard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !g.validToken(r.Header.Get(tokenHeader)) {
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+		writeCode(w, codeUnauthorized, "missing or wrong "+tokenHeader)
 		return
 	}
 	if r.Method != http.MethodGet && (!isJSON(r.Header.Get("Content-Type")) || r.Header.Get("Origin") != "http://"+g.addr) {
-		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+		writeCode(w, codeForbidden, "a write needs Content-Type application/json and this server's Origin")
 		return
 	}
 	if r.ContentLength > maxBodySize {
-		http.Error(w, http.StatusText(http.StatusRequestEntityTooLarge), http.StatusRequestEntityTooLarge)
+		writeCode(w, codePayloadTooLarge, tooLargeBody)
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxBodySize)
@@ -136,7 +139,8 @@ func (g *guard) validToken(got string) bool {
 	return subtle.ConstantTimeCompare([]byte(got), []byte(g.token)) == 1
 }
 
-// isJSON aceita application/json com parâmetros (charset) e nada mais.
+// isJSON aceita o tipo application/json, sem diferenciar maiúsculas, com
+// quaisquer parâmetros (charset ou outro).
 func isJSON(contentType string) bool {
 	media, _, err := mime.ParseMediaType(contentType)
 	return err == nil && media == "application/json"
@@ -163,13 +167,22 @@ func (g *guard) serveStatic(w http.ResponseWriter, r *http.Request) {
 func readBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		var tooBig *http.MaxBytesError
-		if errors.As(err, &tooBig) {
-			http.Error(w, http.StatusText(http.StatusRequestEntityTooLarge), http.StatusRequestEntityTooLarge)
-		} else {
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		}
+		writeBodyError(w, err)
 		return nil, false
 	}
 	return body, true
+}
+
+// tooLargeBody é o detalhe da recusa de um corpo acima do limite.
+const tooLargeBody = "the request body is larger than 2 MiB"
+
+// writeBodyError responde uma falha ao ler ou decodificar o corpo: além do
+// limite é 413; o resto, 400.
+func writeBodyError(w http.ResponseWriter, err error) {
+	var tooBig *http.MaxBytesError
+	if errors.As(err, &tooBig) {
+		writeCode(w, codePayloadTooLarge, tooLargeBody)
+		return
+	}
+	writeCode(w, codeBadRequest, err.Error())
 }

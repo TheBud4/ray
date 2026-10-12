@@ -30,6 +30,12 @@ var webFS embed.FS
 type Options struct {
 	Templates catalog.Templates
 	Token     string
+
+	// previewHook, se não for nil, roda na goroutine do preview logo antes do
+	// render: é o ponto em que os testes seguram um render em andamento.
+	previewHook func()
+	// previewTimeout é o prazo de um preview; 0 é defaultPreviewTimeout.
+	previewTimeout time.Duration
 }
 
 // Os quatro prazos do servidor e o prazo do desligamento.
@@ -62,8 +68,17 @@ func NewToken() (string, error) {
 // NewHandler monta o handler completo. addr é o endereço real do listener
 // ("127.0.0.1:52411"): o Host de toda requisição tem de ser exatamente ele.
 func NewHandler(o Options, addr string) http.Handler {
+	a := newAPIHandler(o)
 	api := http.NewServeMux()
 	api.HandleFunc("/api/ping", handlePing)
+	api.HandleFunc("/api/templates", methods{http.MethodGet: a.list}.serve)
+	api.HandleFunc("/api/template", methods{http.MethodGet: a.info, http.MethodPut: a.save}.serve)
+	api.HandleFunc("/api/preview", methods{http.MethodPost: a.preview}.serve)
+	api.HandleFunc("/api/diff", methods{http.MethodGet: a.diff}.serve)
+	api.HandleFunc("/api/reset", methods{http.MethodPost: a.reset}.serve)
+	api.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
+		writeCode(w, codeNotFound, "no such API route")
+	})
 	return &guard{token: o.Token, addr: addr, static: staticRoutes, api: api}
 }
 
