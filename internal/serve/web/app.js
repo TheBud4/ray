@@ -177,6 +177,8 @@
   // api faz um pedido à própria origem com o token no cabeçalho; uma escrita
   // leva JSON. Uma resposta não-2xx vira ApiError com o código da API.
   async function api(method, path, body) {
+    // sessão perdida: nenhum pedido sai mais, todos falham com o mesmo erro
+    if (ui.sessionLost) throw new ApiError(401, "unauthorized", "unauthorized", "");
     const headers = { "X-Ray-Token": token };
     const init = { method: method, headers: headers, cache: "no-store", credentials: "same-origin" };
     if (body !== undefined) {
@@ -219,19 +221,24 @@
     }
   }
 
-  // lockSession trata um 401: o token guardado não vale mais (o ray serve foi
-  // reiniciado), então ele sai da sessionStorage e a página mostra o aviso
-  // de reabrir em vez de ficar meio funcionando.
+  // lockSession trata um 401: o token não vale mais (o ray serve foi
+  // reiniciado). Ele sai da memória e da sessionStorage, nenhum pedido sai
+  // mais, e a página fica de pé em modo leitura — com um aviso no topo — para
+  // que os rascunhos continuem visíveis e copiáveis.
   function lockSession() {
+    if (ui.sessionLost) return;
+    ui.sessionLost = true;
     token = "";
     try {
       sessionStorage.removeItem(TOKEN_KEY);
     } catch (_) {
       // sem sessionStorage não há o que apagar
     }
-    $("gate-msg").replaceChildren("sessão inválida — reabra pelo ", el("code", { text: "ray serve" }), ".");
-    $("app").hidden = true;
-    $("gate").hidden = false;
+    clearTimeout(preview.timer);
+    disarmReset();
+    $("session-banner").hidden = false;
+    if (editor) editor.setReadOnly(true);
+    renderAll();
   }
 
   // describe traduz um erro da API na frase da barra de status.
@@ -266,6 +273,7 @@
     cursor: { line: 1, col: 1 },
     message: null, // mensagem da página, fora de qualquer aba
     panel: "problems",
+    sessionLost: false, // um 401 com a página já de pé: tudo vira leitura
     resetArmed: null, // {tab, lines}: o segundo passo do Restaurar, preso à aba que o armou
     resetTimer: 0,
   };
@@ -273,7 +281,7 @@
   const tabOf = (name) => ui.tabs.find((t) => t.name === name) || null;
   const activeTab = () => (ui.active ? tabOf(ui.active) : null);
   const stackSample = () => $("sample").value === "true";
-  const editable = (t) => !!t && !t.readOnly && t.utf8;
+  const editable = (t) => !!t && !t.readOnly && t.utf8 && !ui.sessionLost;
 
   /* ---------- Barra de status ---------- */
 
@@ -757,6 +765,7 @@
 
   function schedulePreview(delay) {
     clearTimeout(preview.timer);
+    if (ui.sessionLost) return;
     preview.timer = setTimeout(runPreview, delay);
   }
 
@@ -1009,6 +1018,7 @@
     const force = !!ui.resetArmed && ui.resetArmed.tab === t;
     if (!force && t.dirty && !window.confirm("O rascunho não salvo de " + t.name + " será descartado. Restaurar o padrão?")) return;
     disarmReset();
+    const sentDraft = t.draft;
     try {
       const r = await api("POST", "/api/reset", { name: t.name, force: force });
       const said = { restored: "restaurado", created: "restaurado (criado a partir do padrão)" }[r.action] || "já é o padrão";
@@ -1019,7 +1029,8 @@
         say(t, said, r.baselineErr ? "err" : "ok");
       }
     } catch (e) {
-      if (e.code === "edited") armReset(t, editedLines(e.detalhe));
+      if (e.code === "edited" && t.draft !== sentDraft) say(t, "o rascunho mudou — clique de novo em Restaurar padrão", "");
+      else if (e.code === "edited") armReset(t, editedLines(e.detalhe));
       else report(e, t);
     }
   }
@@ -1059,6 +1070,16 @@
       parts.push(el("p", {}, "hook: somente leitura na web, edite com ", el("code", { text: "ray template edit " + t.name })));
     } else if (t && !t.utf8) {
       parts.push(el("p", {}, "o arquivo não é UTF-8: somente leitura na web, edite com ", el("code", { text: "ray template edit " + t.name })));
+    }
+    if (t && ui.sessionLost && t.dirty) {
+      parts.push(
+        el(
+          "p",
+          { class: "notice-warn" },
+          "⚠ este rascunho não foi salvo. ",
+          el("button", { type: "button", class: "btn", text: "copiar rascunho", on: { click: () => copyText(t, t.draft) } })
+        )
+      );
     }
     if (t && t.notice && t.notice.kind === "stale") {
       parts.push(
