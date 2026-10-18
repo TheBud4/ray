@@ -4,11 +4,87 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ray serve</title>
+<link rel="stylesheet" href="/app.css">
+<script src="/app.js" defer></script>
 </head>
 <body>
-<main>
-<h1>ray serve</h1>
-<p>Editor de templates do ray.</p>
-</main>
+<div id="gate" class="gate" hidden>
+  <div class="gate-box">
+    <h1>ray serve</h1>
+    <p id="gate-msg">Abra esta página pelo comando <code>ray serve</code>: o endereço que ele imprime traz a chave da sessão.</p>
+  </div>
+</div>
+
+<div id="app" class="app">
+  <nav class="activity" aria-label="Seções">
+    <button type="button" id="act-templates" class="activity-btn selected" title="Templates" aria-label="Templates" aria-pressed="true">&#x2630;</button>
+  </nav>
+
+  <aside class="explorer" aria-label="Explorador de templates">
+    <div class="explorer-head">
+      <span class="explorer-title">Templates</span>
+      <button type="button" id="refresh" class="icon-btn" title="Recarregar a lista" aria-label="Recarregar a lista">&#x21bb;</button>
+    </div>
+    <p id="summary" class="summary"></p>
+    <ul id="tree" class="tree" role="tree" aria-label="Templates"></ul>
+  </aside>
+
+  <main class="main">
+    <div id="tabs" class="tabbar" role="tablist" aria-label="Templates abertos"></div>
+
+    <div id="empty" class="empty">
+      <p>Escolha um template na árvore à esquerda.</p>
+      <p class="hint">Ctrl+S salva · o preview acompanha o rascunho</p>
+    </div>
+
+    <div id="workspace" class="workspace" hidden>
+      <div class="toolbar">
+        <span id="crumb" class="crumb"></span>
+        <span class="spacer"></span>
+        <button type="button" id="save" class="btn primary" title="Salvar (Ctrl+S)">Salvar</button>
+        <button type="button" id="reset" class="btn">Restaurar padrão</button>
+        <button type="button" id="reset-cancel" class="btn" hidden>cancelar</button>
+      </div>
+      <div id="notice" class="notice" hidden></div>
+
+      <div class="split">
+        <section class="pane editor-pane" aria-label="Editor">
+          <div id="editor" class="editor"></div>
+        </section>
+        <section class="pane preview-pane" aria-label="Preview">
+          <div class="pane-head">
+            <span class="pane-title">Preview</span>
+            <span id="preview-flag" class="preview-flag" hidden>último render bom</span>
+            <span class="spacer"></span>
+            <label class="sample-label" for="sample">dados</label>
+            <select id="sample" class="sample">
+              <option value="false">stack vazio</option>
+              <option value="true">stack preenchido</option>
+            </select>
+          </div>
+          <pre id="preview" class="preview"></pre>
+        </section>
+      </div>
+
+      <section class="panel" aria-label="Painel">
+        <div class="panel-tabs" role="tablist" aria-label="Painel">
+          <button type="button" role="tab" id="ptab-problems" class="panel-tab" aria-selected="true" aria-controls="problems">Problemas <span id="problem-count" class="badge" hidden></span></button>
+          <button type="button" role="tab" id="ptab-diff" class="panel-tab" aria-selected="false" aria-controls="diff" tabindex="-1">Diff</button>
+        </div>
+        <div id="problems" class="panel-body" role="tabpanel" aria-labelledby="ptab-problems"></div>
+        <div id="diff" class="panel-body" role="tabpanel" aria-labelledby="ptab-diff" hidden></div>
+      </section>
+    </div>
+  </main>
+
+  <footer id="status" class="statusbar" role="status" aria-live="polite">
+    <span id="st-state" class="st-item"></span>
+    <span id="st-render" class="st-item st-render"></span>
+    <span id="st-msg" class="st-item st-msg"></span>
+    <span class="spacer"></span>
+    <span id="st-pos" class="st-item"></span>
+    <span id="st-eol" class="st-item"></span>
+  </footer>
+</div>
 </body>
 </html>
