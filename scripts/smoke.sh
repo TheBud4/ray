@@ -150,18 +150,18 @@ done
 [ -n "$url" ] || fail "serve did not print the URL with the token within 10 s"
 base="${url%%/#*}"
 tok="${url##*#token=}"
-code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
+code() { curl -s --max-time 5 -o /dev/null -w '%{http_code}' "$@"; }
 [ "$(code "$base/api/templates")" = "401" ] || fail "GET /api/templates without the token is not 401"
 [ "$(code -H "X-Ray-Token: $tok" "$base/api/templates")" = "200" ] || fail "GET /api/templates with the token is not 200"
 [ "$(code -H "X-Ray-Token: $tok" -H 'Host: evil.com' "$base/api/templates")" = "403" ] || fail "a foreign Host header is not 403"
-hash="$(curl -s -H "X-Ray-Token: $tok" "$base/api/template?name=$tpl" | grep -oE '"hash":"[^"]*"' | sed 's/^"hash":"//; s/"$//')"
+hash="$(curl -s --max-time 5 -H "X-Ray-Token: $tok" "$base/api/template?name=$tpl" | grep -oE '"hash":"[^"]*"' | sed 's/^"hash":"//; s/"$//' || true)"
 [ -n "$hash" ] || fail "GET /api/template did not return a hash"
 body="{\"name\":\"$tpl\",\"content\":\"# smoke\\n\",\"baseHash\":\"$hash\"}"
 [ "$(code -X PUT -H "X-Ray-Token: $tok" -H 'Content-Type: application/json' "$base/api/template" -d "$body")" = "403" ] \
   || fail "a PUT without Origin is not 403"
 [ "$(code -X PUT -H "X-Ray-Token: $tok" -H 'Content-Type: application/json' -H "Origin: $base" "$base/api/template" -d "$body")" = "200" ] \
   || fail "a PUT with the token and our Origin is not 200"
-curl -s -H "X-Ray-Token: $tok" "$base/api/template?name=$tpl" | grep -q '"content":"# smoke' || fail "the saved template does not read back"
+curl -s --max-time 5 -H "X-Ray-Token: $tok" "$base/api/template?name=$tpl" | grep -q '"content":"# smoke' || fail "the saved template does not read back"
 kill -INT "$serve_pid"
 wait "$serve_pid" || fail "serve did not exit cleanly on Ctrl-C"
 trap 'rm -rf "$work"' EXIT

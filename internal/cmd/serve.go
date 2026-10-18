@@ -97,7 +97,10 @@ func runServe(ctx context.Context, port int, noOpen, dryRun bool, deps serveDeps
 
 	p := ui.For(out)
 	if noOpen {
-		p.Title("ray serve", url)
+		// A URL vai numa linha própria e sem cor: é para ser copiada inteira, e
+		// o detalhe do título sai apagado no terminal.
+		p.Title("ray serve", "")
+		p.Line(url)
 		p.Line("press Ctrl-C to stop")
 		ui.For(errOut).Warning("this URL carries the session token",
 			"anyone who can read this terminal can use it to edit your templates")
