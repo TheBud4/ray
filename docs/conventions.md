@@ -10,7 +10,7 @@ defasou.
   mensagens de teste e mensagens de commit em **inglês**. Os dois convivem de
   propósito — o comentário explica a decisão para quem mantém, o identificador
   segue o idioma do Go.
-- Todo pacote abre com `// Package <nome> <o que faz>`, uma frase. Os 26 pacotes
+- Todo pacote abre com `// Package <nome> <o que faz>`, uma frase. Os 27 pacotes
   de `internal/` seguem isso, sem exceção; um pacote novo sem doc destoa.
 - O comentário explica **decisão, invariante ou risco** — nunca repete o que a
   linha ao lado já diz.
@@ -128,3 +128,5 @@ lista que impede o repo de acumular arquivo gerado defasado:
 - Mudança na árvore que o scaffold escreve → a árvore documentada na Parte 2
   de `docs/features.md`.
 - `internal/scaffold/templates/claude/hooks/*.sh.tmpl` → as cópias que o próprio ray usa em `.claude/hooks/` (regeneradas do template, nunca editadas à mão). **Este par tem gate:** `TestRayOwnHooksMatchTemplates` compara byte-a-byte e confere o modo executável; `TestRayOwnHooksHaveNoStrays` recusa `.sh` órfão no diretório. Os dois derivam de `SystemFiles()`, então um hook novo entra no gate sozinho.
+- Uma defesa do servidor em `internal/serve/` (cabeçalho, limite, prazo, regra do
+  DOM) → a seção "Servidor local" de `SECURITY.md`.

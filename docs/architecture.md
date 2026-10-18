@@ -54,6 +54,8 @@ internal/
 ├── scaffold/     # escreve a árvore de orientação; templates embutidos
 ├── catalog/      # núcleo de leitura e edição do overlay de templates e
 │                 #   checagem de receita
+├── serve/        # `ray serve`: servidor HTTP em 127.0.0.1, API JSON dos
+│                 #   templates e a página embutida (web/)
 ├── update/       # `ray update`: recópia local protegendo edição
 ├── report/       # itens tipados (`Entry`) que initai e update devolvem no resumo
 │
@@ -104,8 +106,17 @@ o código sozinho não conta:
   `~/.ray/...` à mão.
 - O núcleo de domínio (`profile`, `economy`) **não** toca disco nem
   rede — é o que o mantém testável só com memória.
-- `catalog` importa `scaffold`, `store`, `profile` e `fsutil`; `scaffold` não
-  importa `catalog`. `linediff` é usado pelo `cmd` (`template diff` e `reset`).
+- `catalog` importa `scaffold`, `store`, `profile`, `fsutil` e `linediff`;
+  `scaffold` não importa `catalog`. O diff, a contagem de linhas do `reset` e a
+  classificação de uma edição moram no `catalog`, e o `cmd` e o `serve` os
+  consomem prontos. Um rascunho é renderizado da memória por
+  `scaffold.RenderString`, a mesma função que o render do disco usa: o preview
+  não tem cópia da regra de render.
+- `serve` importa `catalog` e a biblioteca padrão, e mais nada — nunca `cmd`,
+  `raypaths` nem `ui` — e não cria processo. Quem monta o catálogo real, abre o
+  navegador (pelo `openutil`, que passa pelo `runner`) e imprime é
+  `internal/cmd/serve.go`. A página (`web/`) é embutida no binário com
+  `//go:embed web`; não há passo de build nem conteúdo baixado.
 - `ui` é o único pacote que conhece escape ANSI e o console do Windows
   (`kernel32`). O `cmd` diz o papel da linha; os pacotes de domínio não importam
   `ui`, e as linhas `+ …` do `--dry-run` que eles imprimem saem sem cor. O writer

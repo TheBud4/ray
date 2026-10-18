@@ -1,8 +1,10 @@
 # Política de segurança — ray
 
 O `ray` executa processos externos, instala ferramentas de terceiros e escreve
-arquivos dentro de repositórios de outras pessoas. A superfície de risco é essa,
-e não a de uma aplicação web — as regras abaixo tratam do que este programa
+arquivos dentro de repositórios de outras pessoas. Essa é a superfície de risco
+principal. A outra é o `ray serve`, um servidor HTTP local que existe só enquanto
+o comando roda e só aceita o navegador da própria sessão: ele tem as regras de
+uma aplicação web, na seção dele. As regras abaixo tratam do que este programa
 realmente faz.
 
 ## Severidade
@@ -85,6 +87,91 @@ O risco central deste programa: ele roda `uv`, `graphify`, `git` e os passos de
   reorganiza. `ray brain set` recusa um caminho que não passa em `vault.Verify`
   e não o grava em `config.yaml`.
 
+## Servidor local (`ray serve`)
+
+O `ray serve` expõe a edição de `~/.ray/templates` a um navegador, e o mesmo
+navegador carrega páginas hostis que podem tentar alcançar o servidor. O raio de
+dano não é só `~/.ray/templates`: um template editado é o que o `init ai` grava
+nos projetos seguintes. As defesas ficam em `internal/serve/security.go` e valem
+para toda requisição, antes de qualquer rota.
+
+- **[MUST]** Escuta só em `127.0.0.1`, literal (`serve.Listen`) — nunca
+  `0.0.0.0`, `localhost` nem outra interface.
+- **[MUST]** Toda chamada a `/api/*`, de leitura ou de escrita, exige o token da
+  sessão no cabeçalho `X-Ray-Token`: 32 bytes de `crypto/rand`, novos a cada
+  execução, comparados em tempo constante; sem ele, ou errado, 401. Os estáticos
+  (`/`, `/index.html`, `app.js`, `app.css`, `favicon.svg`) saem sem token, porque a página
+  precisa carregar antes de ter o token, e por isso são embutidos no binário e não
+  carregam dado do usuário.
+- **[MUST]** O `Host` tem de ser exatamente `127.0.0.1:<porta>`; qualquer outro
+  (`localhost:…`, `[::1]:…`, outra porta, vazio) é 403, em qualquer rota.
+- **[MUST]** Uma escrita (`PUT`, `POST`) exige `Content-Type: application/json` e
+  um `Origin` **presente** e igual a `http://127.0.0.1:<porta>`; senão 403. Só
+  existem `GET`, `PUT` e `POST` (o resto é 405), e `GET` nunca muda estado.
+- **[MUST]** Nenhuma defesa depende de cookie: o servidor não grava cookie nem
+  responde cabeçalho CORS (`Access-Control-*`).
+- **[MUST]** Toda resposta que o handler escreve, inclusive as recusas, leva
+  `Content-Security-Policy` (`default-src 'none'`, script, estilo, conexão e
+  imagem só de `'self'`, `frame-ancestors 'none'`), `X-Content-Type-Options:
+  nosniff` e `Referrer-Policy: no-referrer`; as de `/api/*` também
+  `Cache-Control: no-store`. As respostas que o próprio `net/http` escreve antes
+  de o handler rodar (linha de requisição malformada, cabeçalho grande demais)
+  não levam esses cabeçalhos.
+- **[MUST]** Corpo de até 2 MiB (413) e conteúdo decodificado de até 1 MiB
+  (422). O `http.Server` tem prazo de leitura do cabeçalho (5 s), de leitura
+  (15 s), de escrita (30 s) e de ociosidade (60 s).
+- **[MUST]** Dado do usuário (nome, conteúdo, mensagem de erro, diff) entra no DOM
+  só por `textContent`/`createElement`. Um teste estático recusa no JS embutido
+  `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write`, `eval`,
+  `new Function`, `srcdoc`, `javascript:` e atributo `on*` ou `style` montado
+  por `setAttribute`, e no HTML, script, estilo e manipulador inline. O JS lê o token do fragmento da URL, apaga o fragmento
+  (`history.replaceState`) e o guarda só em `sessionStorage`.
+- **[MUST]** O navegador manda só o **nome** do template, que vale apenas se for
+  igual a um da lista do catálogo; o destino é sempre montado pelo `catalog`.
+  O Salvar recusa gravar através de symlink — o alvo ou qualquer diretório entre
+  `~/.ray/templates` e ele; o Restaurar padrão recusa, como no CLI, um alvo que é
+  symlink. O confinamento é contra a entrada do navegador, não contra links que
+  o próprio usuário põe em `~/.ray`: a pasta `~/.ray/templates` pode ser um link.
+  No Windows, uma junction não é reportada como symlink e por isso não é
+  recusada pela conferência de symlink.
+- **[MUST]** Hooks (`*.sh.tmpl`) são somente leitura na web: Salvar e Restaurar
+  respondem 403. Um hook vira script executável nos projetos, e um desvio aqui
+  seria execução de código; ele se edita pelo `ray template edit`.
+- **[MUST]** Toda escrita (Salvar e Restaurar) passa por um único lock, e o
+  Salvar leva o hash do conteúdo que a página leu: se o disco mudou desde então,
+  409 e nada é gravado.
+- **[MUST]** O token nunca vai para o argv de outro processo — o argv é legível
+  por qualquer usuário da máquina. O `ray` grava um HTML 0600 num diretório
+  temporário 0700 (no Windows, o diretório temporário do próprio usuário), que
+  redireciona para a URL com o token; quem abre o navegador recebe só o caminho
+  desse arquivo, que é apagado ao sair. Se o diretório não puder ser privado, o
+  comando recusa e manda usar `--no-open`. Com `--no-open` a URL com o token é
+  impressa no terminal, com o aviso de que quem lê aquele terminal pode usá-la.
+
+**O que essas regras não cobrem:**
+
+- Uma página hostil que pede direto `http://127.0.0.1:<porta>` manda o `Host`
+  certo: quem a barra é o token (que ela não tem) e a regra do `Origin`. A
+  conferência do `Host` existe contra DNS rebinding.
+- Outro processo do mesmo usuário que leia o diretório temporário durante a
+  sessão lê o token.
+- Um template que gira sem produzir saída não pode ser interrompido
+  (`text/template` não aceita cancelamento). O prazo de 5 s do preview e da
+  conferência de render antes de gravar só limita a frequência: no máximo uma
+  goroutine abandonada nova por prazo vencido em cada chamada, ou seja, até duas
+  a cada 5 s somando preview e gravação. A saída do render tem teto de 4 MiB.
+- A regra de somente leitura dos hooks olha o **nome** do template
+  (`*.sh.tmpl`, sem diferenciar maiúsculas), mas o scaffold decide que um
+  arquivo gerado é executável pelo **destino** (`*.sh`). Uma receita pode
+  mapear qualquer template — inclusive um custom em `~/.ray/templates` — para
+  um destino `.sh`, e a web deixa editar esse template. É um limite aceito
+  nesta fase.
+- Templates como `CLAUDE.md.tmpl` e os de `.claude/commands/*` alimentam o
+  agente na criação do projeto: editá-los também é um vetor indireto de
+  execução de código, e a web os edita. É um limite aceito nesta fase.
+- Navegadores em sandbox (snap, flatpak) podem não enxergar o `/tmp` e não abrir o
+  lançador; nesse caso, `--no-open`.
+
 ## Segredos
 
 - **[MUST]** Nenhum segredo em arquivo versionado — chaves, tokens, senhas.
@@ -108,6 +195,9 @@ O risco central deste programa: ele roda `uv`, `graphify`, `git` e os passos de
 - [ ] Nenhum argumento de comando concatenado em string de shell
 - [ ] Nenhuma aquisição de conteúdo pela rede; nome de pacote novo conferido
 - [ ] Nenhum segredo, token ou caminho pessoal em código, teste ou fixture
+- [ ] No `ray serve`: dado do usuário só sai por `/api/*` (estático não tem
+      token) e entra no DOM só por `textContent`; rota que escreve passa pelo
+      lock de escrita
 - [ ] `make ci` verde
 
 ## Reportar uma vulnerabilidade

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -10,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/TheBud4/ray/internal/catalog"
-	"github.com/TheBud4/ray/internal/linediff"
 	"github.com/TheBud4/ray/internal/raypaths"
 	"github.com/TheBud4/ray/internal/store"
 	"github.com/TheBud4/ray/internal/ui"
@@ -44,6 +42,7 @@ func templateCatalog(verify bool) (catalog.Templates, error) {
 		Dir:         dir,
 		Pristine:    func(rel string) (string, bool) { return st.PristineHash(dir, rel) },
 		SetPristine: func(rel, hash string) error { return st.SetPristine(dir, rel, hash) },
+		Verify:      st.Verify,
 	}, nil
 }
 
@@ -244,20 +243,19 @@ func runTemplateEdit(cat catalog.Templates, name string, spawn func(editor, path
 	for _, w := range warnings {
 		ui.For(errOut).Warning(entry.Name+": "+w, "")
 	}
-	p := ui.For(out)
-	if bytes.Equal(before, after) {
-		p.Result(ui.Kept, entry.Name, "no changes")
-		return nil
-	}
-	now, err := cat.Lookup(entry.Name)
+	outcome, err := cat.Classify(entry.Name, before, after)
 	if err != nil {
 		return err
 	}
-	if now.State == catalog.Current {
+	p := ui.For(out)
+	switch outcome {
+	case catalog.OutcomeNoChanges:
+		p.Result(ui.Kept, entry.Name, "no changes")
+	case catalog.OutcomeCurrent:
 		p.Result(ui.OK, entry.Name, "current (matches the default)")
-		return nil
+	default:
+		p.Result(ui.Updated, entry.Name, string(outcome))
 	}
-	p.Result(ui.Updated, entry.Name, string(now.State))
 	return nil
 }
 
@@ -280,43 +278,30 @@ func newTemplateDiffCmd() *cobra.Command {
 // runTemplateDiff compara o template do overlay com o embutido. O diff sai limpo
 // em out; o aviso de "outdated" vai para errOut para não contaminar um pipe.
 func runTemplateDiff(cat catalog.Templates, name string, out, errOut io.Writer) error {
-	e, err := cat.Lookup(name)
+	r, err := cat.Diff(name)
 	if err != nil {
 		return err
 	}
 	p := ui.For(out)
-	switch e.State {
-	case catalog.Current:
+	switch r.Kind {
+	case catalog.DiffCurrent:
 		p.Line("identical to the embedded template")
 		return nil
-	case catalog.New:
+	case catalog.DiffNew:
 		p.Line("not in the overlay yet; nothing to compare")
 		return nil
-	case catalog.Custom:
+	case catalog.DiffCustom:
 		p.Line("custom template: there is no embedded one to compare to")
 		return nil
-	}
-	embedded, err := cat.Embedded(e.Name)
-	if err != nil {
-		return err
-	}
-	overlay, err := cat.Overlay(e.Name)
-	if err != nil {
-		return err
-	}
-	if lf := func(b []byte) string { return strings.ReplaceAll(string(b), "\r\n", "\n") }; lf(embedded) == lf(overlay) {
+	case catalog.DiffCRLFOnly:
 		p.Line("differs only in line endings (CRLF)")
 		return nil
 	}
-	d, err := linediff.Unified(string(embedded), string(overlay), "embedded/"+e.Name, "overlay/"+e.Name)
-	if err != nil {
-		return err
-	}
-	if e.State == catalog.Outdated {
+	if r.Outdated {
 		ui.For(errOut).Warning("outdated: the embedded template changed; your file is untouched", "")
 	}
-	if d != "" {
-		for line := range strings.SplitSeq(strings.TrimSuffix(d, "\n"), "\n") {
+	if r.Text != "" {
+		for line := range strings.SplitSeq(strings.TrimSuffix(r.Text, "\n"), "\n") {
 			p.DiffLine(line)
 		}
 	}
@@ -342,24 +327,9 @@ func newTemplateResetCmd() *cobra.Command {
 	return c
 }
 
-// changedLines conta as linhas que diferem entre dois conteúdos.
-func changedLines(overlay, embedded []byte) int {
-	d, err := linediff.Unified(string(embedded), string(overlay), "a", "b")
-	if err != nil {
-		return -1
-	}
-	n := 0
-	for l := range strings.SplitSeq(d, "\n") {
-		if (strings.HasPrefix(l, "+") && !strings.HasPrefix(l, "+++ ")) || (strings.HasPrefix(l, "-") && !strings.HasPrefix(l, "--- ")) {
-			n++
-		}
-	}
-	return n
-}
-
 func runTemplateReset(cat catalog.Templates, name string, force, dryRun bool, out, errOut io.Writer) error {
 	if dryRun {
-		e, err := cat.PlanReset(name, force, changedLines)
+		e, err := cat.PlanReset(name, force, catalog.CountChanged)
 		if err != nil {
 			return err
 		}
@@ -370,7 +340,7 @@ func runTemplateReset(cat catalog.Templates, name string, force, dryRun bool, ou
 		fmt.Fprintf(out, "+ reset %s (%s)\n", e.Name, p)
 		return nil
 	}
-	action, baselineErr, err := cat.Reset(name, force, changedLines)
+	action, baselineErr, err := cat.Reset(name, force, catalog.CountChanged)
 	if err != nil {
 		return err
 	}

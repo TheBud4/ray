@@ -1,6 +1,7 @@
 package scaffold
 
 import (
+	"errors"
 	"io/fs"
 
 	"github.com/TheBud4/ray/internal/profile"
@@ -20,6 +21,16 @@ func EmbeddedTemplates() fs.FS {
 // embutido) com data.
 func Render(tmplName, templatesDir string, data Data) ([]byte, error) {
 	return render(tmplName, templatesDir, data)
+}
+
+// ErrOutputTooLarge é devolvido (embrulhado) por RenderString quando a saída
+// passaria do teto pedido.
+var ErrOutputTooLarge = errors.New("rendered output is larger than the ceiling")
+
+// RenderString renderiza raw, um template na memória, como Render faria com o
+// arquivo; max > 0 limita a saída a max bytes e estoura com ErrOutputTooLarge.
+func RenderString(tmplName string, raw []byte, data Data, max int) ([]byte, error) {
+	return renderString(tmplName, raw, data, max)
 }
 
 // TemplateFor devolve o template padrão do arquivo path de uma receita.
