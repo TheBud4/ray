@@ -103,7 +103,7 @@ execução criou.
 | `ray run [alias] [-- extra]` | Roda um alias de `ray.yaml` (projeto) ou `~/.ray/commands.yaml` (global); sem alias, lista os disponíveis. Cada passo é dividido como um shell divide a linha (aspas e `\`, **sem** expansão de variável nem de curinga), roda com stdin, stdout e stderr ligados ao terminal (servidor de dev e comando interativo funcionam) e os argumentos extras vão **depois** do `--`. Chave desconhecida no `ray.yaml` (`step:` por `steps:`) é erro. |
 | `ray profile list\|show\|add\|edit\|remove\|path` | Gerencia as receitas em `~/.ray/profiles`. `show` também confere se a receita vai funcionar: componente ausente ou recusado, template ausente ou que não renderiza; termina em `ready` ou no número de problemas. Os perfis de fábrica (`base`, `go`, `web`, `flutter`) acompanham o binário enquanto você não os edita, e `remove` os recusa (eles voltariam). |
 | `ray template list\|show\|path\|edit\|diff\|reset` | Vê e edita os templates de scaffold de `~/.ray/templates`. `list` diz o que o `init ai` fará com cada um (`current`, `outdated`, `edited`, `new`, `custom`); `edit` abre no `$EDITOR` (aceita argumentos, ex. `code -w`) e avisa se o template deixou de renderizar; `diff` compara com o embutido; `reset` o devolve ao padrão (`--force` para descartar uma edição sua). |
-| `ray serve [--port N] [--no-open]` | Serve uma página local em `127.0.0.1` para ver e editar os templates, com preview e diff; hooks são só leitura na web. O token da URL chega ao navegador por um arquivo privado, nunca pela linha de comando; `--no-open` imprime a URL com o token em vez de abrir o navegador (útil se ele não abrir). |
+| `ray serve [--port N] [--no-open]` | Serve uma página local em `127.0.0.1` para ver e editar os templates de `~/.ray/templates`, com preview ao vivo, diff contra o padrão embutido e restaurar padrão (com confirmação); hooks são só leitura na web. `--port` escolhe a porta (sem ela, uma livre); `--no-open` imprime a URL com o token em vez de abrir o navegador. Com `--dry-run` só diz o que faria. Veja [Editor de templates](#editor-de-templates). |
 | `ray brain set\|status\|open\|path` | Grava/consulta o caminho da sua vault Obsidian em `~/.ray/config.yaml`. Valida o caminho; nunca cria nem reorganiza, e não expõe nada por MCP — o agente lê a vault por filesystem direto. |
 | `ray doctor [--fix]` | Checa/instala dependências externas. |
 | `ray update [path]` | Recopia componentes do overlay local (`~/.ray/components/`) e atualiza ferramentas; protege edições suas por hash de conteúdo (exige `--force` para sobrescrever). `--no-global` deixa as ferramentas da máquina onde estão e atualiza só o projeto. |
@@ -136,6 +136,20 @@ ray --version
 
 Peça "mais" quando uma dica não bastar. A resposta completa está sempre
 disponível, mas ela te pergunta antes o que você já tentou.
+
+## Editor de templates
+
+`ray serve` sobe, em primeiro plano até o Ctrl-C, uma página que mostra os
+templates com o mesmo estado do `ray template list`, edita-os com preview a cada
+pausa na digitação e compara cada um com o padrão embutido. Um template que não
+renderiza é salvo mesmo assim, e o erro aparece na barra de status.
+
+A página só responde ao navegador da sessão: o token de acesso chega a ele por um
+arquivo privado que o `ray` abre, nunca pela linha de comando de outro processo.
+Se o navegador não abrir esse arquivo (navegadores em sandbox, como snap e
+flatpak, podem não enxergar o `/tmp`), rode `ray serve --no-open` e abra a URL
+impressa — ela leva o token, então só quem pode ler aquele terminal deve vê-la.
+As regras do servidor estão em [`SECURITY.md`](SECURITY.md).
 
 ## Completion
 

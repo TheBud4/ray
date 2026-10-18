@@ -444,7 +444,9 @@ Cada template tem um de cinco estados, que é exatamente o que o próximo
 - **O ray nunca troca um symlink por arquivo comum.** Onde ele gravaria (`edit`
   em `new`/`outdated`, e `reset`), um alvo que é symlink é recusado, nomeando o
   link e o destino; o `--dry-run` do `edit` antecipa a mesma recusa. Em `edited`
-  o ray não grava nada: o editor escreve através do link, como se espera.
+  o ray não grava nada: o editor escreve através do link, como se espera. O
+  `ray serve` diverge de propósito: o Salvar da web recusa um symlink em
+  qualquer estado, inclusive `edited` (ver `ray serve`, abaixo).
 - **`diff` compara o overlay com o embutido** num diff unificado com rótulos
   fixos `embedded/<nome>` e `overlay/<nome>`, puro Go (`internal/linediff`), sem
   depender do `diff` do sistema. Em `outdated`, o aviso de que o embutido mudou
@@ -473,6 +475,50 @@ path`) e template que não renderiza (`broken`). O estado de um template
 `profile edit` e `template edit` abrem o `$EDITOR`, que pode ter argumentos
 (`code -w`): se o valor inteiro é um executável no `$PATH`, é usado como está;
 senão é quebrado em palavras, sem shell, e o caminho vai como último argumento.
+
+## `ray serve`
+
+`ray serve [--port N] [--no-open]` sobe em primeiro plano um servidor local e uma
+página para ver e editar o overlay de `~/.ray/templates`: árvore com o estado de
+cada template (o mesmo do `list`), abas, editor com preview ao lado, diff contra
+o embutido e Restaurar padrão com confirmação. O núcleo continua sendo o
+`internal/catalog` — a web não tem regra própria de estado, diff nem reset. As
+regras de segurança do servidor estão em `SECURITY.md`; aqui fica o
+comportamento.
+
+**O que tem de valer:**
+
+- **Escuta antes de abrir.** A linha-base é conferida, a porta é aberta e só
+  então o navegador é chamado, em paralelo: ele nunca abre um endereço que ainda
+  não escuta. Porta ocupada ou inválida é erro antes de qualquer saída; falhar ao
+  abrir o navegador é aviso, não derruba o servidor. Ctrl-C desliga com prazo.
+- **Linha-base ilegível: o servidor não sobe**, com o mesmo erro do CLI. O
+  Salvar a confere de novo antes de gravar.
+- **`--dry-run` não sobe nem abre nada**: imprime só `+ serve on 127.0.0.1`, sem
+  token.
+- **Grava e avisa**, como o `edit` do CLI. Um template que não renderiza é salvo
+  mesmo assim; o erro aparece na barra de status, que fica vermelha, com a linha
+  marcada no editor, e o preview continua mostrando o último render bom. O
+  preview roda com `Stack` vazio ou preenchido, os dados de exemplo da validação.
+- **Antes de gravar, o rascunho é renderizado com prazo** (5 s, nos dois
+  conjuntos de dados). O que não renderiza dentro dele é recusado com
+  `render-timeout` e nada é gravado; um erro de render comum não impede a
+  gravação.
+- **Hooks (`*.sh.tmpl`) são somente leitura na web**: aparecem, têm preview e
+  diff, mas Salvar e Restaurar são recusados. Edita-se pelo `ray template edit`.
+- **Aba defasada não sobrescreve.** O Salvar leva o hash do conteúdo que a
+  página leu; se o arquivo mudou no disco desde então (outra aba, o `$EDITOR`),
+  a resposta é 409 e nada é gravado.
+- **A web não grava através de symlink**, nem no alvo nem num diretório do
+  caminho, em qualquer estado — mesmo em `edited`, onde o `template edit` do CLI
+  segue o link. A divergência é deliberada: o CLI entrega o arquivo a um editor
+  que o usuário controla; a web grava o que um navegador mandou.
+- **UTF-8.** Um arquivo no disco que não é UTF-8 válido não é gravado pela web:
+  o editor o leu com bytes trocados por U+FFFD, e salvar perderia os originais.
+  Um U+FFFD digitado é texto legítimo.
+- **Fim de linha.** O editor trabalha em LF e o Salvar restaura o CRLF de um
+  arquivo que o tinha; um arquivo com fins de linha misturados volta inteiro em
+  CRLF.
 
 ---
 
