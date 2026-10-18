@@ -129,3 +129,21 @@ func TestTheStylesheetColorsTheStatesAndFollowsTheSystemTheme(t *testing.T) {
 		t.Error("app.css does not follow the system color scheme")
 	}
 }
+
+// O favicon é um SVG autônomo: o namespace xmlns é a única URL permitida, e nada
+// de script, link, imagem ou folha de estilo externos dentro dele.
+func TestTheFaviconIsASelfContainedSVG(t *testing.T) {
+	svg := mustRead(t, "web/favicon.svg")
+	if !strings.Contains(svg, "<svg") {
+		t.Fatal("favicon.svg is not an SVG document")
+	}
+	for _, bad := range []string{"<script", "<foreignObject", "<image", "<use", "<style", "xlink:href", " href=", "onload", "onerror", "@import", "url("} {
+		if strings.Contains(strings.ToLower(svg), strings.ToLower(bad)) {
+			t.Errorf("favicon.svg contains %q", bad)
+		}
+	}
+	rest := strings.ReplaceAll(svg, "http://www.w3.org/2000/svg", "")
+	if strings.Contains(rest, "http://") || strings.Contains(rest, "https://") {
+		t.Error("favicon.svg references an URL besides the SVG namespace")
+	}
+}

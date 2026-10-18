@@ -11,7 +11,7 @@
 (function () {
   "use strict";
 
-  /* ---------- Funções puras (sem DOM; o teste em node carrega estas) ---------- */
+  /* ---------- Funções puras (sem DOM) ---------- */
 
   // restoreEOL devolve o texto do editor (sempre LF) com o fim de linha que o
   // arquivo tinha: "crlf" troca cada \n por \r\n.
@@ -136,12 +136,6 @@
     return "d-ctx";
   }
 
-  const pure = { restoreEOL, summarize, buildTree, editedLines, highlightLine, diffLineClass };
-  if (typeof module !== "undefined" && module.exports) {
-    module.exports = pure;
-    return;
-  }
-
   /* ---------- DOM ---------- */
 
   const $ = (id) => document.getElementById(id);
@@ -203,6 +197,7 @@
     }
     if (!res.ok) {
       const d = data || {};
+      if (res.status === 401) lockSession();
       throw new ApiError(res.status, d.codigo || "http-" + res.status, d.erro || res.statusText || "erro", d.detalhe || "");
     }
     return data;
@@ -224,19 +219,33 @@
     }
   }
 
+  // lockSession trata um 401: o token guardado não vale mais (o ray serve foi
+  // reiniciado), então ele sai da sessionStorage e a página mostra o aviso
+  // de reabrir em vez de ficar meio funcionando.
+  function lockSession() {
+    token = "";
+    try {
+      sessionStorage.removeItem(TOKEN_KEY);
+    } catch (_) {
+      // sem sessionStorage não há o que apagar
+    }
+    $("gate-msg").replaceChildren("sessão inválida — reabra pelo ", el("code", { text: "ray serve" }), ".");
+    $("app").hidden = true;
+    $("gate").hidden = false;
+  }
+
   // describe traduz um erro da API na frase da barra de status.
   function describe(err) {
-    switch (err && err.code) {
+    if (err === undefined || err === null) return "erro inesperado";
+    switch (err.code) {
       case "stale":
         return "o arquivo mudou no disco — recarregar";
       case "render-timeout":
         return "o template demora demais para renderizar; corrija antes de salvar";
       case "unauthorized":
         return "sessão inválida — reabra pelo ray serve";
-      case undefined:
-        return String(err);
       default:
-        return err.message;
+        return err.message || String(err) || "erro inesperado";
     }
   }
 
@@ -257,7 +266,7 @@
     cursor: { line: 1, col: 1 },
     message: null, // mensagem da página, fora de qualquer aba
     panel: "problems",
-    resetArmed: 0, // nº de linhas do segundo passo do Restaurar (0 = desarmado)
+    resetArmed: null, // {tab, lines}: o segundo passo do Restaurar, preso à aba que o armou
     resetTimer: 0,
   };
 
@@ -304,6 +313,7 @@
     if (!t) r.textContent = "";
     else if (t.render) r.textContent = "✗ " + (t.render.line ? "linha " + t.render.line + ": " : "") + t.render.message;
     else if (t.previewKey) r.textContent = "✓ renderiza";
+    else if (t.previewFailed) r.textContent = "preview indisponível";
     else r.textContent = "… renderizando";
 
     const msg = statusMessage(t);
@@ -554,12 +564,14 @@
     t.draft = content;
     t.dirty = false;
     t.previewKey = "";
+    t.previewFailed = false;
   }
 
   function closeTab(name) {
     const t = tabOf(name);
     if (!t) return;
     if (t.dirty && !window.confirm("Descartar as alterações não salvas de " + name + "?")) return;
+    disarmReset();
     const i = ui.tabs.indexOf(t);
     ui.tabs.splice(i, 1);
     if (ui.active === name) {
@@ -727,6 +739,7 @@
     const t = activeTab();
     if (!t) return;
     const wasDirty = t.dirty;
+    if (ui.resetArmed) disarmReset();
     t.draft = text;
     t.dirty = text !== t.saved;
     if (wasDirty !== t.dirty) {
@@ -763,7 +776,12 @@
       if (previewKey(t) === key) applyPreview(t, key, r);
     } catch (e) {
       if (e.code === "busy") retry = true;
-      else report(e, t);
+      else {
+        // sem render: a próxima edição (ou troca de dados) tenta de novo
+        t.previewFailed = true;
+        report(e, t);
+        if (t === activeTab()) renderPreview();
+      }
     } finally {
       preview.inflight = false;
     }
@@ -776,9 +794,10 @@
 
   function applyPreview(t, key, r) {
     t.previewKey = key;
+    t.previewFailed = false;
     t.render = r.err || null;
     if (!r.err) t.lastGood = r.output || "";
-    if (t.name !== ui.active) {
+    if (t !== activeTab()) {
       renderTabs();
       return;
     }
@@ -800,7 +819,7 @@
     pre.classList.toggle("stale", stale);
     $("preview-flag").hidden = !stale || t.lastGood === null;
     if (t.lastGood === null) {
-      pre.textContent = t.render ? "(o rascunho ainda não renderizou)" : "renderizando…";
+      pre.textContent = t.render ? "(o rascunho ainda não renderizou)" : t.previewFailed ? "(preview indisponível)" : "renderizando…";
       pre.classList.add("placeholder");
     } else {
       pre.classList.remove("placeholder");
@@ -843,7 +862,7 @@
     } catch (e) {
       t.diff = { error: describe(e) };
     }
-    if (t.name === ui.active) renderDiff();
+    if (t === activeTab()) renderDiff();
   }
 
   const DIFF_KIND = {
@@ -908,12 +927,14 @@
 
   /* ---------- Ações: salvar, restaurar, recarregar ---------- */
 
-  let saving = false;
-
   async function save() {
     const t = activeTab();
-    if (!editable(t) || saving) return;
-    saving = true;
+    if (!editable(t)) return;
+    if (t.saving) {
+      say(t, "ainda salvando esta aba… tente de novo", "");
+      return;
+    }
+    t.saving = true;
     const draft = t.draft;
     say(t, "salvando…", "");
     try {
@@ -932,7 +953,7 @@
       } else {
         say(t, r.outcome === "no changes" ? "salvo — nada mudou" : "salvo · " + r.state, "ok");
       }
-      if (t.name === ui.active) editor.markError(t.render ? t.render.line : 0);
+      if (t === activeTab()) editor.markError(t.render ? t.render.line : 0);
       renderAll();
       refreshTree();
       loadDiff(t);
@@ -946,7 +967,7 @@
         report(e, t);
       }
     } finally {
-      saving = false;
+      t.saving = false;
     }
   }
 
@@ -966,7 +987,7 @@
     t.notice = keepDraft && old !== t.saved ? { kind: "draft", text: old } : null;
     t.view = null;
     t.message = null;
-    if (t.name === ui.active) {
+    if (t === activeTab()) {
       editor.load(t.draft);
       editor.setReadOnly(!editable(t));
       editor.markError(0);
@@ -979,13 +1000,17 @@
     return true;
   }
 
-  async function reset(force) {
+  // reset restaura o padrão da aba ativa. force (descartar edições) só vale
+  // quando o segundo passo foi armado por esta mesma aba; qualquer outro
+  // clique é um Restaurar novo, sem force.
+  async function reset() {
     const t = activeTab();
     if (!editable(t)) return;
+    const force = !!ui.resetArmed && ui.resetArmed.tab === t;
     if (!force && t.dirty && !window.confirm("O rascunho não salvo de " + t.name + " será descartado. Restaurar o padrão?")) return;
     disarmReset();
     try {
-      const r = await api("POST", "/api/reset", { name: t.name, force: !!force });
+      const r = await api("POST", "/api/reset", { name: t.name, force: force });
       const said = { restored: "restaurado", created: "restaurado (criado a partir do padrão)" }[r.action] || "já é o padrão";
       if (await reload(t, false)) {
         if (r.baselineErr) t.warnings = ["linha-base: " + r.baselineErr];
@@ -1001,7 +1026,12 @@
 
   // O segundo passo do Restaurar: o botão vira a pergunta e volta sozinho.
   function armReset(t, lines) {
-    ui.resetArmed = lines || -1;
+    if (t !== activeTab()) {
+      // o usuário trocou de aba durante o pedido: nada fica armado
+      say(t, "o template tem edições suas: clique em Restaurar padrão de novo para confirmar", "");
+      return;
+    }
+    ui.resetArmed = { tab: t, lines: lines };
     const b = $("reset");
     b.textContent = lines ? "descartar as suas edições (" + lines + (lines === 1 ? " linha" : " linhas") + ")?" : "descartar as suas edições?";
     b.classList.add("danger");
@@ -1013,7 +1043,7 @@
   }
 
   function disarmReset() {
-    ui.resetArmed = 0;
+    ui.resetArmed = null;
     clearTimeout(ui.resetTimer);
     const b = $("reset");
     b.textContent = "Restaurar padrão";
@@ -1125,14 +1155,14 @@
     wirePanel();
     $("refresh").addEventListener("click", refreshTree);
     $("save").addEventListener("click", save);
-    $("reset").addEventListener("click", () => reset(ui.resetArmed !== 0));
+    $("reset").addEventListener("click", reset);
     $("reset-cancel").addEventListener("click", () => {
       disarmReset();
       say(activeTab(), "", "");
     });
     $("sample").addEventListener("change", () => schedulePreview(0));
     document.addEventListener("keydown", (ev) => {
-      if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && ev.key.toLowerCase() === "s") {
+      if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && (ev.key || "").toLowerCase() === "s") {
         ev.preventDefault();
         save();
       }
