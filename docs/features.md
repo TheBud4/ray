@@ -492,8 +492,10 @@ comportamento.
   então o navegador é chamado, em paralelo: ele nunca abre um endereço que ainda
   não escuta. Porta ocupada ou inválida é erro antes de qualquer saída; falhar ao
   abrir o navegador é aviso, não derruba o servidor. Ctrl-C desliga com prazo.
-- **Linha-base ilegível: o servidor não sobe**, com o mesmo erro do CLI. O
-  Salvar a confere de novo antes de gravar.
+- **Linha-base ilegível: o servidor não sobe**, com o mesmo erro do CLI. Se ela
+  ficar ilegível com o servidor no ar, toda requisição que decide estado ou
+  grava — listar, ler, diff, Salvar e Restaurar — a confere de novo e recusa
+  com 422, sem gravar nada.
 - **`--dry-run` não sobe nem abre nada**: imprime só `+ serve on 127.0.0.1`, sem
   token.
 - **Grava e avisa**, como o `edit` do CLI. Um template que não renderiza é salvo

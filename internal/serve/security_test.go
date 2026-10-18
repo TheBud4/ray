@@ -231,3 +231,21 @@ func TestTheTokenIsComparedInConstantTime(t *testing.T) {
 		t.Error("security.go must compare the token with subtle.ConstantTimeCompare")
 	}
 }
+
+// Forma absoluta de requisição: o Go põe r.Host a partir da URI, então o Host
+// de uma URI estrangeira é recusado mesmo que o cabeçalho diga o nosso.
+func TestAnAbsoluteRequestURIMustPointAtTheListener(t *testing.T) {
+	h, addr, tok := newTestHandler(t)
+	for target, want := range map[string]int{
+		"http://evil.com/api/ping":     403,
+		"http://" + addr + "/api/ping": 200,
+	} {
+		req := httptest.NewRequest("GET", target, nil) // r.Host vem da URI, como no servidor real
+		req.Header.Set("X-Ray-Token", tok)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != want {
+			t.Errorf("absolute URI %s = %d, want %d", target, rec.Code, want)
+		}
+	}
+}

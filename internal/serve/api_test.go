@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/TheBud4/ray/internal/catalog"
 	"github.com/TheBud4/ray/internal/store"
+	"github.com/TheBud4/ray/internal/testenv"
 )
 
 // hook é um template de hook embutido: o nome termina em .sh.tmpl.
@@ -326,11 +328,13 @@ func TestPreviewIsSerialized(t *testing.T) {
 
 func TestPreviewTimesOutAndReleasesTheGate(t *testing.T) {
 	var calls atomic.Int32
+	stuck := make(chan struct{})
+	t.Cleanup(func() { close(stuck) })
 	a := newAPI(t, func(o *Options) {
-		o.previewTimeout = 50 * time.Millisecond
+		o.previewTimeout = 300 * time.Millisecond
 		o.previewHook = func() {
 			if calls.Add(1) == 1 {
-				time.Sleep(400 * time.Millisecond) // o primeiro render "trava"
+				<-stuck // o primeiro render "trava" até o fim do teste
 			}
 		}
 	})
@@ -452,8 +456,12 @@ func TestAnUnreadableBaselineRefusesTheWrite(t *testing.T) {
 		o.Templates.Verify = func() error { return errors.New("pristine.yaml: unreadable") }
 	})
 	name := a.first(t)
-	info := a.load(t, name)
-	code, res := a.put(t, name, "# mine\n", info["hash"])
+	// O hash vem direto do catálogo: o GET também recusa quando a linha-base está ilegível.
+	info, err := a.opts.Templates.Info(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, res := a.put(t, name, "# mine\n", info.Hash)
 	if code != 422 || res["codigo"] != "refused" || !strings.Contains(res["detalhe"].(string), "unreadable") {
 		t.Errorf("PUT with an unreadable baseline = %d %v, want 422 refused naming the cause", code, res)
 	}
@@ -528,11 +536,13 @@ func TestCancelledPreviewKeepsTheGateUntilTheRenderEnds(t *testing.T) {
 // escritas. A recusa solta o mutex, e o Save seguinte funciona.
 func TestSaveRefusesATemplateThatTakesTooLongToRender(t *testing.T) {
 	var calls atomic.Int32
+	stuck := make(chan struct{})
+	t.Cleanup(func() { close(stuck) })
 	a := newAPI(t, func(o *Options) {
-		o.previewTimeout = 50 * time.Millisecond
+		o.previewTimeout = 300 * time.Millisecond
 		o.previewHook = func() {
 			if calls.Add(1) == 1 {
-				time.Sleep(400 * time.Millisecond) // o primeiro render "trava"
+				<-stuck // o primeiro render "trava" até o fim do teste
 			}
 		}
 	})
@@ -555,5 +565,118 @@ func TestAMethodNotAllowedOnAKnownRouteIsJSON405(t *testing.T) {
 	code, res := a.call(t, "POST", "/api/templates", map[string]any{})
 	if code != 405 || res["codigo"] != "method-not-allowed" {
 		t.Errorf("POST /api/templates = %d %v, want 405 method-not-allowed in JSON", code, res)
+	}
+}
+
+// Linha-base ilegível depois de o servidor subir: nada decide estado nem
+// escreve — o Reset e as três leituras recusam com 422, como o CLI.
+func TestAnUnreadableBaselineRefusesResetAndReadsToo(t *testing.T) {
+	a := newAPI(t, func(o *Options) {
+		o.Templates.Verify = func() error { return errors.New("pristine.yaml: unreadable") }
+	})
+	name := a.first(t)
+	for _, c := range []struct {
+		label, method, path string
+		body                any
+	}{
+		{"list", "GET", "/api/templates", nil},
+		{"info", "GET", "/api/template" + q(name), nil},
+		{"diff", "GET", "/api/diff" + q(name), nil},
+		{"reset", "POST", "/api/reset", map[string]any{"name": name, "force": true}},
+	} {
+		code, res := a.call(t, c.method, c.path, c.body)
+		if code == 200 || res["codigo"] != "refused" || !strings.Contains(fmt.Sprint(res["detalhe"]), "unreadable") {
+			t.Errorf("%s with an unreadable baseline = %d %v, want 422 refused naming the cause", c.label, code, res)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(a.dir, name)); !os.IsNotExist(err) {
+		t.Errorf("a refused reset created the file: %v", err)
+	}
+}
+
+// Duas abas salvam a partir da mesma base: só uma vence, a outra leva 409 e o
+// arquivo é exatamente o da vencedora.
+func TestTwoSavesFromTheSameBaseOnlyOneWins(t *testing.T) {
+	a := newAPI(t, nil)
+	entries, _ := a.opts.Templates.List()
+	n := 0
+	for _, e := range entries {
+		if catalog.IsHook(e.Name) || n == 4 {
+			continue
+		}
+		n++
+		name := e.Name
+		hash := a.load(t, name)["hash"]
+		var wg sync.WaitGroup
+		codes := make([]int, 2)
+		for i := range codes {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				codes[i], _ = a.put(t, name, fmt.Sprintf("# aba %d\n", i), hash)
+			}()
+		}
+		wg.Wait()
+		wins, stale := 0, 0
+		for _, c := range codes {
+			switch c {
+			case 200:
+				wins++
+			case 409:
+				stale++
+			}
+		}
+		if wins != 1 || stale != 1 {
+			t.Errorf("%s: statuses %v, want exactly one 200 and one 409", name, codes)
+			continue
+		}
+		winner := 0
+		if codes[1] == 200 {
+			winner = 1
+		}
+		if got, _ := os.ReadFile(filepath.Join(a.dir, name)); string(got) != fmt.Sprintf("# aba %d\n", winner) {
+			t.Errorf("%s: file = %q, want the winner's content", name, got)
+		}
+	}
+}
+
+// Um template que é symlink é recusado com 422 e o alvo fica como está.
+func TestASymlinkedTemplateIs422AndTheTargetIsUntouched(t *testing.T) {
+	a := newAPI(t, nil)
+	name := a.first(t)
+	outside := filepath.Join(t.TempDir(), "outside.tmpl")
+	if err := os.WriteFile(outside, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(filepath.Join(a.dir, name)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(a.dir, name)); err != nil {
+		testenv.SymlinkUnavailable(t, err)
+		t.Fatal(err)
+	}
+	info := a.load(t, name)
+	code, res := a.put(t, name, "# mine\n", info["hash"])
+	if code != 422 || res["codigo"] != "refused" || !strings.Contains(fmt.Sprint(res["detalhe"]), "symlink") {
+		t.Errorf("PUT over a symlink = %d %v, want 422 refused naming the symlink", code, res)
+	}
+	if got, _ := os.ReadFile(outside); string(got) != "x" {
+		t.Errorf("the symlink target was written: %q", got)
+	}
+}
+
+// Um hook é recusado (403) antes de qualquer render: o PUT não paga os dois
+// renders com prazo nem segura o mutex por causa de conteúdo lento.
+func TestAHookPutIsRefusedBeforeAnyRender(t *testing.T) {
+	var calls atomic.Int32
+	a := newAPI(t, func(o *Options) {
+		o.previewHook = func() { calls.Add(1) }
+	})
+	code, res := a.put(t, hook, "echo hi\n", "")
+	if code != 403 || res["codigo"] != "read-only-on-web" {
+		t.Errorf("PUT of a hook = %d %v, want 403 read-only-on-web", code, res)
+	}
+	if n := calls.Load(); n != 0 {
+		t.Errorf("a refused hook PUT rendered %d times, want 0", n)
 	}
 }

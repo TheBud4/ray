@@ -107,9 +107,31 @@ type listEntry struct {
 	ReadOnly   bool   `json:"readOnly"`
 }
 
+// verified confere a linha-base, quando há quem a confira, e responde a
+// recusa quando ela está ilegível: sem ela, nenhum estado decidido aqui é
+// confiável. Devolve false quando já respondeu.
+func (a *apiHandler) verified(w http.ResponseWriter) bool {
+	if err := a.verify(); err != nil {
+		writeError(w, err)
+		return false
+	}
+	return true
+}
+
+// verify confere a linha-base; sem Verify configurado, não há o que conferir.
+func (a *apiHandler) verify() error {
+	if a.templates.Verify == nil {
+		return nil
+	}
+	return a.templates.Verify()
+}
+
 // list responde a lista de templates. Só lê: o estado vem da simulação do
 // `init ai`, sem gravar nada.
 func (a *apiHandler) list(w http.ResponseWriter, _ *http.Request) {
+	if !a.verified(w) {
+		return
+	}
 	entries, err := a.templates.List()
 	if err != nil {
 		writeError(w, err)
@@ -139,6 +161,9 @@ type templateInfo struct {
 }
 
 func (a *apiHandler) info(w http.ResponseWriter, r *http.Request) {
+	if !a.verified(w) {
+		return
+	}
 	f, err := a.templates.Info(r.URL.Query().Get("name"))
 	if err != nil {
 		writeError(w, err)
@@ -234,17 +259,25 @@ type previewResponse struct {
 	Err    *renderInfo `json:"err"`
 }
 
-// saveSerialized grava req sob writeMu. Antes do Save, o conteúdo passa pelo
-// render com prazo nos dois conjuntos de dados: o Save renderiza o que grava
-// sem prazo, e um template que não termina seguraria o mutex de todas as
-// escritas. Assim o mutex fica preso no máximo dois prazos de preview além do
-// próprio Save. Esse render não usa o portão do preview: um preview em
-// andamento não pode virar 503 numa gravação.
+// saveSerialized grava req sob writeMu. Um nome fora da lista e um hook são
+// recusados antes de qualquer render. Depois, o conteúdo passa pelo render com
+// prazo nos dois conjuntos de dados: o Save renderiza o que grava sem prazo, e
+// um template que não termina seguraria o mutex de todas as escritas. Assim o
+// mutex fica preso no máximo dois prazos de preview além do próprio Save. Esse
+// render não usa o portão do preview: um preview em andamento não pode virar
+// 503 numa gravação.
 func (a *apiHandler) saveSerialized(req saveRequest) (catalog.SaveResult, error) {
 	writeMu.Lock()
 	defer writeMu.Unlock()
+	e, err := a.templates.Lookup(req.Name)
+	if err != nil {
+		return catalog.SaveResult{}, err
+	}
+	if catalog.IsHook(e.Name) {
+		return catalog.SaveResult{}, catalog.ErrReadOnly
+	}
 	for _, stack := range []bool{false, true} {
-		_, timedOut, err := a.boundedPreview(req.Name, req.Content, stack)
+		_, timedOut, err := a.boundedPreview(e.Name, req.Content, stack)
 		if err != nil {
 			return catalog.SaveResult{}, err
 		}
@@ -252,7 +285,7 @@ func (a *apiHandler) saveSerialized(req saveRequest) (catalog.SaveResult, error)
 			return catalog.SaveResult{}, errRenderTimeout
 		}
 	}
-	return a.templates.Save(req.Name, []byte(req.Content), req.BaseHash)
+	return a.templates.Save(e.Name, []byte(req.Content), req.BaseHash)
 }
 
 // previewOutcome é o que a goroutine do render devolve.
@@ -325,6 +358,9 @@ type diffResponse struct {
 }
 
 func (a *apiHandler) diff(w http.ResponseWriter, r *http.Request) {
+	if !a.verified(w) {
+		return
+	}
 	d, err := a.templates.Diff(r.URL.Query().Get("name"))
 	if err != nil {
 		writeError(w, err)
@@ -365,10 +401,14 @@ func (a *apiHandler) reset(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// resetSerialized é o Reset do catalog para quem não é hook, sob writeMu.
+// resetSerialized é o Reset do catalog para quem não é hook, sob writeMu. A
+// linha-base é conferida antes de tudo: ilegível, nada é escrito.
 func (a *apiHandler) resetSerialized(name string, force bool) (action string, baselineErr, err error) {
 	writeMu.Lock()
 	defer writeMu.Unlock()
+	if err := a.verify(); err != nil {
+		return "", nil, err
+	}
 	e, err := a.templates.Lookup(name)
 	if err != nil {
 		return "", nil, err

@@ -95,9 +95,12 @@ func TestSaveRefusesASymlinkAtTheTarget(t *testing.T) {
 		testenv.SymlinkUnavailable(t, err)
 		t.Fatal(err)
 	}
-	info, _ := f.cat.Info(sample)
-	if _, err := f.cat.Save(sample, []byte("# mine\n"), info.Hash); err == nil {
-		t.Fatal("Save through a symlink succeeded; want it refused")
+	info, ierr := f.cat.Info(sample)
+	if ierr != nil {
+		t.Fatal(ierr)
+	}
+	if _, err := f.cat.Save(sample, []byte("# mine\n"), info.Hash); err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatal("Save through a symlink must be refused with an error naming the symlink")
 	}
 	if got, _ := os.ReadFile(outside); string(got) != "x" {
 		t.Errorf("the symlink target was written: %q", got)
@@ -115,9 +118,12 @@ func TestSaveRefusesASymlinkedParentDirectory(t *testing.T) {
 		testenv.SymlinkUnavailable(t, err)
 		t.Fatal(err)
 	}
-	info, _ := f.cat.Info(nested)
-	if _, err := f.cat.Save(nested, []byte("# mine\n"), info.Hash); err == nil {
-		t.Fatal("Save through a symlinked directory succeeded; want it refused")
+	info, ierr := f.cat.Info(nested)
+	if ierr != nil {
+		t.Fatal(ierr)
+	}
+	if _, err := f.cat.Save(nested, []byte("# mine\n"), info.Hash); err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatal("Save through a symlinked directory must be refused with an error naming the symlink")
 	}
 	if entries, _ := os.ReadDir(outside); len(entries) != 0 {
 		t.Errorf("the symlinked directory was written to: %v", entries)

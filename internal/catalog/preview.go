@@ -85,10 +85,11 @@ type TemplateFile struct {
 	ReadOnly bool   // IsHook(Name)
 }
 
-// IsHook diz se name é um hook (.sh.tmpl): o editor só o mostra, porque CRLF
-// quebra o bash.
+// IsHook diz se name é um hook (.sh.tmpl, sem diferenciar maiúsculas: no
+// macOS e no Windows outra caixa é o mesmo arquivo): o editor só o mostra,
+// porque CRLF quebra o bash.
 func IsHook(name string) bool {
-	return strings.HasSuffix(name, ".sh.tmpl")
+	return strings.HasSuffix(strings.ToLower(name), ".sh.tmpl")
 }
 
 // Info lê name pelo mesmo caminho que o próximo `init ai` usaria.

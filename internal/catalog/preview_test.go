@@ -133,3 +133,34 @@ func TestInfoRejectsANameOutsideTheList(t *testing.T) {
 		t.Errorf("Info error = %v, want ErrUnknown", err)
 	}
 }
+
+// Em sistemas de arquivos que ignoram maiúsculas (macOS, Windows), um arquivo
+// com o nome de hook em outra caixa é o mesmo arquivo: continua hook.
+func TestIsHookIgnoresCase(t *testing.T) {
+	for _, n := range []string{hook, "claude/hooks/guard-add.SH.tmpl", "claude/hooks/Guard-Add.Sh.Tmpl"} {
+		if !IsHook(n) {
+			t.Errorf("IsHook(%q) = false, want true", n)
+		}
+	}
+	if IsHook(sample) {
+		t.Errorf("IsHook(%q) = true, want false", sample)
+	}
+}
+
+// A posição e a mensagem do erro: coluna extraída e o prefixo de contexto do
+// ray fora do texto.
+func TestPreviewErrorHasTheColumnAndNoContextPrefix(t *testing.T) {
+	f := newFixture(t)
+	res, err := f.cat.Preview(sample, []byte("ok\n{{.Stak}}\n"), false)
+	if err != nil || res.Err == nil {
+		t.Fatalf("Preview = %+v, %v; want a render error", res, err)
+	}
+	if res.Err.Line != 2 || res.Err.Col != 2 {
+		t.Errorf("position = %d:%d, want 2:2", res.Err.Line, res.Err.Col)
+	}
+	for _, prefix := range []string{"rendering template", "parsing template"} {
+		if strings.HasPrefix(res.Err.Message, prefix) {
+			t.Errorf("Message %q still carries the %q context prefix", res.Err.Message, prefix)
+		}
+	}
+}

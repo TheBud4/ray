@@ -100,7 +100,7 @@ para toda requisição, antes de qualquer rota.
 - **[MUST]** Toda chamada a `/api/*`, de leitura ou de escrita, exige o token da
   sessão no cabeçalho `X-Ray-Token`: 32 bytes de `crypto/rand`, novos a cada
   execução, comparados em tempo constante; sem ele, ou errado, 401. Os estáticos
-  (`/`, `app.js`, `app.css`, `favicon.svg`) saem sem token, porque a página
+  (`/`, `/index.html`, `app.js`, `app.css`, `favicon.svg`) saem sem token, porque a página
   precisa carregar antes de ter o token, e por isso são embutidos no binário e não
   carregam dado do usuário.
 - **[MUST]** O `Host` tem de ser exatamente `127.0.0.1:<porta>`; qualquer outro
@@ -110,11 +110,13 @@ para toda requisição, antes de qualquer rota.
   existem `GET`, `PUT` e `POST` (o resto é 405), e `GET` nunca muda estado.
 - **[MUST]** Nenhuma defesa depende de cookie: o servidor não grava cookie nem
   responde cabeçalho CORS (`Access-Control-*`).
-- **[MUST]** Toda resposta, inclusive as recusas, leva
+- **[MUST]** Toda resposta que o handler escreve, inclusive as recusas, leva
   `Content-Security-Policy` (`default-src 'none'`, script, estilo, conexão e
   imagem só de `'self'`, `frame-ancestors 'none'`), `X-Content-Type-Options:
   nosniff` e `Referrer-Policy: no-referrer`; as de `/api/*` também
-  `Cache-Control: no-store`.
+  `Cache-Control: no-store`. As respostas que o próprio `net/http` escreve antes
+  de o handler rodar (linha de requisição malformada, cabeçalho grande demais)
+  não levam esses cabeçalhos.
 - **[MUST]** Corpo de até 2 MiB (413) e conteúdo decodificado de até 1 MiB
   (422). O `http.Server` tem prazo de leitura do cabeçalho (5 s), de leitura
   (15 s), de escrita (30 s) e de ociosidade (60 s).
@@ -130,6 +132,8 @@ para toda requisição, antes de qualquer rota.
   `~/.ray/templates` e ele; o Restaurar padrão recusa, como no CLI, um alvo que é
   symlink. O confinamento é contra a entrada do navegador, não contra links que
   o próprio usuário põe em `~/.ray`: a pasta `~/.ray/templates` pode ser um link.
+  No Windows, uma junction não é reportada como symlink e por isso não é
+  recusada pela conferência de symlink.
 - **[MUST]** Hooks (`*.sh.tmpl`) são somente leitura na web: Salvar e Restaurar
   respondem 403. Um hook vira script executável nos projetos, e um desvio aqui
   seria execução de código; ele se edita pelo `ray template edit`.
@@ -156,6 +160,15 @@ para toda requisição, antes de qualquer rota.
   conferência de render antes de gravar só limita a frequência: no máximo uma
   goroutine abandonada nova por prazo vencido em cada chamada, ou seja, até duas
   a cada 5 s somando preview e gravação. A saída do render tem teto de 4 MiB.
+- A regra de somente leitura dos hooks olha o **nome** do template
+  (`*.sh.tmpl`, sem diferenciar maiúsculas), mas o scaffold decide que um
+  arquivo gerado é executável pelo **destino** (`*.sh`). Uma receita pode
+  mapear qualquer template — inclusive um custom em `~/.ray/templates` — para
+  um destino `.sh`, e a web deixa editar esse template. É um limite aceito
+  nesta fase.
+- Templates como `CLAUDE.md.tmpl` e os de `.claude/commands/*` alimentam o
+  agente na criação do projeto: editá-los também é um vetor indireto de
+  execução de código, e a web os edita. É um limite aceito nesta fase.
 - Navegadores em sandbox (snap, flatpak) podem não enxergar o `/tmp` e não abrir o
   lançador; nesse caso, `--no-open`.
 

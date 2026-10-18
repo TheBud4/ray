@@ -10,12 +10,13 @@ import (
 	"github.com/TheBud4/ray/internal/catalog"
 )
 
-// apiError é o corpo de toda resposta de erro em /api/*: Erro é uma frase
-// curta, Codigo o código que a página trata e Detalhe o texto do erro do Go.
+// apiError é o corpo de toda resposta de erro em /api/*: Message é uma frase
+// curta, Code o código que a página trata e Detail o texto do erro do Go. As
+// chaves no JSON são erro, codigo e detalhe.
 type apiError struct {
-	Erro    string `json:"erro"`
-	Codigo  string `json:"codigo"`
-	Detalhe string `json:"detalhe"`
+	Message string `json:"erro"`
+	Code    string `json:"codigo"`
+	Detail  string `json:"detalhe"`
 }
 
 // Códigos de erro da API. Cada um tem um status fixo.
@@ -41,8 +42,8 @@ const (
 
 // errorKinds dá a cada código o status e a frase curta.
 var errorKinds = map[string]struct {
-	status int
-	erro   string
+	status  int
+	message string
 }{
 	codeUnknownTemplate: {http.StatusNotFound, "unknown template"},
 	codeReadOnly:        {http.StatusForbidden, "hooks are read-only on the web"},
@@ -63,10 +64,10 @@ var errorKinds = map[string]struct {
 	codeRenderTimeout:   {http.StatusUnprocessableEntity, "the template takes too long to render"},
 }
 
-// writeCode responde o erro de código code com detalhe.
-func writeCode(w http.ResponseWriter, code, detalhe string) {
+// writeCode responde o erro de código code com detail.
+func writeCode(w http.ResponseWriter, code, detail string) {
 	k := errorKinds[code]
-	writeJSON(w, k.status, apiError{Erro: k.erro, Codigo: code, Detalhe: detalhe})
+	writeJSON(w, k.status, apiError{Message: k.message, Code: code, Detail: detail})
 }
 
 // writeError responde err com o código que codeFor escolhe.
@@ -105,11 +106,11 @@ func codeFor(err error) string {
 // que nada foi gravado.
 func writeWriteError(w http.ResponseWriter, err error) {
 	code := codeFor(err)
-	detalhe := err.Error()
+	detail := err.Error()
 	if code == codeInternal {
-		detalhe = "the file may already have been written; reload it before saving again: " + detalhe
+		detail = "the file may already have been written; reload it before saving again: " + detail
 	}
-	writeCode(w, code, detalhe)
+	writeCode(w, code, detail)
 }
 
 // isIOError diz se err vem de uma operação do sistema operacional.
@@ -128,9 +129,9 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 // refuse é a recusa do guard: JSON em /api/*, texto puro nas rotas estáticas.
-func refuse(w http.ResponseWriter, isAPI bool, code, detalhe string) {
+func refuse(w http.ResponseWriter, isAPI bool, code, detail string) {
 	if isAPI {
-		writeCode(w, code, detalhe)
+		writeCode(w, code, detail)
 		return
 	}
 	status := errorKinds[code].status

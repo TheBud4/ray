@@ -50,6 +50,13 @@ func newServeCmd() *cobra.Command {
 			}
 			ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
 			defer stop()
+			// O primeiro sinal começa o desligamento; soltar a captura logo em
+			// seguida devolve ao segundo Ctrl-C o efeito padrão de encerrar na
+			// hora, em vez de ele se perder durante o prazo do desligamento.
+			go func() {
+				<-ctx.Done()
+				stop()
+			}()
 			deps := serveDeps{
 				catalog:  func() (catalog.Templates, error) { return templateCatalog(true) },
 				listen:   serve.Listen,
