@@ -141,7 +141,7 @@ code { font-family: var(--mono); font-size: 12px; background: var(--code-bg); pa
   display: grid;
   height: 100vh;
   min-width: 860px;
-  grid-template-columns: 48px minmax(200px, 260px) minmax(0, 1fr);
+  grid-template-columns: 48px minmax(220px, 310px) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) 22px;
   grid-template-areas: "act side main" "status status status";
 }
@@ -183,15 +183,15 @@ code { font-family: var(--mono); font-size: 12px; background: var(--code-bg); pa
 .row:hover { background: var(--hover); }
 .tree-item[aria-selected="true"] > .row { background: var(--select); }
 .tree-item:focus-visible > .row { outline: 1px solid var(--focus); outline-offset: -1px; }
-.twisty { width: 12px; color: var(--fg-dim); }
+.twisty { flex: none; width: 12px; color: var(--fg-dim); }
 .folder > .row .label { color: var(--fg); }
 .file > .row { padding-right: 10px; }
-.dot { font-size: 9px; width: 12px; text-align: center; }
-.label { overflow: hidden; text-overflow: ellipsis; }
-.tree-dirty { color: var(--fg); font-size: 9px; }
+.dot { flex: none; font-size: 9px; width: 12px; text-align: center; }
+.label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tree-dirty { flex: none; color: var(--fg); font-size: 9px; }
 .ro {
-  margin-left: auto; font-size: 10px; color: var(--fg-dim);
-  border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; line-height: 14px;
+  flex: none; font-size: 9px; font-weight: 600; letter-spacing: 0.04em; color: var(--fg-dim);
+  border: 1px solid var(--border); border-radius: 3px; padding: 0 3px; line-height: 13px;
 }
 
 /* ---------- área principal ---------- */
@@ -361,6 +361,10 @@ code { font-family: var(--mono); font-size: 12px; background: var(--code-bg); pa
   .preview-pane { border-left: 0; border-top: 1px solid var(--border); }
 }
 
+@media (max-width: 1200px) {
+  .app { grid-template-columns: 48px 260px minmax(0, 1fr); }
+}
+
 @media (max-width: 1000px) {
-  .app { grid-template-columns: 48px 200px minmax(0, 1fr); }
+  .app { grid-template-columns: 48px 230px minmax(0, 1fr); }
 }

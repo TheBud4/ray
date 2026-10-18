@@ -30,15 +30,17 @@ var staticTypes = map[string]string{
 	".html": "text/html; charset=utf-8",
 	".js":   "text/javascript; charset=utf-8",
 	".css":  "text/css; charset=utf-8",
+	".svg":  "image/svg+xml",
 }
 
 // staticRoutes é a lista fechada de caminhos públicos: só os que existem no
 // embed entram. Qualquer outro caminho fora de /api/ é 404.
 var staticRoutes = buildStaticRoutes(webFS, map[string]string{
-	"/":           "web/index.html",
-	"/index.html": "web/index.html",
-	"/app.js":     "web/app.js",
-	"/app.css":    "web/app.css",
+	"/":            "web/index.html",
+	"/index.html":  "web/index.html",
+	"/app.js":      "web/app.js",
+	"/app.css":     "web/app.css",
+	"/favicon.svg": "web/favicon.svg",
 })
 
 // staticFile é um arquivo embutido pronto para servir.

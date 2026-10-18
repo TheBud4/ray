@@ -21,10 +21,11 @@ func mustRead(t *testing.T, name string) string {
 func TestTheEmbeddedPageHasItsThreeFilesAndServesThem(t *testing.T) {
 	h, addr, _ := newTestHandler(t)
 	want := map[string]string{
-		"/":           "text/html",
-		"/index.html": "text/html",
-		"/app.js":     "text/javascript",
-		"/app.css":    "text/css",
+		"/":            "text/html",
+		"/index.html":  "text/html",
+		"/app.js":      "text/javascript",
+		"/app.css":     "text/css",
+		"/favicon.svg": "image/svg+xml",
 	}
 	for path, ctype := range want {
 		rec := do(h, "GET", path, addr, "", nil)
@@ -69,7 +70,7 @@ func TestIndexHasNoInlineScriptStyleOrHandler(t *testing.T) {
 	if regexp.MustCompile(`(?i)\son[a-z]+\s*=`).MatchString(html) {
 		t.Error("index.html has an inline on* handler")
 	}
-	for _, want := range []string{`src="/app.js"`, `href="/app.css"`, "<title>", `name="viewport"`, "<html lang="} {
+	for _, want := range []string{`src="/app.js"`, `href="/app.css"`, `rel="icon"`, `href="/favicon.svg"`, "<title>", `name="viewport"`, "<html lang="} {
 		if !strings.Contains(html, want) {
 			t.Errorf("index.html lacks %s", want)
 		}

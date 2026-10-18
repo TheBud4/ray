@@ -240,8 +240,10 @@
     }
   }
 
-  function report(err) {
-    setMessage(describe(err), "err");
+  // report mostra err na barra de status como mensagem de owner (a aba a que
+  // o erro pertence, ou null para a página).
+  function report(err, owner) {
+    say(owner, describe(err), "err");
   }
 
   /* ---------- Estado ---------- */
@@ -253,8 +255,7 @@
     collapsed: new Set(), // pastas fechadas na árvore
     opening: new Set(),
     cursor: { line: 1, col: 1 },
-    message: { text: "", kind: "" },
-    messageTimer: 0,
+    message: null, // mensagem da página, fora de qualquer aba
     panel: "problems",
     resetArmed: 0, // nº de linhas do segundo passo do Restaurar (0 = desarmado)
     resetTimer: 0,
@@ -267,11 +268,27 @@
 
   /* ---------- Barra de status ---------- */
 
-  function setMessage(text, kind) {
-    ui.message = { text: text, kind: kind || "" };
-    clearTimeout(ui.messageTimer);
-    if (kind === "ok") ui.messageTimer = setTimeout(() => setMessage("", ""), 6000);
+  // say põe a mensagem passageira de owner: uma aba (cada aba tem a sua e a
+  // barra mostra só a da aba ativa) ou null, a da página. Texto vazio apaga;
+  // uma mensagem "ok" some sozinha.
+  function say(owner, text, kind) {
+    const msg = text ? { text: text, kind: kind || "" } : null;
+    if (owner) owner.message = msg;
+    else ui.message = msg;
+    if (msg && kind === "ok") {
+      setTimeout(() => {
+        if (owner ? owner.message === msg : ui.message === msg) say(owner, "", "");
+      }, 6000);
+    }
     renderStatus();
+  }
+
+  // statusMessage é o que a barra mostra: o aviso de arquivo defasado sai do
+  // estado da aba (t.notice), não de um texto guardado; depois vem a mensagem
+  // da aba e, sem ela, a da página.
+  function statusMessage(t) {
+    if (t && t.notice && t.notice.kind === "stale") return { text: describe({ code: "stale" }), kind: "err" };
+    return (t && t.message) || ui.message;
   }
 
   function renderStatus() {
@@ -289,9 +306,10 @@
     else if (t.previewKey) r.textContent = "✓ renderiza";
     else r.textContent = "… renderizando";
 
+    const msg = statusMessage(t);
     const m = $("st-msg");
-    m.className = "st-item st-msg" + (ui.message.kind ? " msg-" + ui.message.kind : "");
-    m.textContent = ui.message.text ? (ui.message.kind === "err" ? "⚠ " : "") + ui.message.text : "";
+    m.className = "st-item st-msg" + (msg && msg.kind ? " msg-" + msg.kind : "");
+    m.textContent = msg ? (msg.kind === "err" ? "⚠ " : "") + msg.text : "";
 
     $("st-pos").textContent = t ? "Ln " + ui.cursor.line + ", Col " + ui.cursor.col : "";
     $("st-eol").textContent = t ? (t.eol === "crlf" ? "CRLF" : "LF") : "";
@@ -303,7 +321,7 @@
     try {
       ui.list = await api("GET", "/api/templates");
     } catch (e) {
-      report(e);
+      report(e, null);
       return;
     }
     for (const t of ui.tabs) {
@@ -352,8 +370,8 @@
           el("span", { class: "dot state-" + e.state, "aria-hidden": "true", text: "●" }),
           el("span", { class: "label state-" + e.state, text: c.label }),
           t && t.dirty ? el("span", { class: "tree-dirty", text: "●", title: "rascunho não salvo" }) : null,
-          e.readOnly ? el("span", { class: "ro", text: "somente leitura" }) : null,
-          el("span", { class: "sr-only", text: ", " + e.state })
+          e.readOnly ? el("span", { class: "ro", text: "RO", title: "somente leitura na web", "aria-hidden": "true" }) : null,
+          el("span", { class: "sr-only", text: ", " + e.state + (e.readOnly ? ", somente leitura na web" : "") })
         )
       );
     });
@@ -502,7 +520,7 @@
       activate(name);
       loadDiff(t);
     } catch (e) {
-      report(e);
+      report(e, null);
     } finally {
       ui.opening.delete(name);
     }
@@ -518,6 +536,7 @@
       diff: null,
       view: null, // cursor e rolagem do editor
       notice: null, // {kind: "stale"} ou {kind: "draft", text}
+      message: null, // a mensagem passageira da barra de status desta aba
     };
     applyInfo(t, info);
     return t;
@@ -562,6 +581,7 @@
     if (!t) return;
     const switching = ui.active !== name;
     ui.active = name;
+    if (switching) ui.message = null;
     disarmReset();
     if (switching || editor.text() !== t.draft) {
       editor.load(t.draft);
@@ -743,7 +763,7 @@
       if (previewKey(t) === key) applyPreview(t, key, r);
     } catch (e) {
       if (e.code === "busy") retry = true;
-      else report(e);
+      else report(e, t);
     } finally {
       preview.inflight = false;
     }
@@ -895,7 +915,7 @@
     if (!editable(t) || saving) return;
     saving = true;
     const draft = t.draft;
-    setMessage("salvando…", "");
+    say(t, "salvando…", "");
     try {
       const r = await api("PUT", "/api/template", { name: t.name, content: restoreEOL(draft, t.eol), baseHash: t.hash });
       t.hash = r.hash;
@@ -908,9 +928,9 @@
       if (r.render) {
         t.render = r.render;
         t.previewKey = "";
-        setMessage("salvo, mas não renderiza: " + (r.render.line ? "linha " + r.render.line + ": " : "") + r.render.message, "err");
+        say(t, "salvo, mas não renderiza: " + (r.render.line ? "linha " + r.render.line + ": " : "") + r.render.message, "err");
       } else {
-        setMessage(r.outcome === "no changes" ? "salvo — nada mudou" : "salvo · " + r.state, "ok");
+        say(t, r.outcome === "no changes" ? "salvo — nada mudou" : "salvo · " + r.state, "ok");
       }
       if (t.name === ui.active) editor.markError(t.render ? t.render.line : 0);
       renderAll();
@@ -918,10 +938,13 @@
       loadDiff(t);
     } catch (e) {
       if (e.code === "stale") {
+        // o aviso da aba é a fonte da mensagem da barra (statusMessage)
         t.notice = { kind: "stale" };
+        say(t, "", "");
         renderNotice();
+      } else {
+        report(e, t);
       }
-      report(e);
     } finally {
       saving = false;
     }
@@ -934,7 +957,7 @@
     try {
       info = await api("GET", "/api/template?name=" + encodeURIComponent(t.name));
     } catch (e) {
-      report(e);
+      report(e, t);
       return false;
     }
     const old = t.draft;
@@ -942,12 +965,14 @@
     t.render = null;
     t.notice = keepDraft && old !== t.saved ? { kind: "draft", text: old } : null;
     t.view = null;
+    t.message = null;
     if (t.name === ui.active) {
       editor.load(t.draft);
       editor.setReadOnly(!editable(t));
       editor.markError(0);
     }
     renderAll();
+    if (keepDraft) say(t, "recarregado do disco", "ok");
     schedulePreview(0);
     loadDiff(t);
     refreshTree();
@@ -966,16 +991,16 @@
         if (r.baselineErr) t.warnings = ["linha-base: " + r.baselineErr];
         else t.warnings = [];
         renderProblems();
-        setMessage(said, r.baselineErr ? "err" : "ok");
+        say(t, said, r.baselineErr ? "err" : "ok");
       }
     } catch (e) {
-      if (e.code === "edited") armReset(editedLines(e.detalhe));
-      else report(e);
+      if (e.code === "edited") armReset(t, editedLines(e.detalhe));
+      else report(e, t);
     }
   }
 
   // O segundo passo do Restaurar: o botão vira a pergunta e volta sozinho.
-  function armReset(lines) {
+  function armReset(t, lines) {
     ui.resetArmed = lines || -1;
     const b = $("reset");
     b.textContent = lines ? "descartar as suas edições (" + lines + (lines === 1 ? " linha" : " linhas") + ")?" : "descartar as suas edições?";
@@ -983,7 +1008,7 @@
     $("reset-cancel").hidden = false;
     clearTimeout(ui.resetTimer);
     ui.resetTimer = setTimeout(disarmReset, 10000);
-    setMessage("o template tem edições suas: confirme para descartá-las", "");
+    say(t, "o template tem edições suas: confirme para descartá-las", "");
     b.focus();
   }
 
@@ -1031,7 +1056,7 @@
               type: "button",
               class: "btn",
               text: "copiar rascunho",
-              on: { click: () => copyText(text) },
+              on: { click: () => copyText(t, text) },
             }),
             " ",
             el("button", {
@@ -1041,6 +1066,7 @@
               on: {
                 click: () => {
                   t.notice = null;
+                  say(t, "", "");
                   renderNotice();
                 },
               },
@@ -1053,12 +1079,12 @@
     box.hidden = parts.length === 0;
   }
 
-  async function copyText(text) {
+  async function copyText(t, text) {
     try {
       await navigator.clipboard.writeText(text);
-      setMessage("rascunho copiado", "ok");
+      say(t, "rascunho copiado", "ok");
     } catch (_) {
-      setMessage("não foi possível copiar; selecione o texto do rascunho", "err");
+      say(t, "não foi possível copiar; selecione o texto do rascunho", "err");
     }
   }
 
@@ -1102,7 +1128,7 @@
     $("reset").addEventListener("click", () => reset(ui.resetArmed !== 0));
     $("reset-cancel").addEventListener("click", () => {
       disarmReset();
-      setMessage("", "");
+      say(activeTab(), "", "");
     });
     $("sample").addEventListener("change", () => schedulePreview(0));
     document.addEventListener("keydown", (ev) => {
@@ -1119,7 +1145,7 @@
     });
     window.addEventListener("unhandledrejection", (ev) => {
       ev.preventDefault();
-      report(ev.reason);
+      report(ev.reason, null);
     });
   }
 
